@@ -897,10 +897,10 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Finds the FileTreeView in this container
+        /// Finds the FileTreeListView in this container
         /// </summary>
-        /// <returns>The active FileTreeView or null</returns>
-        public FileTreeView? FindFileTree()
+        /// <returns>The active FileTreeListView or null</returns>
+        public FileTreeListView? FindFileTree()
         {
             try
             {
