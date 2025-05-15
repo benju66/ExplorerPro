@@ -1,0 +1,48 @@
+<Window x:Class="ExplorerPro.UI.Dialogs.ManageRecurringItemsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ExplorerPro.UI.Dialogs"
+        mc:Ignorable="d"
+        Title="Manage Recurring Items" Height="400" Width="600"
+        WindowStartupLocation="CenterOwner">
+    
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Data Grid to display recurring items -->
+        <DataGrid x:Name="recurringItemsGrid" 
+                  Grid.Row="0" 
+                  AutoGenerateColumns="False" 
+                  IsReadOnly="True"
+                  SelectionMode="Single"
+                  SelectionUnit="FullRow"
+                  HeadersVisibility="Column"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  CanUserReorderColumns="False"
+                  CanUserResizeRows="False"
+                  CanUserSortColumns="True"
+                  AlternatingRowBackground="WhiteSmoke"
+                  VerticalAlignment="Stretch"
+                  HorizontalAlignment="Stretch">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                <DataGridTextColumn Header="Frequency" Binding="{Binding Frequency}" Width="Auto"/>
+                <DataGridTextColumn Header="Next Due Date" Binding="{Binding NextDueDate}" Width="Auto"/>
+                <DataGridTextColumn Header="Priority" Binding="{Binding Priority}" Width="Auto"/>
+            </DataGrid.Columns>
+        </DataGrid>
+        
+        <!-- Buttons panel -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button x:Name="btnEdit" Content="Edit Recurrence" Width="120" Margin="0,0,10,0" Click="BtnEdit_Click"/>
+            <Button x:Name="btnRemove" Content="Remove Recurrence" Width="120" Margin="0,0,10,0" Click="BtnRemove_Click"/>
+            <Button x:Name="btnClose" Content="Close" Width="80" IsCancel="True" Click="BtnClose_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

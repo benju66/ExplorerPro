@@ -1,0 +1,47 @@
+<UserControl x:Class="ExplorerPro.UI.Controls.DateEditControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:ExplorerPro.UI.Controls"
+             mc:Ignorable="d" 
+             d:DesignHeight="30" d:DesignWidth="200">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        
+        <!-- DatePicker control -->
+        <DatePicker x:Name="DatePicker" 
+                    Grid.Column="0"
+                    SelectedDateChanged="DatePicker_SelectedDateChanged"
+                    VerticalAlignment="Center"
+                    BorderThickness="1"
+                    CalendarStyle="{DynamicResource DatePickerCalendarStyle}">
+            <DatePicker.Resources>
+                <!-- Custom calendar style -->
+                <Style x:Key="DatePickerCalendarStyle" TargetType="Calendar">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Calendar">
+                                <Calendar />
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </DatePicker.Resources>
+        </DatePicker>
+        
+        <!-- Clear button -->
+        <Button x:Name="ClearButton" 
+                Grid.Column="1"
+                Content="✕"
+                Width="20"
+                Height="20"
+                Margin="5,0,0,0"
+                VerticalAlignment="Center"
+                Click="ClearButton_Click"
+                ToolTip="Clear date"/>
+    </Grid>
+</UserControl>

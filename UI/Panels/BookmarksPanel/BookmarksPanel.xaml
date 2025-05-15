@@ -1,0 +1,38 @@
+<UserControl x:Class="ExplorerPro.UI.Panels.BookmarksPanel.BookmarksPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:ExplorerPro.UI.Panels.BookmarksPanel"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="300">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Button bar for Add Bookmark & Refresh -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="5">
+            <Button x:Name="btnAddBookmark" Content="Add Bookmark" Margin="0,0,5,0" Padding="8,3" Click="BtnAddBookmark_Click" />
+            <Button x:Name="btnRefresh" Content="Refresh" Padding="8,3" Click="BtnRefresh_Click" />
+            <Label Width="5"/> <!-- Spacer -->
+        </StackPanel>
+        
+        <!-- Tree view for displaying tags and bookmarked items -->
+        <TreeView x:Name="bookmarksTree" Grid.Row="1" Margin="5" 
+                  MouseDoubleClick="BookmarksTree_MouseDoubleClick"
+                  ContextMenuOpening="BookmarksTree_ContextMenuOpening">
+            <TreeView.ContextMenu>
+                <ContextMenu x:Name="treeContextMenu">
+                    <!-- Menu items will be added dynamically -->
+                </ContextMenu>
+            </TreeView.ContextMenu>
+            <TreeView.Resources>
+                <Style TargetType="{x:Type TreeViewItem}">
+                    <Setter Property="IsExpanded" Value="True" />
+                </Style>
+            </TreeView.Resources>
+        </TreeView>
+    </Grid>
+</UserControl>

@@ -1,0 +1,160 @@
+<UserControl x:Class="ExplorerPro.UI.MainWindow.MainWindowContainer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:ExplorerPro.UI.MainWindow"
+             xmlns:tab="clr-namespace:ExplorerPro.UI.TabManagement"
+             xmlns:panel="clr-namespace:ExplorerPro.UI.Panels"
+             xmlns:pinned="clr-namespace:ExplorerPro.UI.Panels.PinnedPanel"
+             xmlns:bookmarks="clr-namespace:ExplorerPro.UI.Panels.BookmarksPanel"
+             xmlns:todo="clr-namespace:ExplorerPro.UI.Panels.ToDoPanel"
+             xmlns:procore="clr-namespace:ExplorerPro.UI.Panels.ProcoreLinksPanel"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="800">
+    
+    <UserControl.Resources>
+        <!-- Dock area styles -->
+        <Style x:Key="DockAreaStyle" TargetType="DockPanel">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        
+        <!-- Separator styles -->
+        <Style x:Key="SeparatorStyle" TargetType="GridSplitter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Width" Value="3"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#0083DB"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        
+        <!-- Drop indicator style -->
+        <Style x:Key="DropIndicatorStyle" TargetType="Border">
+            <Setter Property="Background" Value="#D00083DB"/>
+            <Setter Property="BorderBrush" Value="White"/>
+            <Setter Property="BorderThickness" Value="3"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="CornerRadius" Value="3"/>
+        </Style>
+    </UserControl.Resources>
+    
+    <Grid x:Name="MainGrid">
+        <!-- Main window with dockable layout -->
+        <DockPanel x:Name="DockArea" Style="{StaticResource DockAreaStyle}" AllowDrop="True">
+            <!-- Dock Panel Container will be populated dynamically in code -->
+            <!-- This uses standard DockPanel approach, but we'll implement custom docking behavior -->
+            
+            <!-- Left Column -->
+            <Border x:Name="LeftColumnContainer" DockPanel.Dock="Left" Width="200">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <!-- Pinned Panel will go here -->
+                    <Border x:Name="PinnedPanelContainer" Grid.Row="0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="Pinned Items" 
+                                      Padding="5" Background="#F0F0F0" FontWeight="Bold"/>
+                            <ContentControl x:Name="PinnedPanelContent"/>
+                        </DockPanel>
+                    </Border>
+                </Grid>
+            </Border>
+            
+            <!-- Splitter between Left Column and Main Area -->
+            <GridSplitter Width="3" DockPanel.Dock="Left" 
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Stretch"
+                         Style="{StaticResource SeparatorStyle}"/>
+            
+            <!-- Right Column -->
+            <Border x:Name="RightColumnContainer" DockPanel.Dock="Right" Width="200">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <!-- To-Do Panel -->
+                    <Border x:Name="ToDoPanelContainer" Grid.Row="0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="To-Do" 
+                                      Padding="5" Background="#F0F0F0" FontWeight="Bold"/>
+                            <ContentControl x:Name="ToDoPanelContent"/>
+                        </DockPanel>
+                    </Border>
+                    
+                    <!-- Splitter -->
+                    <GridSplitter Grid.Row="1" Height="3" 
+                                 HorizontalAlignment="Stretch"
+                                 VerticalAlignment="Center"
+                                 Style="{StaticResource SeparatorStyle}"/>
+                    
+                    <!-- Procore Links Panel -->
+                    <Border x:Name="ProcorePanelContainer" Grid.Row="2" Visibility="Collapsed">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="Procore Links" 
+                                      Padding="5" Background="#F0F0F0" FontWeight="Bold"/>
+                            <ContentControl x:Name="ProcorePanelContent"/>
+                        </DockPanel>
+                    </Border>
+                    
+                    <!-- Splitter -->
+                    <GridSplitter Grid.Row="3" Height="3" 
+                                 HorizontalAlignment="Stretch"
+                                 VerticalAlignment="Center"
+                                 Style="{StaticResource SeparatorStyle}" 
+                                 Visibility="{Binding ElementName=ProcorePanelContainer, Path=Visibility}"/>
+                    
+                    <!-- Bookmarks Panel -->
+                    <Border x:Name="BookmarksPanelContainer" Grid.Row="4">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="Bookmarks" 
+                                      Padding="5" Background="#F0F0F0" FontWeight="Bold"/>
+                            <ContentControl x:Name="BookmarksPanelContent"/>
+                        </DockPanel>
+                    </Border>
+                </Grid>
+            </Border>
+            
+            <!-- Splitter between Main Area and Right Column -->
+            <GridSplitter Width="3" DockPanel.Dock="Right" 
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Stretch"
+                         Style="{StaticResource SeparatorStyle}"/>
+            
+            <!-- Main Content Area (Center) -->
+            <ContentControl x:Name="MainContent">
+                <!-- Tab Manager will be placed here -->
+            </ContentControl>
+        </DockPanel>
+        
+        <!-- Console Area at bottom (Hidden by default) -->
+        <Border x:Name="ConsoleArea" Visibility="Collapsed" 
+               VerticalAlignment="Bottom" Height="200"
+               Background="#F5F5F5" BorderBrush="#CCCCCC" BorderThickness="0,1,0,0">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Console" 
+                          Padding="5" Background="#E0E0E0" FontWeight="Bold"/>
+                <ContentControl x:Name="ConsoleContent"/>
+            </DockPanel>
+        </Border>
+        
+        <!-- Drop Indicator (Hidden by default) -->
+        <Border x:Name="DropIndicator" Style="{StaticResource DropIndicatorStyle}" 
+               Visibility="Collapsed" HorizontalAlignment="Stretch" 
+               VerticalAlignment="Bottom" Margin="20">
+            <TextBlock Text="Drop Here to Show Console" 
+                      FontWeight="Bold" Foreground="White" 
+                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+    </Grid>
+</UserControl>

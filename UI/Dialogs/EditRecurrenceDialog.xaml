@@ -1,0 +1,84 @@
+<Window x:Class="ExplorerPro.UI.Dialogs.EditRecurrenceDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ExplorerPro.UI.Dialogs"
+        mc:Ignorable="d"
+        Title="Edit Recurrence" Height="350" Width="450"
+        WindowStartupLocation="CenterOwner">
+    
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        
+        <!-- Task Name -->
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="Task Name:" Margin="0,5,10,5" VerticalAlignment="Center"/>
+        <TextBox x:Name="txtName" Grid.Row="0" Grid.Column="1" Margin="0,5" />
+        
+        <!-- Frequency -->
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="Frequency:" Margin="0,5,10,5" VerticalAlignment="Center"/>
+        <ComboBox x:Name="cmbFrequency" Grid.Row="1" Grid.Column="1" Margin="0,5" IsEditable="True">
+            <ComboBoxItem Content="Daily" />
+            <ComboBoxItem Content="Weekly" />
+            <ComboBoxItem Content="Monthly" />
+            <ComboBoxItem Content="Yearly" />
+            <ComboBoxItem Content="Every Weekday" />
+            <ComboBoxItem Content="Every Weekend" />
+            <ComboBoxItem Content="Every Monday" />
+            <ComboBoxItem Content="Every Tuesday" />
+            <ComboBoxItem Content="Every Wednesday" />
+            <ComboBoxItem Content="Every Thursday" />
+            <ComboBoxItem Content="Every Friday" />
+        </ComboBox>
+        
+        <!-- Next Due Date -->
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="Next Due Date:" Margin="0,5,10,5" VerticalAlignment="Center"/>
+        <DatePicker x:Name="dpNextDueDate" Grid.Row="2" Grid.Column="1" Margin="0,5" />
+        
+        <!-- Priority -->
+        <TextBlock Grid.Row="3" Grid.Column="0" Text="Priority:" Margin="0,5,10,5" VerticalAlignment="Center"/>
+        <ComboBox x:Name="cmbPriority" Grid.Row="3" Grid.Column="1" Margin="0,5">
+            <ComboBoxItem Content="1" />
+            <ComboBoxItem Content="2" />
+            <ComboBoxItem Content="3" />
+            <ComboBoxItem Content="4" />
+            <ComboBoxItem Content="5" />
+        </ComboBox>
+        
+        <!-- Original Due Day -->
+        <TextBlock Grid.Row="4" Grid.Column="0" Text="Original Due Day:" Margin="0,5,10,5" VerticalAlignment="Center"/>
+        <Grid Grid.Row="4" Grid.Column="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <CheckBox x:Name="chkUseOriginalDueDay" Content="Use original day of month" Grid.Column="0" VerticalAlignment="Center"
+                      Checked="ChkUseOriginalDueDay_Checked" Unchecked="ChkUseOriginalDueDay_Unchecked"/>
+            <TextBox x:Name="txtOriginalDueDay" Grid.Column="1" Margin="5,5,0,5" IsEnabled="{Binding ElementName=chkUseOriginalDueDay, Path=IsChecked}" />
+        </Grid>
+        
+        <!-- Shift Weekends -->
+        <TextBlock Grid.Row="5" Grid.Column="0" Text="Weekend Behavior:" Margin="0,5,10,5" VerticalAlignment="Center"/>
+        <CheckBox x:Name="chkShiftWeekends" Grid.Row="5" Grid.Column="1" Content="Shift weekend due dates to Friday" Margin="0,5" />
+        
+        <!-- Buttons -->
+        <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" 
+                    Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10">
+            <Button x:Name="btnSave" Content="Save" Width="80" Margin="0,0,10,0" Click="BtnSave_Click" IsDefault="True"/>
+            <Button x:Name="btnCancel" Content="Cancel" Width="80" Click="BtnCancel_Click" IsCancel="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

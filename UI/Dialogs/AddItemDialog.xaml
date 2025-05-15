@@ -1,0 +1,128 @@
+<Window x:Class="ExplorerPro.UI.Dialogs.AddItemDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ExplorerPro.UI.Dialogs"
+        mc:Ignorable="d"
+        Title="Add Task" 
+        Height="350" Width="500"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        
+        <!-- Item Title -->
+        <Label Grid.Row="0" Grid.Column="0" Content="Title:" VerticalAlignment="Center" Margin="0,5,10,5"/>
+        <TextBox x:Name="TitleTextBox" Grid.Row="0" Grid.Column="1" Margin="0,5,0,5" 
+                 VerticalContentAlignment="Center" Height="25"/>
+        
+        <!-- Item Description -->
+        <Label Grid.Row="1" Grid.Column="0" Content="Description:" VerticalAlignment="Top" Margin="0,5,10,5"/>
+        <TextBox x:Name="DescriptionTextBox" Grid.Row="1" Grid.Column="1" Margin="0,5,0,5" 
+                 AcceptsReturn="True" TextWrapping="Wrap" Height="60"/>
+        
+        <!-- Date Selection -->
+        <Label Grid.Row="2" Grid.Column="0" Content="Due Date:" VerticalAlignment="Center" Margin="0,5,10,5"/>
+        <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,5,0,5">
+            <DatePicker x:Name="DueDatePicker" Width="200" Height="25" VerticalContentAlignment="Center"/>
+            <CheckBox x:Name="HasDueDateCheckBox" Content="Has Due Date" 
+                      Margin="10,0,0,0" VerticalAlignment="Center"
+                      Checked="HasDueDateCheckBox_Checked" 
+                      Unchecked="HasDueDateCheckBox_Unchecked"/>
+        </StackPanel>
+        
+        <!-- Priority Selection -->
+        <Label Grid.Row="3" Grid.Column="0" Content="Priority:" VerticalAlignment="Center" Margin="0,5,10,5"/>
+        <ComboBox x:Name="PriorityComboBox" Grid.Row="3" Grid.Column="1" Margin="0,5,0,5" 
+                  Height="25" VerticalContentAlignment="Center">
+            <ComboBoxItem Content="Low" Tag="0"/>
+            <ComboBoxItem Content="Medium" Tag="1" IsSelected="True"/>
+            <ComboBoxItem Content="High" Tag="2"/>
+        </ComboBox>
+        
+        <!-- Recurrence Options -->
+        <Label Grid.Row="4" Grid.Column="0" Content="Recurrence:" VerticalAlignment="Center" Margin="0,5,10,5"/>
+        <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Margin="0,5,0,5">
+            <CheckBox x:Name="IsRecurringCheckBox" Content="Recurring Task" 
+                      VerticalAlignment="Center" 
+                      Checked="IsRecurringCheckBox_Checked"
+                      Unchecked="IsRecurringCheckBox_Unchecked"/>
+            <ComboBox x:Name="RecurrenceTypeComboBox" 
+                      Margin="10,0,0,0" 
+                      IsEnabled="False"
+                      Width="150"
+                      Height="25"
+                      VerticalContentAlignment="Center">
+                <ComboBoxItem Content="Daily" Tag="daily"/>
+                <ComboBoxItem Content="Weekly" Tag="weekly"/>
+                <ComboBoxItem Content="Monthly" Tag="monthly"/>
+                <ComboBoxItem Content="Yearly" Tag="yearly"/>
+                <ComboBoxItem Content="Custom" Tag="custom"/>
+            </ComboBox>
+        </StackPanel>
+        
+        <!-- Recurrence Options Panel (visible when IsRecurring is checked) -->
+        <StackPanel x:Name="RecurrencePanel" 
+                    Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" 
+                    Margin="0,10,0,0"
+                    Visibility="Collapsed">
+            
+            <GroupBox Header="Recurrence Settings">
+                <Grid Margin="5">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Repeat Every -->
+                    <Label Grid.Row="0" Grid.Column="0" Content="Repeat Every:" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,5,0,5">
+                        <TextBox x:Name="RepeatIntervalTextBox" Width="50" Height="25" 
+                                 VerticalContentAlignment="Center" Text="1"/>
+                        <Label x:Name="IntervalUnitLabel" Content="Week(s)" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    
+                    <!-- End Date -->
+                    <Label Grid.Row="1" Grid.Column="0" Content="End Date:" VerticalAlignment="Center" Margin="0,5,10,5"/>
+                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,5,0,5">
+                        <DatePicker x:Name="EndDatePicker" Width="200" Height="25" VerticalContentAlignment="Center"/>
+                        <CheckBox x:Name="HasEndDateCheckBox" Content="Never Ends" 
+                                  Margin="10,0,0,0" VerticalAlignment="Center" IsChecked="True"
+                                  Checked="HasEndDateCheckBox_Checked" 
+                                  Unchecked="HasEndDateCheckBox_Unchecked"/>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+        </StackPanel>
+        
+        <!-- Buttons -->
+        <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" 
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Right" 
+                    Margin="0,10,0,0">
+            <Button x:Name="SaveButton" Content="Save" IsDefault="True"
+                    Width="80" Height="30" Margin="0,0,10,0"
+                    Click="SaveButton_Click"/>
+            <Button x:Name="CancelButton" Content="Cancel" IsCancel="True"
+                    Width="80" Height="30"/>
+        </StackPanel>
+    </Grid>
+</Window>
