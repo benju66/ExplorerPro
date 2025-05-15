@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCopyrightAttribute("Copyright © 2025")]
 [assembly: System.Reflection.AssemblyDescriptionAttribute("Enhanced File Explorer with productivity features")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b2a67d9cb4d189fb95c717c9062353cd515ce1d8")]
 [assembly: System.Reflection.AssemblyProductAttribute("ExplorerPro")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ExplorerPro")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
