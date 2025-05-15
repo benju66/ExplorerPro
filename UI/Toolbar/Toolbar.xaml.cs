@@ -316,7 +316,7 @@ namespace ExplorerPro.UI.Toolbar
                                 mainWindow.OpenDirectoryInTab(parentDir);
                                 
                                 // Select the file in the file tree
-                                FileTreeView? activeFileTree = mainWindow.GetActiveFileTree();
+                                FileTreeListView? activeFileTree = mainWindow.GetActiveFileTree();
                                 if (activeFileTree != null)
                                 {
                                     activeFileTree.NavigateAndHighlight(normalizedPath);
@@ -358,7 +358,7 @@ namespace ExplorerPro.UI.Toolbar
                 try
                 {
                     // Get the active file tree
-                    FileTreeView? activeFileTree = mainWindow.GetActiveFileTree();
+                    FileTreeListView? activeFileTree = mainWindow.GetActiveFileTree();
                     if (activeFileTree == null)
                     {
                         _logger?.LogWarning("No active FileTree found for fuzzy searching");
@@ -427,7 +427,7 @@ namespace ExplorerPro.UI.Toolbar
         /// </summary>
         /// <param name="fileTree">The active file tree</param>
         /// <returns>The directory to search in</returns>
-        private string? GetSearchDirectory(FileTreeView fileTree)
+        private string? GetSearchDirectory(FileTreeListView fileTree)
         {
             if (fileTree == null)
                 return null;

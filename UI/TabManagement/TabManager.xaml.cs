@@ -12,7 +12,7 @@ namespace ExplorerPro.UI.TabManagement
 {
     /// <summary>
     /// Interaction logic for TabManager.xaml
-    /// Manages tabs containing FileTreeView instances
+    /// Manages tabs containing FileTreeListView instances
     /// </summary>
     public partial class TabManager : UserControl, IDisposable
     {
@@ -101,7 +101,7 @@ namespace ExplorerPro.UI.TabManagement
         #region Tab Management
 
         /// <summary>
-        /// Adds a new tab with a FileTreeView
+        /// Adds a new tab with a FileTreeListView
         /// </summary>
         /// <param name="title">Title for the tab</param>
         /// <param name="rootPath">Root path for the file tree</param>
@@ -135,7 +135,7 @@ namespace ExplorerPro.UI.TabManagement
                 Grid tabContent = new Grid();
                 
                 // Create file tree view
-                FileTreeView fileTree = new FileTreeView();
+                FileTreeListView fileTree = new FileTreeListView();
                 
                 // Add file tree to the grid BEFORE connecting events or setting root
                 tabContent.Children.Add(fileTree);
@@ -284,7 +284,7 @@ namespace ExplorerPro.UI.TabManagement
         /// </summary>
         /// <param name="fileTree">The file tree to get the path from</param>
         /// <returns>The path to display</returns>
-        private string DeterminePathForAddressBar(FileTreeView fileTree)
+        private string DeterminePathForAddressBar(FileTreeListView fileTree)
         {
             if (fileTree == null)
                 return string.Empty;
@@ -371,7 +371,7 @@ namespace ExplorerPro.UI.TabManagement
                 {
                     foreach (var child in grid.Children)
                     {
-                        if (child is FileTreeView fileTree)
+                        if (child is FileTreeListView fileTree)
                         {
                             fileTree.Dispose();
                         }
@@ -696,7 +696,7 @@ namespace ExplorerPro.UI.TabManagement
         private void FileTree_FileTreeClicked(object? sender, EventArgs e)
         {
             // Find which tab contains this FileTree
-            var clickedTree = sender as FileTreeView;
+            var clickedTree = sender as FileTreeListView;
             if (clickedTree == null)
                 return;
 
@@ -849,17 +849,17 @@ namespace ExplorerPro.UI.TabManagement
         #region Helper Methods
 
         /// <summary>
-        /// Finds the FileTreeView within a container
+        /// Finds the FileTreeListView within a container
         /// </summary>
         /// <param name="container">Container to search in</param>
-        /// <returns>The FileTreeView or null</returns>
-        private FileTreeView? FindFileTree(DependencyObject? container)
+        /// <returns>The FileTreeListView or null</returns>
+        private FileTreeListView? FindFileTree(DependencyObject? container)
         {
             if (container == null)
                 return null;
 
-            // Check if the container is directly a FileTreeView
-            if (container is FileTreeView fileTree)
+            // Check if the container is directly a FileTreeListView
+            if (container is FileTreeListView fileTree)
                 return fileTree;
 
             // If it's a panel, look through children
@@ -867,7 +867,7 @@ namespace ExplorerPro.UI.TabManagement
             {
                 foreach (var child in panel.Children)
                 {
-                    if (child is FileTreeView tree)
+                    if (child is FileTreeListView tree)
                         return tree;
 
                     // Recursive search
@@ -883,7 +883,7 @@ namespace ExplorerPro.UI.TabManagement
             // If it's ContentControl, check its content
             if (container is ContentControl contentControl)
             {
-                if (contentControl.Content is FileTreeView contentTree)
+                if (contentControl.Content is FileTreeListView contentTree)
                     return contentTree;
 
                 if (contentControl.Content is DependencyObject contentObject)
@@ -896,10 +896,10 @@ namespace ExplorerPro.UI.TabManagement
         }
 
         /// <summary>
-        /// Finds the FileTreeView in the active tab
+        /// Finds the FileTreeListView in the active tab
         /// </summary>
-        /// <returns>The active FileTreeView or null</returns>
-        public FileTreeView? FindActiveFileTree()
+        /// <returns>The active FileTreeListView or null</returns>
+        public FileTreeListView? FindActiveFileTree()
         {
             if (TabControl.SelectedItem is TabItem tabItem && tabItem.Content is FrameworkElement tabContent)
             {
