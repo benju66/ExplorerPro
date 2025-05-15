@@ -1,40 +1,40 @@
-// UI/FileTree/FileTreeView.xaml.cs
-
+// UI/FileTree/FileTreeListView.xaml.cs
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using Microsoft.Win32;
-using System.Diagnostics;
-using System.Threading.Tasks;
-using System.Windows.Threading;
-using Newtonsoft.Json;
+using Microsoft.Extensions.Logging;
 using ExplorerPro.Models;
 using ExplorerPro.FileOperations;
-// Add namespace aliases to resolve ambiguities
-using WPF = System.Windows;
-using WinForms = System.Windows.Forms;
-using Microsoft.Extensions.Logging;
+using ExplorerPro.UI.Controls;
+using ExplorerPro.Utilities;
 
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for FileTreeView.xaml
+    /// Interaction logic for FileTreeListView.xaml
     /// </summary>
-    public partial class FileTreeView : UserControl, IFileTree, IDisposable
+    public partial class FileTreeListView : UserControl, IFileTree, IDisposable
     {
         #region Events
+        
         public event EventHandler<string> LocationChanged = delegate { };
         public event EventHandler<Tuple<string, string>> ContextMenuActionTriggered = delegate { };
         public event EventHandler FileTreeClicked = delegate { };
+        
         #endregion
 
         #region Properties
+        
         /// <summary>
         /// Gets the current path being displayed
         /// </summary>
@@ -47,52 +47,92 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Gets whether any items are selected
         /// </summary>
-        public bool HasSelectedItems => GetSelectedTreeViewItem() != null;
+        public bool HasSelectedItems => treeListView.SelectedItem != null;
+        
+        /// <summary>
+        /// Gets or sets whether to show hidden files
+        /// </summary>
+        public bool ShowHiddenFiles
+        {
+            get { return _showHiddenFiles; }
+            set
+            {
+                if (_showHiddenFiles != value)
+                {
+                    _showHiddenFiles = value;
+                    RefreshView();
+                }
+            }
+        }
+        
         #endregion
 
         #region Fields
+        
         private MetadataManager metadataManager = null!;
         private CustomFileSystemModel fileSystemModel = null!;
         private UndoManager undoManager = null!;
         private SettingsManager _settingsManager = null!;
         private string currentFolderPath = string.Empty;
+        private bool _showHiddenFiles = false;
         private bool autoResizeEnabled = true;
-        private Dictionary<string, object> pathCache = new Dictionary<string, object>();
-        private Dictionary<string, TreeViewItem> itemCache = new Dictionary<string, TreeViewItem>();
+        private ObservableCollection<FileTreeItem> _rootItems = new ObservableCollection<FileTreeItem>();
+        private Dictionary<string, FileTreeItem> _itemCache = new Dictionary<string, FileTreeItem>();
         private const int CacheLimit = 1000;
         private Point? dragStartPosition;
-        private DispatcherTimer columnResizeTimer = null!;
         private const double DragThreshold = 10.0;
         private readonly IFileOperations fileOperations;
+        private FileIconProvider _iconProvider;
+        
         #endregion
 
-        public FileTreeView()
+        #region Constructor
+        
+        /// <summary>
+        /// Initializes a new instance of the FileTreeListView class
+        /// </summary>
+        public FileTreeListView()
         {
             InitializeComponent();
             
             // Initialize file operations
             fileOperations = new FileOperations.FileOperations();
             
-            // Initialize column resize timer
-            columnResizeTimer = new DispatcherTimer();
-            columnResizeTimer.Interval = TimeSpan.FromMilliseconds(200);
-            columnResizeTimer.Tick += (s, e) => {
-                columnResizeTimer.Stop();
-                AutoResizeColumns();
-            };
-
-            // Initialize the file system model and metadata manager
+            // Initialize file icon provider
+            _iconProvider = new FileIconProvider(true);
+            
+            // Initialize managers and model
             InitializeManagersAndModel();
 
-            // Set up event handlers
-            this.Loaded += FileTreeView_Loaded;
-            this.SizeChanged += FileTreeView_SizeChanged;
+            // Set the TreeListView ItemsSource
+            treeListView.ItemsSource = _rootItems;
             
-            // REMOVED: Don't set root directory in constructor
-            // This was causing the null reference exception
+            // Set up event handlers for the TreeListView
+            treeListView.SelectedTreeItemChanged += TreeListView_SelectedItemChanged;
+            treeListView.TreeItemExpanded += TreeListView_ItemExpanded;
+            treeListView.MouseDoubleClick += TreeListView_MouseDoubleClick;
+            treeListView.ContextMenu = treeContextMenu;
+            
+            // Mouse event handlers for drag and drop
+            treeListView.PreviewMouseLeftButtonDown += TreeListView_PreviewMouseLeftButtonDown;
+            treeListView.PreviewMouseLeftButtonUp += TreeListView_PreviewMouseLeftButtonUp;
+            treeListView.MouseMove += TreeListView_MouseMove;
+            
+            // Add drag/drop handlers
+            treeListView.AllowDrop = true;
+            treeListView.DragEnter += TreeListView_DragEnter;
+            treeListView.DragOver += TreeListView_DragOver;
+            treeListView.Drop += TreeListView_Drop;
+            treeListView.DragLeave += TreeListView_DragLeave;
+            
+            // Setup column click events
+            this.Loaded += FileTreeListView_Loaded;
         }
+        
+        #endregion
 
         #region Initialization
+        
         private void InitializeManagersAndModel()
         {
             try
@@ -105,11 +145,11 @@ namespace ExplorerPro.UI.FileTree
                 // Initialize the file system model with required dependencies
                 fileSystemModel = new CustomFileSystemModel(metadataManager, undoManager, fileOperations);
                 
-                Debug.WriteLine("[DEBUG] File tree components initialized successfully");
+                System.Diagnostics.Debug.WriteLine("[DEBUG] File tree components initialized successfully");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[ERROR] Failed to initialize file tree components: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to initialize file tree components: {ex.Message}");
                 
                 // Create minimal working instances as fallback
                 try {
@@ -119,7 +159,7 @@ namespace ExplorerPro.UI.FileTree
                     if (fileSystemModel == null) fileSystemModel = new CustomFileSystemModel(metadataManager, undoManager, fileOperations);
                 }
                 catch (Exception fallbackEx) {
-                    Debug.WriteLine($"[CRITICAL] Failed to create fallback components: {fallbackEx.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[CRITICAL] Failed to create fallback components: {fallbackEx.Message}");
                     // Last resort - create absolute minimal dependencies
                     metadataManager = new MetadataManager();
                     undoManager = new UndoManager();
@@ -129,16 +169,15 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
-        private void FileTreeView_Loaded(object sender, RoutedEventArgs e)
+        private void FileTreeListView_Loaded(object sender, RoutedEventArgs e)
         {
-            // Additional initialization logic once the control is loaded
+            // Load settings
+            _showHiddenFiles = _settingsManager.GetSetting("file_view.show_hidden", false);
+            
+            // Configure columns
             AutoResizeColumns();
         }
-
-        private void FileTreeView_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            ScheduleColumnAdjustment();
-        }
+        
         #endregion
 
         #region IFileTree Implementation
@@ -156,8 +195,11 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public string? GetSelectedPath()
         {
-            var selectedItem = GetSelectedTreeViewItem();
-            return selectedItem?.Tag as string;
+            if (treeListView.SelectedItem is FileTreeItem selectedItem)
+            {
+                return selectedItem.Path;
+            }
+            return null;
         }
 
         /// <summary>
@@ -188,7 +230,7 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public void SelectItem(string path)
         {
-            NavigateAndHighlight(path);
+            SelectItemByPath(path);
         }
 
         /// <summary>
@@ -196,10 +238,9 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public void CopySelected()
         {
-            var selectedItem = GetSelectedTreeViewItem();
-            if (selectedItem != null && selectedItem.Tag is string path)
+            if (treeListView.SelectedItem is FileTreeItem selectedItem)
             {
-                CopyItem(path);
+                CopyItem(selectedItem.Path);
             }
         }
 
@@ -229,10 +270,9 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public void DeleteSelected()
         {
-            var selectedItem = GetSelectedTreeViewItem();
-            if (selectedItem != null && selectedItem.Tag is string path)
+            if (treeListView.SelectedItem is FileTreeItem selectedItem)
             {
-                DeleteItemWithUndo(path);
+                DeleteItemWithUndo(selectedItem.Path);
             }
         }
 
@@ -257,10 +297,8 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public void ToggleShowHidden()
         {
-            // Toggle internal flag and refresh the view
-            bool showHidden = !_settingsManager.GetSetting("file_view.show_hidden", false);
-            _settingsManager.UpdateSetting("file_view.show_hidden", showHidden);
-            RefreshTreeView();
+            ShowHiddenFiles = !ShowHiddenFiles;
+            _settingsManager.UpdateSetting("file_view.show_hidden", ShowHiddenFiles);
         }
 
         /// <summary>
@@ -268,10 +306,7 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public void ClearSelection()
         {
-            if (treeView.SelectedItem is TreeViewItem item)
-            {
-                item.IsSelected = false;
-            }
+            treeListView.SelectedItem = null;
         }
 
         /// <summary>
@@ -279,42 +314,43 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public void HandleFileDrop(object data)
         {
-            if (data is WPF.IDataObject dataObject && dataObject.GetDataPresent(WPF.DataFormats.FileDrop))
+            if (data is DataObject dataObject && dataObject.GetDataPresent(DataFormats.FileDrop))
             {
-                string[] files = (string[])dataObject.GetData(WPF.DataFormats.FileDrop);
+                string[] files = (string[])dataObject.GetData(DataFormats.FileDrop);
                 HandleDrop(files);
             }
         }
         
-        #endregion
-
-        #region TreeView Management
+        /// <summary>
+        /// Sets the root directory for the tree view
+        /// </summary>
         public void SetRootDirectory(string directory)
         {
             try {
                 if (string.IsNullOrEmpty(directory))
                 {
-                    Debug.WriteLine($"[ERROR] Invalid directory path: null or empty");
+                    System.Diagnostics.Debug.WriteLine($"[ERROR] Invalid directory path: null or empty");
                     return;
                 }
                 
                 if (!Directory.Exists(directory))
                 {
-                    Debug.WriteLine($"[ERROR] Invalid or inaccessible directory: {directory}");
+                    System.Diagnostics.Debug.WriteLine($"[ERROR] Invalid or inaccessible directory: {directory}");
                     return;
                 }
 
-                treeView.Items.Clear();
-                itemCache.Clear();
-                pathCache.Clear();
+                // Clear root items
+                _rootItems.Clear();
+                _itemCache.Clear();
 
                 // Create root item
-                var rootItem = CreateTreeViewItemForDirectory(directory);
+                var rootItem = CreateFileTreeItem(directory);
                 if (rootItem != null)
                 {
-                    treeView.Items.Add(rootItem);
+                    // Add root item to the collection
+                    _rootItems.Add(rootItem);
                     
-                    // Expand the root to show its contents
+                    // Expand the root item
                     rootItem.IsExpanded = true;
                     
                     // Update current folder path
@@ -323,90 +359,80 @@ namespace ExplorerPro.UI.FileTree
                     // Notify listeners of location change
                     LocationChanged?.Invoke(this, directory);
                     
-                    Debug.WriteLine($"[DEBUG] Set root directory to: {directory}");
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Set root directory to: {directory}");
                 }
                 else 
                 {
-                    Debug.WriteLine($"[ERROR] Failed to create root item for: {directory}");
+                    System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to create root item for: {directory}");
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[ERROR] Failed to set root directory: {ex.Message}");
-                WPF.MessageBox.Show($"Error setting root directory: {ex.Message}", "Error", 
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to set root directory: {ex.Message}");
+                MessageBox.Show($"Error setting root directory: {ex.Message}", "Error", 
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+        
+        #endregion
 
-        private TreeViewItem CreateTreeViewItemForDirectory(string path)
+        #region File Tree Item Creation
+
+        /// <summary>
+        /// Creates a FileTreeItem for a directory
+        /// </summary>
+        private FileTreeItem CreateFileTreeItem(string path)
         {
             try {
-                if (itemCache.ContainsKey(path))
-                    return itemCache[path];
-                
-                var directoryInfo = new DirectoryInfo(path);
-                var item = new TreeViewItem
+                if (_itemCache.TryGetValue(path, out FileTreeItem cachedItem))
                 {
-                    Header = directoryInfo.Name,
-                    Tag = path,
-                    IsExpanded = false
-                };
-
-                // Add dummy item to enable expander
-                item.Items.Add(CreateDummyItem());
+                    return cachedItem;
+                }
                 
-                // Add to cache
-                if (itemCache.Count > CacheLimit)
-                    itemCache.Clear();
+                var item = FileTreeItem.FromPath(path);
                 
-                itemCache[path] = item;
+                // Apply styling from metadata
+                ApplyMetadataStyling(item);
                 
-                // Apply custom styling from metadata if applicable
-                ApplyMetadataStyling(item, path);
+                // Set icon
+                item.Icon = _iconProvider.GetIcon(path);
+                
+                // Register event handler for loading children
+                item.LoadChildren += Item_LoadChildren;
+                
+                // Cache the item
+                if (_itemCache.Count > CacheLimit)
+                {
+                    _itemCache.Clear();
+                }
+                _itemCache[path] = item;
                 
                 return item;
             }
             catch (Exception ex) {
-                Debug.WriteLine($"[ERROR] Failed to create tree view item for directory: {ex.Message}");
-                return new TreeViewItem { Header = Path.GetFileName(path), Tag = path };
-            }
-        }
-
-        private TreeViewItem CreateTreeViewItemForFile(string path)
-        {
-            try {
-                if (itemCache.ContainsKey(path))
-                    return itemCache[path];
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to create file tree item: {ex.Message}");
                 
-                var fileInfo = new FileInfo(path);
-                var item = new TreeViewItem
+                // Return a basic item if creation fails
+                var fallbackItem = new FileTreeItem
                 {
-                    Header = fileInfo.Name,
-                    Tag = path
+                    Name = Path.GetFileName(path),
+                    Path = path,
+                    IsDirectory = Directory.Exists(path),
+                    Type = Directory.Exists(path) ? "Folder" : "File"
                 };
-
-                // Add to cache
-                if (itemCache.Count > CacheLimit)
-                    itemCache.Clear();
                 
-                itemCache[path] = item;
-                
-                // Apply custom styling from metadata if applicable
-                ApplyMetadataStyling(item, path);
-                
-                return item;
-            }
-            catch (Exception ex) {
-                Debug.WriteLine($"[ERROR] Failed to create tree view item for file: {ex.Message}");
-                return new TreeViewItem { Header = Path.GetFileName(path), Tag = path };
+                return fallbackItem;
             }
         }
 
-        private void ApplyMetadataStyling(TreeViewItem item, string path)
+        /// <summary>
+        /// Applies metadata styling to a FileTreeItem
+        /// </summary>
+        private void ApplyMetadataStyling(FileTreeItem item)
         {
             try {
                 // Apply text color if set in metadata
-                string? colorHex = metadataManager.GetItemColor(path);
+                string colorHex = metadataManager.GetItemColor(item.Path);
                 if (!string.IsNullOrEmpty(colorHex))
                 {
                     try {
@@ -418,68 +444,49 @@ namespace ExplorerPro.UI.FileTree
                 }
 
                 // Apply bold if set in metadata
-                bool isBold = metadataManager.GetItemBold(path);
+                bool isBold = metadataManager.GetItemBold(item.Path);
                 if (isBold)
                 {
-                    if (item.Header is string headerText)
-                    {
-                        var textBlock = new TextBlock
-                        {
-                            Text = headerText,
-                            FontWeight = FontWeights.Bold
-                        };
-                        
-                        if (!string.IsNullOrEmpty(colorHex))
-                        {
-                            try {
-                                textBlock.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colorHex));
-                            }
-                            catch {
-                                // Ignore color conversion errors
-                            }
-                        }
-                        
-                        item.Header = textBlock;
-                    }
+                    item.FontWeight = FontWeights.Bold;
                 }
             }
             catch (Exception ex) {
-                Debug.WriteLine($"[ERROR] Failed to apply metadata styling: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to apply metadata styling: {ex.Message}");
                 // Continue without styling
             }
         }
 
-        private TreeViewItem CreateDummyItem()
+        /// <summary>
+        /// Loads children when a directory item is expanded
+        /// </summary>
+        private void Item_LoadChildren(object sender, EventArgs e)
         {
-            return new TreeViewItem { Header = "Loading..." };
+            if (sender is FileTreeItem item && item.IsDirectory)
+            {
+                LoadDirectoryContents(item);
+            }
         }
 
-        private bool HasRealChildren(TreeViewItem item)
+        /// <summary>
+        /// Loads the contents of a directory
+        /// </summary>
+        private void LoadDirectoryContents(FileTreeItem parentItem)
         {
-            if (item == null || item.Items.Count == 0) 
-                return false;
-                
-            if (item.Items.Count == 1 && item.Items[0] is TreeViewItem firstChild)
-                return firstChild.Header?.ToString() != "Loading...";
-                
-            return true;
-        }
-
-        private void LoadDirectoryContents(TreeViewItem parentItem)
-        {
-            if (parentItem == null || !(parentItem.Tag is string path) || HasRealChildren(parentItem))
+            if (parentItem == null || !parentItem.IsDirectory)
                 return;
+                
+            string path = parentItem.Path;
 
             try
             {
                 // Remove dummy item
-                parentItem.Items.Clear();
+                parentItem.ClearChildren();
 
-                // Mark as loaded in path cache to avoid reloading
-                if (pathCache.Count > CacheLimit)
-                    pathCache.Clear();
-                
-                pathCache[path] = true;
+                // Mark as loaded in cache
+                if (_itemCache.ContainsKey(path))
+                {
+                    _itemCache[path] = parentItem;
+                }
 
                 // Get and sort directories first
                 var directories = Directory.GetDirectories(path)
@@ -490,8 +497,12 @@ namespace ExplorerPro.UI.FileTree
                 {
                     try
                     {
-                        var dirItem = CreateTreeViewItemForDirectory(dir);
-                        parentItem.Items.Add(dirItem);
+                        // Skip hidden folders if not showing hidden files
+                        if (!ShowHiddenFiles && IsHidden(dir))
+                            continue;
+                            
+                        var dirItem = CreateFileTreeItem(dir);
+                        parentItem.Children.Add(dirItem);
                     }
                     catch (UnauthorizedAccessException)
                     {
@@ -509,8 +520,12 @@ namespace ExplorerPro.UI.FileTree
                 {
                     try
                     {
-                        var fileItem = CreateTreeViewItemForFile(file);
-                        parentItem.Items.Add(fileItem);
+                        // Skip hidden files if not showing hidden files
+                        if (!ShowHiddenFiles && IsHidden(file))
+                            continue;
+                            
+                        var fileItem = CreateFileTreeItem(file);
+                        parentItem.Children.Add(fileItem);
                     }
                     catch (UnauthorizedAccessException)
                     {
@@ -519,70 +534,103 @@ namespace ExplorerPro.UI.FileTree
                     }
                 }
 
-                // Process UI events
+                // Ensure UI updates
                 DoEvents();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[ERROR] Failed to load directory contents: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to load directory contents: {ex.Message}");
                 
-                // Re-add dummy item in case of failure
-                parentItem.Items.Clear();
-                parentItem.Items.Add(CreateDummyItem());
+                // Add dummy items back in case of failure
+                parentItem.ClearChildren();
+                parentItem.AddDummyChild();
             }
         }
 
+        /// <summary>
+        /// Checks if a file or directory is hidden
+        /// </summary>
+        private bool IsHidden(string path)
+        {
+            try
+            {
+                var attributes = File.GetAttributes(path);
+                return (attributes & FileAttributes.Hidden) == FileAttributes.Hidden;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Allows UI to update during lengthy operations
+        /// </summary>
         private void DoEvents()
         {
-            // Allows UI to update during lengthy operations
-            DispatcherFrame frame = new DispatcherFrame();
-            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background,
+            var frame = new DispatcherFrame();
+            Dispatcher.CurrentDispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Background,
                 new DispatcherOperationCallback(ExitFrame), frame);
             Dispatcher.PushFrame(frame);
         }
 
-        private object? ExitFrame(object frame)
+        private object ExitFrame(object frame)
         {
             ((DispatcherFrame)frame).Continue = false;
             return null;
         }
+        
         #endregion
 
         #region Event Handlers
-        private void TreeViewItem_Expanded(object sender, RoutedEventArgs e)
+
+        /// <summary>
+        /// Handles TreeListView selection changes
+        /// </summary>
+        private void TreeListView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            if (sender is TreeViewItem item && item.Tag is string path)
+            if (e.NewValue is FileTreeItem item)
+            {
+                OnTreeItemClicked(item.Path);
+            }
+        }
+
+        /// <summary>
+        /// Handles TreeListView item expansion
+        /// </summary>
+        private void TreeListView_ItemExpanded(object sender, TreeItemExpandedEventArgs e)
+        {
+            if (e.IsExpanded && e.Item is FileTreeItem item && item.IsDirectory)
             {
                 LoadDirectoryContents(item);
-                AutoResizeNameColumn();
             }
-            e.Handled = true;
-        }
-
-        private void TreeViewItem_Collapsed(object sender, RoutedEventArgs e)
-        {
+            
             if (autoResizeEnabled)
             {
-                AutoResizeNameColumn();
-            }
-            e.Handled = true;
-        }
-
-        private void TreeView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-        {
-            var item = GetSelectedTreeViewItem();
-            if (item != null && item.Tag is string path)
-            {
-                HandleDoubleClick(path);
+                AutoResizeColumns();
             }
         }
 
-        private void TreeView_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        /// <summary>
+        /// Handles TreeListView double-click
+        /// </summary>
+        private void TreeListView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            var item = GetSelectedTreeViewItem();
-            if (item != null && item.Tag is string path)
+            if (treeListView.SelectedItem is FileTreeItem item)
             {
-                BuildContextMenu(path);
+                HandleDoubleClick(item.Path);
+            }
+        }
+
+        /// <summary>
+        /// Handles TreeListView context menu opening
+        /// </summary>
+        private void TreeListView_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            if (treeListView.SelectedItem is FileTreeItem item)
+            {
+                BuildContextMenu(item.Path);
             }
             else
             {
@@ -590,38 +638,30 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
-        private void TreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        /// <summary>
+        /// Starts drag operation when mouse is pressed
+        /// </summary>
+        private void TreeListView_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            var item = e.NewValue as TreeViewItem;
-            if (item != null && item.Tag is string path)
-            {
-                OnTreeItemClicked(path);
-            }
+            dragStartPosition = e.GetPosition(treeListView);
         }
 
-        private void TreeView_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        /// <summary>
+        /// Ends drag operation when mouse is released
+        /// </summary>
+        private void TreeListView_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            // Check if user clicked on empty space
-            if (GetTreeViewItemFromPoint(e.GetPosition(treeView)) == null)
-            {
-                // Clear selection without directly setting SelectedItem
-                if (treeView.SelectedItem is TreeViewItem selectedItem)
-                {
-                    selectedItem.IsSelected = false;
-                }
-                e.Handled = true;
-                return;
-            }
-
-            // Store start position for potential drag operation
-            dragStartPosition = e.GetPosition(treeView);
+            dragStartPosition = null;
         }
 
-        private void TreeView_MouseMove(object sender, MouseEventArgs e)
+        /// <summary>
+        /// Initiates drag operation when mouse moves with button pressed
+        /// </summary>
+        private void TreeListView_MouseMove(object sender, MouseEventArgs e)
         {
             if (e.LeftButton == MouseButtonState.Pressed && dragStartPosition.HasValue)
             {
-                Point currentPosition = e.GetPosition(treeView);
+                Point currentPosition = e.GetPosition(treeListView);
                 Vector dragVector = currentPosition - dragStartPosition.Value;
                 double dragDistance = Math.Sqrt(Math.Pow(dragVector.X, 2) + Math.Pow(dragVector.Y, 2));
 
@@ -632,883 +672,250 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
-        private void TreeView_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        /// <summary>
+        /// Handles TreeListView drag enter events
+        /// </summary>
+        private void TreeListView_DragEnter(object sender, DragEventArgs e)
         {
-            dragStartPosition = null;
+            HandleDragEnter(e);
         }
 
-        private void TreeView_DragEnter(object sender, WPF.DragEventArgs e)
+        /// <summary>
+        /// Handles TreeListView drag over events
+        /// </summary>
+        private void TreeListView_DragOver(object sender, DragEventArgs e)
         {
-            if (e.Data.GetDataPresent(WPF.DataFormats.FileDrop) || 
-                e.Data.GetDataPresent("FileGroupDescriptor") ||
-                e.Data.GetDataPresent("FileGroupDescriptorW"))
+            HandleDragOver(e);
+        }
+
+        /// <summary>
+        /// Handles TreeListView drop events
+        /// </summary>
+        private void TreeListView_Drop(object sender, DragEventArgs e)
+        {
+            HandleDropEvent(e);
+        }
+
+        /// <summary>
+        /// Handles TreeListView drag leave events
+        /// </summary>
+        private void TreeListView_DragLeave(object sender, DragEventArgs e)
+        {
+            Mouse.OverrideCursor = null;
+            e.Handled = true;
+        }
+        
+        #endregion
+
+        #region Drag and Drop
+
+        /// <summary>
+        /// Starts a drag operation for selected items
+        /// </summary>
+        private void StartDrag()
+        {
+            if (treeListView.SelectedItem is FileTreeItem selectedItem)
             {
-                e.Effects = WPF.DragDropEffects.Copy;
+                List<string> paths = new List<string> { selectedItem.Path };
+                
+                // Currently only supports single selection
+                // For multi-select support, collect all selected items' paths
+                
+                // Create data object for drag and drop
+                DataObject dataObject = new DataObject(DataFormats.FileDrop, paths.ToArray());
+                
+                // Start drag-drop operation
+                DragDrop.DoDragDrop(treeListView, dataObject, DragDropEffects.Copy | DragDropEffects.Move);
+                
+                // Reset drag start position
+                dragStartPosition = null;
+            }
+        }
+
+        /// <summary>
+        /// Handles drag enter events
+        /// </summary>
+        private void HandleDragEnter(DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                e.Effects = DragDropEffects.Copy;
             }
             else
             {
-                e.Effects = WPF.DragDropEffects.None;
+                e.Effects = DragDropEffects.None;
             }
             e.Handled = true;
         }
 
-        private void TreeView_DragOver(object sender, WPF.DragEventArgs e)
+        /// <summary>
+        /// Handles drag over events
+        /// </summary>
+        private void HandleDragOver(DragEventArgs e)
         {
-            // Find the TreeViewItem under the cursor
-            var item = GetTreeViewItemFromPoint(e.GetPosition(treeView));
+            // Get the item under the cursor
+            var item = GetItemFromPoint(e.GetPosition(treeListView));
             
-            if (item != null && item.Tag is string path && Directory.Exists(path))
+            if (item != null && item.IsDirectory)
             {
-                e.Effects = WPF.DragDropEffects.Copy;
-                // Instead of directly setting SelectedItem
-                if (item != null)
-                {
-                    item.IsSelected = true;
-                }
-                Mouse.SetCursor(Cursors.Arrow);
+                e.Effects = DragDropEffects.Copy;
+                item.IsSelected = true;
+                Mouse.OverrideCursor = Cursors.Arrow;
             }
             else
             {
-                e.Effects = WPF.DragDropEffects.None;
-                Mouse.SetCursor(Cursors.No);
+                e.Effects = DragDropEffects.None;
+                Mouse.OverrideCursor = Cursors.No;
             }
             
             e.Handled = true;
         }
 
-        private void TreeView_Drop(object sender, WPF.DragEventArgs e)
+        /// <summary>
+        /// Handles drop events
+        /// </summary>
+        private void HandleDropEvent(DragEventArgs e)
         {
-            var item = GetTreeViewItemFromPoint(e.GetPosition(treeView));
-            if (item == null || !(item.Tag is string targetPath) || !Directory.Exists(targetPath))
+            var item = GetItemFromPoint(e.GetPosition(treeListView));
+            if (item == null || !item.IsDirectory)
             {
                 e.Handled = true;
                 return;
             }
 
+            string targetPath = item.Path;
+
             try
             {
                 // Handle file drop from Windows Explorer
-                if (e.Data.GetDataPresent(WPF.DataFormats.FileDrop))
+                if (e.Data.GetDataPresent(DataFormats.FileDrop))
                 {
-                    HandleStandardFileDrop(e, targetPath);
-                }
-                // Handle Outlook attachments
-                else if (e.Data.GetDataPresent("FileGroupDescriptor") || 
-                         e.Data.GetDataPresent("FileGroupDescriptorW"))
-                {
-                    HandleOutlookAttachments(e, targetPath);
-                }
-            }
-            catch (Exception ex)
-            {
-                WPF.MessageBox.Show($"Error processing dropped files: {ex.Message}", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                Mouse.SetCursor(Cursors.Arrow);
-            }
-            
-            e.Handled = true;
-        }
-
-        private void TreeView_DragLeave(object sender, WPF.DragEventArgs e)
-        {
-            Mouse.SetCursor(Cursors.Arrow);
-            e.Handled = true;
-        }
-        #endregion
-
-        #region Drag and Drop
-        private void StartDrag()
-        {
-            var selectedItem = GetSelectedTreeViewItem();
-            if (selectedItem == null || !(selectedItem.Tag is string path))
-                return;
-
-            List<string> paths = new List<string>();
-            
-            // If there are multiple selected items, include them all
-            foreach (var item in GetSelectedTreeViewItems())
-            {
-                if (item.Tag is string itemPath)
-                    paths.Add(itemPath);
-            }
-
-            // Prepare the data object
-            WPF.DataObject dataObject = new WPF.DataObject(WPF.DataFormats.FileDrop, paths.ToArray());
-            
-            // Execute the drag-drop operation
-            WPF.DragDrop.DoDragDrop(treeView, dataObject, WPF.DragDropEffects.Copy | WPF.DragDropEffects.Move);
-            
-            // Reset drag start position
-            dragStartPosition = null;
-        }
-
-        private void HandleStandardFileDrop(WPF.DragEventArgs e, string targetPath)
-        {
-            if (e.Data.GetDataPresent(WPF.DataFormats.FileDrop))
-            {
-                string[] files = (string[])e.Data.GetData(WPF.DataFormats.FileDrop);
-                List<string> errors = new List<string>();
-
-                foreach (string sourcePath in files)
-                {
-                    try
+                    string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                    
+                    foreach (string sourcePath in files)
                     {
-                        string destPath = Path.Combine(targetPath, Path.GetFileName(sourcePath));
-                        
-                        if (File.Exists(sourcePath))
+                        try
                         {
-                            // Move the file
-                            if (File.Exists(destPath))
-                            {
-                                var result = WPF.MessageBox.Show(
-                                    $"File {Path.GetFileName(sourcePath)} already exists. Overwrite?",
-                                    "File Exists", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                                
-                                if (result == MessageBoxResult.No)
-                                    continue;
-                            }
+                            string destPath = Path.Combine(targetPath, Path.GetFileName(sourcePath));
                             
-                            File.Move(sourcePath, destPath, true);
-                            Debug.WriteLine($"Moved {sourcePath} -> {destPath}");
-                        }
-                        else if (Directory.Exists(sourcePath))
-                        {
-                            // Move the directory
-                            if (Directory.Exists(destPath))
+                            if (File.Exists(sourcePath))
                             {
-                                var result = WPF.MessageBox.Show(
-                                    $"Folder {Path.GetFileName(sourcePath)} already exists. Overwrite?",
-                                    "Folder Exists", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                                // Check for overwrite
+                                if (File.Exists(destPath))
+                                {
+                                    if (MessageBox.Show(
+                                        $"File {Path.GetFileName(sourcePath)} already exists. Overwrite?",
+                                        "File Exists", MessageBoxButton.YesNo, MessageBoxImage.Question) 
+                                        != MessageBoxResult.Yes)
+                                    {
+                                        continue;
+                                    }
+                                }
                                 
-                                if (result == MessageBoxResult.No)
-                                    continue;
-                                
-                                Directory.Delete(destPath, true);
+                                File.Copy(sourcePath, destPath, true);
                             }
-                            
-                            Directory.Move(sourcePath, destPath);
-                            Debug.WriteLine($"Moved {sourcePath} -> {destPath}");
+                            else if (Directory.Exists(sourcePath))
+                            {
+                                // Check for overwrite
+                                if (Directory.Exists(destPath))
+                                {
+                                    if (MessageBox.Show(
+                                        $"Folder {Path.GetFileName(sourcePath)} already exists. Merge?",
+                                        "Folder Exists", MessageBoxButton.YesNo, MessageBoxImage.Question) 
+                                        != MessageBoxResult.Yes)
+                                    {
+                                        continue;
+                                    }
+                                }
+                                else
+                                {
+                                    Directory.CreateDirectory(destPath);
+                                }
+                                
+                                // Copy directory contents
+                                CopyDirectory(sourcePath, destPath);
+                            }
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        errors.Add($"{sourcePath} => {ex.Message}");
-                    }
-                }
-
-                if (errors.Count > 0)
-                {
-                    WPF.MessageBox.Show($"Some files failed to move:\n{string.Join("\n", errors)}", 
-                        "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-
-                // Refresh the target directory
-                if (treeView.SelectedItem is TreeViewItem selectedItem && selectedItem.Tag?.ToString() == targetPath)
-                {
-                    // Collapse and re-expand to refresh
-                    selectedItem.IsExpanded = false;
-                    selectedItem.IsExpanded = true;
-                }
-            }
-        }
-
-        private void HandleOutlookAttachments(WPF.DragEventArgs e, string targetPath)
-        {
-            // Implementation for Outlook attachments would go here
-            // This is a complex topic and would require COM interop or additional libraries
-            
-            WPF.MessageBox.Show("Outlook attachment handling is not implemented in this version.", 
-                "Not Implemented", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-        #endregion
-
-        #region Context Menu
-        private void BuildContextMenu(string selectedPath)
-        {
-            try {
-                // Clear existing items
-                treeContextMenu.Items.Clear();
-    
-                // Create a context menu provider with required dependencies
-                var contextMenuProvider = new ContextMenuProvider(metadataManager, undoManager);
-                
-                // Build the context menu with the action handler
-                ContextMenu menu = contextMenuProvider.BuildContextMenu(selectedPath, 
-                    (action, path) => ContextMenuActionTriggered?.Invoke(this, new Tuple<string, string>(action, path)));
-                
-                // Copy all items from the built menu to our existing menu
-                foreach (var item in menu.Items)
-                {
-                    treeContextMenu.Items.Add(item);
-                }
-            }
-            catch (Exception ex) {
-                Debug.WriteLine($"[ERROR] Failed to build context menu: {ex.Message}");
-                // Create minimal context menu
-                treeContextMenu.Items.Clear();
-                var menuItem = new MenuItem { Header = "Refresh" };
-                menuItem.Click += (s, e) => RefreshView();
-                treeContextMenu.Items.Add(menuItem);
-            }
-        }
-
-        private void AddMenuItem(ContextMenu menu, string header, string iconPath, RoutedEventHandler clickHandler)
-        {
-            var menuItem = new MenuItem { Header = header };
-            
-            if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
-            {
-                try
-                {
-                    var image = new Image
-                    {
-                        Source = new BitmapImage(new Uri(iconPath, UriKind.Relative)),
-                        Width = 16,
-                        Height = 16
-                    };
-                    
-                    menuItem.Icon = image;
-                }
-                catch
-                {
-                    // Ignore icon loading errors
-                }
-            }
-            
-            if (clickHandler != null)
-                menuItem.Click += clickHandler;
-            
-            menu.Items.Add(menuItem);
-        }
-        #endregion
-
-        #region Context Menu Action Handlers
-        private void OpenFile(string path)
-        {
-            try
-            {
-                if (File.Exists(path))
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = path,
-                        UseShellExecute = true
-                    });
-                }
-                else if (Directory.Exists(path))
-                {
-                    // Set this directory as root
-                    SetRootDirectory(path);
-                }
-            }
-            catch (Exception ex)
-            {
-                WPF.MessageBox.Show($"Failed to open file: {ex.Message}", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void ShowInFileExplorer(string path)
-        {
-            try
-            {
-                if (File.Exists(path) || Directory.Exists(path))
-                {
-                    Process.Start("explorer.exe", $"/select,\"{path}\"");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error opening file explorer for {path}: {ex.Message}");
-            }
-        }
-
-        private void RenameItem(string path)
-        {
-            var item = GetTreeViewItemForPath(path);
-            if (item != null)
-            {
-                // Implementation would depend on how you handle inline editing
-                // This is a placeholder
-                string newName = Microsoft.VisualBasic.Interaction.InputBox(
-                    "Enter new name:", "Rename", Path.GetFileName(path));
-                
-                if (!string.IsNullOrWhiteSpace(newName) && newName != Path.GetFileName(path))
-                {
-                    // Fixed: Properly create a RenameCommand with all required parameters
-                    var command = new RenameCommand(fileOperations, path, newName);
-                    undoManager.ExecuteCommand(command);
-                    
-                    // Refresh the tree view to reflect the change
-                    RefreshParentDirectory(path);
-                }
-            }
-        }
-
-        private void DeleteItemWithUndo(string path)
-        {
-            if (!File.Exists(path) && !Directory.Exists(path))
-            {
-                WPF.MessageBox.Show($"'{path}' does not exist.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var result = WPF.MessageBox.Show($"Are you sure you want to delete:\n{path}?", 
-                "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Question);
-            
-            if (result == MessageBoxResult.Yes)
-            {
-                var command = new DeleteItemCommand(fileOperations, this, path);
-                undoManager.ExecuteCommand(command);
-                
-                // Refresh the parent directory
-                RefreshParentDirectory(path);
-            }
-        }
-
-        private void CopyItem(string path)
-        {
-            if (File.Exists(path) || Directory.Exists(path))
-            {
-                string[] filePaths = { path };
-                Clipboard.SetFileDropList(new System.Collections.Specialized.StringCollection { path });
-                Debug.WriteLine($"Copied: {path}");
-            }
-            else
-            {
-                WPF.MessageBox.Show("The selected file or folder does not exist.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
-        private void PasteItem(string targetPath)
-        {
-            if (!Directory.Exists(targetPath))
-            {
-                WPF.MessageBox.Show("You can only paste into a directory.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var files = Clipboard.GetFileDropList();
-            if (files.Count == 0)
-            {
-                WPF.MessageBox.Show("No valid file path(s) in clipboard.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            foreach (string sourcePath in files)
-            {
-                if (File.Exists(sourcePath) || Directory.Exists(sourcePath))
-                {
-                    string? newPath = fileOperations.CopyItem(sourcePath, targetPath);
-                    if (!string.IsNullOrEmpty(newPath))
-                    {
-                        Debug.WriteLine($"Pasted: {newPath}");
-                    }
-                    else
-                    {
-                        WPF.MessageBox.Show($"Failed to paste item: {sourcePath}", "Error", 
-                            MessageBoxButton.OK, MessageBoxImage.Error);
-                    }
-                }
-                else
-                {
-                    WPF.MessageBox.Show($"Clipboard file/folder does not exist: {sourcePath}", "Error", 
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            }
-
-            // Refresh the target directory
-            RefreshDirectory(targetPath);
-        }
-
-        private void CreateNewFile(string directoryPath)
-        {
-            if (!Directory.Exists(directoryPath))
-            {
-                WPF.MessageBox.Show("Cannot create a file outside a folder.", "Invalid Target", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            string newFileName = Microsoft.VisualBasic.Interaction.InputBox(
-                "Enter file name (e.g., new_file.txt):", "Add New File", "");
-            
-            if (!string.IsNullOrWhiteSpace(newFileName))
-            {
-                var command = new CreateFileCommand(fileOperations, this, directoryPath, newFileName);
-                undoManager.ExecuteCommand(command);
-                
-                // Refresh the directory
-                RefreshDirectory(directoryPath);
-            }
-        }
-
-        private void CreateNewFolder(string directoryPath)
-        {
-            if (!Directory.Exists(directoryPath))
-            {
-                WPF.MessageBox.Show("Cannot create a folder outside a directory.", "Invalid Target", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            string newFolderName = Microsoft.VisualBasic.Interaction.InputBox(
-                "Enter folder name:", "Add New Folder", "");
-            
-            if (!string.IsNullOrWhiteSpace(newFolderName))
-            {
-                var command = new CreateFolderCommand(fileOperations, this, directoryPath, newFolderName);
-                undoManager.ExecuteCommand(command);
-                
-                // Refresh the directory
-                RefreshDirectory(directoryPath);
-            }
-        }
-
-        private void CollapseAll()
-        {
-            foreach (var item in treeView.Items.OfType<TreeViewItem>())
-            {
-                CollapseTreeViewItem(item);
-            }
-        }
-
-        private void ExpandAll()
-        {
-            foreach (var item in treeView.Items.OfType<TreeViewItem>())
-            {
-                ExpandTreeViewItem(item);
-            }
-        }
-
-        private void CollapseTreeViewItem(TreeViewItem item)
-        {
-            item.IsExpanded = false;
-            foreach (var child in item.Items.OfType<TreeViewItem>())
-            {
-                CollapseTreeViewItem(child);
-            }
-        }
-
-        private void ExpandTreeViewItem(TreeViewItem item)
-        {
-            item.IsExpanded = true;
-            foreach (var child in item.Items.OfType<TreeViewItem>())
-            {
-                ExpandTreeViewItem(child);
-            }
-        }
-
-        private void OpenFolderInNewTab(string folderPath)
-        {
-            if (!Directory.Exists(folderPath))
-            {
-                Debug.WriteLine($"Error: {folderPath} is not a valid directory.");
-                return;
-            }
-
-            // This would need to interact with your TabManager
-            var mainWindow = Window.GetWindow(this);
-            if (mainWindow != null)
-            {
-                // Example of how this might work - adjust based on your actual MainWindow structure
-                // mainWindow.OpenFolderInNewTab(folderPath);
-                Debug.WriteLine($"Opening folder in new tab: {folderPath}");
-            }
-        }
-
-        private void OpenFolderInNewWindow(string folderPath)
-        {
-            if (!Directory.Exists(folderPath))
-            {
-                Debug.WriteLine($"Error: {folderPath} is not a valid directory.");
-                return;
-            }
-
-            // This would need to interact with your MainWindow
-            var mainWindow = Window.GetWindow(this);
-            if (mainWindow != null)
-            {
-                // Example of how this might work - adjust based on your actual MainWindow structure
-                // mainWindow.OpenFolderInNewWindow(folderPath);
-                Debug.WriteLine($"Opening folder in new window: {folderPath}");
-            }
-        }
-
-        private void ToggleSplitView(string folderPath)
-        {
-            if (!Directory.Exists(folderPath))
-            {
-                Debug.WriteLine($"Error: {folderPath} is not a valid directory.");
-                return;
-            }
-
-            // This would need to interact with your MainWindow
-            var mainWindow = Window.GetWindow(this);
-            if (mainWindow != null)
-            {
-                // Example of how this might work - adjust based on your actual MainWindow structure
-                // mainWindow.ToggleSplitView(folderPath);
-                Debug.WriteLine($"Toggling split view for: {folderPath}");
-            }
-        }
-
-        private void PreviewPdf(string filePath)
-        {
-            // Placeholder for PDF preview functionality
-            WPF.MessageBox.Show("PDF preview functionality not implemented in this version.", 
-                "Not Implemented", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-
-        private void PreviewImage(string filePath)
-        {
-            // Placeholder for image preview functionality
-            WPF.MessageBox.Show("Image preview functionality not implemented in this version.", 
-                "Not Implemented", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-
-        private void ChangeItemTextColor(string path)
-        {
-            // Placeholder for text color customization
-            var dialog = new WinForms.ColorDialog();
-            if (dialog.ShowDialog() == WinForms.DialogResult.OK)
-            {
-                Color color = Color.FromArgb(
-                    dialog.Color.A, 
-                    dialog.Color.R, 
-                    dialog.Color.G, 
-                    dialog.Color.B);
-                
-                string colorHex = color.ToString();
-                metadataManager.SetItemColor(path, colorHex);
-                
-                // Also update bold status if needed
-                bool isBold = false; // You would get this from a checkbox
-                metadataManager.SetItemBold(path, isBold);
-                
-                // Refresh the tree view to apply the changes
-                RefreshTreeView();
-            }
-        }
-        #endregion
-
-        #region Utility Methods
-        private void HandleDoubleClick(string path)
-        {
-            if (File.Exists(path))
-            {
-                try
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = path,
-                        UseShellExecute = true
-                    });
-                }
-                catch (Exception ex)
-                {
-                    WPF.MessageBox.Show($"Failed to open file:\n{path}\n\n{ex.Message}", 
-                        "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
-            else if (Directory.Exists(path))
-            {
-                var item = GetTreeViewItemForPath(path);
-                if (item != null)
-                {
-                    item.IsExpanded = !item.IsExpanded;
-                }
-            }
-        }
-
-        private void OnTreeItemClicked(string path)
-        {
-            if (string.IsNullOrEmpty(path) || (!File.Exists(path) && !Directory.Exists(path)))
-            {
-                Debug.WriteLine("[WARNING] Clicked on an invalid path, ignoring.");
-                return;
-            }
-
-            // Update current folder path
-            if (Directory.Exists(path))
-            {
-                currentFolderPath = path;
-            }
-            else
-            {
-                currentFolderPath = Path.GetDirectoryName(path) ?? string.Empty;
-            }
-
-            // Notify listeners of location change
-            LocationChanged?.Invoke(this, path);
-            
-            // Notify that this FileTree was clicked
-            FileTreeClicked?.Invoke(this, EventArgs.Empty);
-        }
-
-        private TreeViewItem? GetSelectedTreeViewItem()
-        {
-            return treeView.SelectedItem as TreeViewItem;
-        }
-
-        private IEnumerable<TreeViewItem> GetSelectedTreeViewItems()
-        {
-            // This is a simplification since WPF TreeView doesn't natively support multi-select
-            // For multi-select, you would need a custom implementation
-            var selectedItem = GetSelectedTreeViewItem();
-            if (selectedItem != null)
-                yield return selectedItem;
-        }
-
-        private TreeViewItem? GetTreeViewItemFromPoint(Point point)
-        {
-            var element = treeView.InputHitTest(point) as DependencyObject;
-            while (element != null && !(element is TreeViewItem))
-            {
-                element = VisualTreeHelper.GetParent(element);
-            }
-            return element as TreeViewItem;
-        }
-
-        private TreeViewItem? GetTreeViewItemForPath(string path)
-        {
-            if (string.IsNullOrEmpty(path))
-                return null;
-                
-            if (itemCache.ContainsKey(path))
-                return itemCache[path];
-            
-            // Fallback to searching through the tree
-            return FindTreeViewItemByPath(treeView.Items, path);
-        }
-
-        private TreeViewItem? FindTreeViewItemByPath(ItemCollection items, string path)
-        {
-            foreach (var item in items.OfType<TreeViewItem>())
-            {
-                if (item.Tag?.ToString() == path)
-                    return item;
-                
-                var childItem = FindTreeViewItemByPath(item.Items, path);
-                if (childItem != null)
-                    return childItem;
-            }
-            return null;
-        }
-
-        private void RefreshParentDirectory(string path)
-        {
-            if (string.IsNullOrEmpty(path))
-                return;
-                
-            string? parentDir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(parentDir))
-            {
-                RefreshDirectory(parentDir);
-            }
-        }
-
-        private void RefreshDirectory(string directoryPath)
-        {
-            if (string.IsNullOrEmpty(directoryPath))
-                return;
-                
-            var item = GetTreeViewItemForPath(directoryPath);
-            if (item != null)
-            {
-                bool wasExpanded = item.IsExpanded;
-                item.Items.Clear();
-                item.Items.Add(CreateDummyItem());
-                
-                if (wasExpanded)
-                {
-                    item.IsExpanded = false;
-                    item.IsExpanded = true;
-                }
-            }
-        }
-
-        private void RefreshTreeView()
-        {
-            // This is a more extensive refresh that might be needed after metadata changes
-            string? currentRoot = null;
-            if (treeView.Items.Count > 0 && treeView.Items[0] is TreeViewItem rootItem)
-            {
-                currentRoot = rootItem.Tag?.ToString();
-            }
-            
-            if (!string.IsNullOrEmpty(currentRoot))
-            {
-                SetRootDirectory(currentRoot);
-            }
-        }
-
-        public bool NavigateAndHighlight(string path)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(path))
-                    return false;
-                    
-                string absPath = Path.GetFullPath(path);
-                
-                if (!File.Exists(absPath) && !Directory.Exists(absPath))
-                {
-                    Debug.WriteLine($"[ERROR] Cannot navigate to non-existent path: {absPath}");
-                    return false;
-                }
-
-                // Expand parent directories
-                string? dirPath = File.Exists(absPath) ? Path.GetDirectoryName(absPath) : absPath;
-                if (dirPath != null)
-                {
-                    ExpandToPath(dirPath);
-                }
-                
-                // Select and scroll to the item
-                var item = GetTreeViewItemForPath(absPath);
-                if (item != null)
-                {
-                    // Instead of: treeView.SelectedItem = item;
-                    item.IsSelected = true;
-                    item.BringIntoView();
-                    Debug.WriteLine($"✅ Successfully navigated and highlighted: {absPath}");
-                    return true;
-                }
-                
-                Debug.WriteLine($"[ERROR] Could not find TreeViewItem for path: {absPath}");
-                return false;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[ERROR] Exception while navigating: {ex.Message}");
-                return false;
-            }
-        }
-
-        public bool ExpandToPath(string path)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(path))
-                    return false;
-                    
-                string absPath = Path.GetFullPath(path);
-                
-                if (!Directory.Exists(absPath))
-                {
-                    if (File.Exists(absPath))
-                    {
-                        // If it's a file, expand to its parent directory
-                        absPath = Path.GetDirectoryName(absPath) ?? string.Empty;
-                        if (string.IsNullOrEmpty(absPath))
+                        catch (Exception ex)
                         {
-                            return false;
+                            MessageBox.Show($"Error copying {sourcePath}: {ex.Message}", 
+                                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                         }
+                    }
+                    
+                    // Refresh target directory
+                    if (item.IsExpanded)
+                    {
+                        item.IsExpanded = false;
+                        item.IsExpanded = true;
                     }
                     else
                     {
-                        Debug.WriteLine($"[ERROR] Cannot expand non-existent path: {absPath}");
-                        return false;
+                        item.IsExpanded = true;
                     }
                 }
-
-                // Get path components
-                var components = absPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                    .Where(c => !string.IsNullOrEmpty(c))
-                    .ToList();
-                
-                if (components.Count == 0)
-                    return false;
-                
-                // Start from the root
-                string currentPath = components[0] + Path.DirectorySeparatorChar;
-                var currentItem = GetTreeViewItemForPath(currentPath);
-                
-                if (currentItem == null)
-                {
-                    // If we can't find the root, try to use the first item in the tree
-                    if (treeView.Items.Count > 0 && treeView.Items[0] is TreeViewItem rootItem)
-                    {
-                        currentItem = rootItem;
-                        currentPath = rootItem.Tag?.ToString() ?? string.Empty;
-                        if (string.IsNullOrEmpty(currentPath))
-                        {
-                            return false;
-                        }
-                    }
-                    else
-                    {
-                        Debug.WriteLine($"[ERROR] Cannot find root item for path: {absPath}");
-                        return false;
-                    }
-                }
-
-                // Expand each component
-                for (int i = 1; i < components.Count; i++)
-                {
-                    currentPath = Path.Combine(currentPath, components[i]);
-                    currentItem.IsExpanded = true;
-                    
-                    var nextItem = GetTreeViewItemForPath(currentPath);
-                    if (nextItem == null)
-                    {
-                        Debug.WriteLine($"[ERROR] Cannot find item for path component: {currentPath}");
-                        return false;
-                    }
-                    
-                    currentItem = nextItem;
-                }
-
-                // Expand the final directory
-                currentItem.IsExpanded = true;
-                return true;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[ERROR] Exception while expanding path: {ex.Message}");
-                return false;
+                MessageBox.Show($"Error processing dropped files: {ex.Message}", 
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
-
-        private void AutoResizeNameColumn()
-        {
-            if (!autoResizeEnabled)
-                return;
             
-            // Placeholder method since TreeView doesn't have columns
-            // In a GridView implementation, this would resize the columns
-        }
-
-        private void AutoResizeColumns()
-        {
-            if (!autoResizeEnabled)
-                return;
-            
-            // Placeholder method since TreeView doesn't have columns
-            // In a GridView implementation, this would resize the columns
-        }
-
-        private void ScheduleColumnAdjustment()
-        {
-            if (!autoResizeEnabled)
-                return;
-            
-            columnResizeTimer.Stop();
-            columnResizeTimer.Start();
+            Mouse.OverrideCursor = null;
+            e.Handled = true;
         }
 
         /// <summary>
-        /// Handles dropped files.
+        /// Gets the FileTreeItem at a specific point
         /// </summary>
-        /// <param name="files">Array of file paths that were dropped</param>
+        private FileTreeItem GetItemFromPoint(Point point)
+        {
+            var result = VisualTreeHelper.HitTest(treeListView, point);
+            if (result == null)
+                return null;
+                
+            DependencyObject obj = result.VisualHit;
+            while (obj != null && !(obj is ListViewItem))
+            {
+                obj = VisualTreeHelper.GetParent(obj);
+            }
+            
+            if (obj is ListViewItem item)
+            {
+                return item.DataContext as FileTreeItem;
+            }
+            
+            return null;
+        }
+        
+        /// <summary>
+        /// Recursively copies a directory and its contents
+        /// </summary>
+        private void CopyDirectory(string sourceDirName, string destDirName)
+        {
+            // Create the destination directory
+            Directory.CreateDirectory(destDirName);
+
+            // Copy files
+            foreach (string file in Directory.GetFiles(sourceDirName))
+            {
+                string fileName = Path.GetFileName(file);
+                string destFile = Path.Combine(destDirName, fileName);
+                File.Copy(file, destFile, true);
+            }
+
+            // Copy subdirectories
+            foreach (string dir in Directory.GetDirectories(sourceDirName))
+            {
+                string dirName = Path.GetFileName(dir);
+                string destDir = Path.Combine(destDirName, dirName);
+                CopyDirectory(dir, destDir);
+            }
+        }
+        
+        /// <summary>
+        /// Handles a collection of dropped files
+        /// </summary>
         private void HandleDrop(string[] files)
         {
             if (files == null || files.Length == 0)
@@ -1531,100 +938,560 @@ namespace ExplorerPro.UI.FileTree
                             // Create destination directory
                             Directory.CreateDirectory(destPath);
                             
-                            // Copy all files and subdirectories
-                            foreach (string file in Directory.GetFiles(filePath))
-                            {
-                                string fileName = Path.GetFileName(file);
-                                File.Copy(file, Path.Combine(destPath, fileName), false);
-                            }
-                            
-                            foreach (string dir in Directory.GetDirectories(filePath))
-                            {
-                                string dirName = Path.GetFileName(dir);
-                                DirectoryCopy(dir, Path.Combine(destPath, dirName), true);
-                            }
+                            // Copy directory contents
+                            CopyDirectory(filePath, destPath);
                         }
                     }
                     catch (Exception ex)
                     {
-                        WPF.MessageBox.Show($"Error handling dropped file {filePath}: {ex.Message}", 
+                        MessageBox.Show($"Error handling dropped file {filePath}: {ex.Message}", 
                             "Drop Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                 }
             }
             
-            // Refresh the view to show new files
-            RefreshTreeView();
+            // Refresh view
+            RefreshView();
         }
+        
+        #endregion
+
+        #region Context Menu
 
         /// <summary>
-        /// Helper method to recursively copy directories
+        /// Builds the context menu for a file or folder
         /// </summary>
-        private void DirectoryCopy(string sourceDirName, string destDirName, bool copySubDirs)
+        private void BuildContextMenu(string selectedPath)
         {
-            DirectoryInfo dir = new DirectoryInfo(sourceDirName);
-            
-            if (!dir.Exists)
-            {
-                throw new DirectoryNotFoundException($"Source directory does not exist or could not be found: {sourceDirName}");
-            }
-            
-            // If the destination directory doesn't exist, create it
-            if (!Directory.Exists(destDirName))
-            {
-                Directory.CreateDirectory(destDirName);
-            }
-            
-            // Get the files in the directory and copy them to the new location
-            FileInfo[] files = dir.GetFiles();
-            foreach (FileInfo file in files)
-            {
-                string tempPath = Path.Combine(destDirName, file.Name);
-                file.CopyTo(tempPath, false);
-            }
-            
-            // If copying subdirectories, copy them and their contents to new location
-            if (copySubDirs)
-            {
-                DirectoryInfo[] dirs = dir.GetDirectories();
-                foreach (DirectoryInfo subdir in dirs)
+            try {
+                // Clear existing items
+                treeContextMenu.Items.Clear();
+    
+                // Create a context menu provider with required dependencies
+                var contextMenuProvider = new ContextMenuProvider(metadataManager, undoManager);
+                
+                // Build the context menu with the action handler
+                ContextMenu menu = contextMenuProvider.BuildContextMenu(selectedPath, 
+                    (action, path) => ContextMenuActionTriggered?.Invoke(this, new Tuple<string, string>(action, path)));
+                
+                // Copy all items from the built menu to our existing menu
+                foreach (var item in menu.Items)
                 {
-                    string tempPath = Path.Combine(destDirName, subdir.Name);
-                    DirectoryCopy(subdir.FullName, tempPath, copySubDirs);
+                    treeContextMenu.Items.Add(item);
+                }
+            }
+            catch (Exception ex) {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to build context menu: {ex.Message}");
+                // Create minimal context menu
+                treeContextMenu.Items.Clear();
+                var menuItem = new MenuItem { Header = "Refresh" };
+                menuItem.Click += (s, e) => RefreshView();
+                treeContextMenu.Items.Add(menuItem);
+            }
+        }
+        
+        #endregion
+
+        #region Context Menu Action Handlers
+
+        /// <summary>
+        /// Handles a double-click on a tree item
+        /// </summary>
+        private void HandleDoubleClick(string path)
+        {
+            if (File.Exists(path))
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = path,
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to open file:\n{path}\n\n{ex.Message}", 
+                        "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            else if (Directory.Exists(path))
+            {
+                // Find the item and toggle expansion
+                var item = FindItemByPath(path);
+                if (item != null)
+                {
+                    item.IsExpanded = !item.IsExpanded;
                 }
             }
         }
+
+        /// <summary>
+        /// Called when a tree item is clicked
+        /// </summary>
+        private void OnTreeItemClicked(string path)
+        {
+            if (string.IsNullOrEmpty(path) || (!File.Exists(path) && !Directory.Exists(path)))
+            {
+                System.Diagnostics.Debug.WriteLine("[WARNING] Clicked on an invalid path, ignoring.");
+                return;
+            }
+
+            // Update current folder path
+            if (Directory.Exists(path))
+            {
+                currentFolderPath = path;
+            }
+            else
+            {
+                currentFolderPath = Path.GetDirectoryName(path) ?? string.Empty;
+            }
+
+            // Notify listeners of location change
+            LocationChanged?.Invoke(this, path);
+            
+            // Notify that this FileTree was clicked
+            FileTreeClicked?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Deletes an item with undo support
+        /// </summary>
+        private void DeleteItemWithUndo(string path)
+        {
+            if (!File.Exists(path) && !Directory.Exists(path))
+            {
+                MessageBox.Show($"'{path}' does not exist.", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (MessageBox.Show($"Are you sure you want to delete:\n{path}?", 
+                "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            {
+                var command = new DeleteItemCommand(fileOperations, this, path);
+                undoManager.ExecuteCommand(command);
+                
+                // Refresh the parent directory
+                RefreshParentDirectory(path);
+            }
+        }
+
+        /// <summary>
+        /// Copies an item to the clipboard
+        /// </summary>
+        private void CopyItem(string path)
+        {
+            if (File.Exists(path) || Directory.Exists(path))
+            {
+                var filePaths = new System.Collections.Specialized.StringCollection();
+                filePaths.Add(path);
+                Clipboard.SetFileDropList(filePaths);
+            }
+            else
+            {
+                MessageBox.Show("The selected file or folder does not exist.", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
+        /// Pastes items from the clipboard
+        /// </summary>
+        private void PasteItem(string targetPath)
+        {
+            if (!Directory.Exists(targetPath))
+            {
+                MessageBox.Show("You can only paste into a directory.", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var files = Clipboard.GetFileDropList();
+            if (files.Count == 0)
+            {
+                MessageBox.Show("No valid file path(s) in clipboard.", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            foreach (string sourcePath in files)
+            {
+                if (File.Exists(sourcePath) || Directory.Exists(sourcePath))
+                {
+                    string newPath = fileOperations.CopyItem(sourcePath, targetPath);
+                    if (string.IsNullOrEmpty(newPath))
+                    {
+                        MessageBox.Show($"Failed to paste item: {sourcePath}", "Error", 
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show($"Clipboard file/folder does not exist: {sourcePath}", "Error", 
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+
+            // Refresh the target directory
+            RefreshDirectory(targetPath);
+        }
+
+        /// <summary>
+        /// Creates a new file
+        /// </summary>
+        private void CreateNewFile(string directoryPath)
+        {
+            if (!Directory.Exists(directoryPath))
+            {
+                MessageBox.Show("Cannot create a file outside a folder.", "Invalid Target", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string newFileName = Microsoft.VisualBasic.Interaction.InputBox(
+                "Enter file name (e.g., new_file.txt):", "Add New File", "");
+            
+            if (!string.IsNullOrWhiteSpace(newFileName))
+            {
+                var command = new CreateFileCommand(fileOperations, this, directoryPath, newFileName);
+                undoManager.ExecuteCommand(command);
+                
+                // Refresh the directory
+                RefreshDirectory(directoryPath);
+            }
+        }
+
+        /// <summary>
+        /// Creates a new folder
+        /// </summary>
+        private void CreateNewFolder(string directoryPath)
+        {
+            if (!Directory.Exists(directoryPath))
+            {
+                MessageBox.Show("Cannot create a folder outside a directory.", "Invalid Target", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string newFolderName = Microsoft.VisualBasic.Interaction.InputBox(
+                "Enter folder name:", "Add New Folder", "");
+            
+            if (!string.IsNullOrWhiteSpace(newFolderName))
+            {
+                var command = new CreateFolderCommand(fileOperations, this, directoryPath, newFolderName);
+                undoManager.ExecuteCommand(command);
+                
+                // Refresh the directory
+                RefreshDirectory(directoryPath);
+            }
+        }
+        
+        #endregion
+
+        #region Utility Methods
+
+        /// <summary>
+        /// Refreshes the parent directory of a path
+        /// </summary>
+        private void RefreshParentDirectory(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return;
+                
+            string parentDir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(parentDir))
+            {
+                RefreshDirectory(parentDir);
+            }
+        }
+
+        /// <summary>
+        /// Refreshes a specific directory
+        /// </summary>
+        private void RefreshDirectory(string directoryPath)
+        {
+            if (string.IsNullOrEmpty(directoryPath))
+                return;
+                
+            var item = FindItemByPath(directoryPath);
+            if (item != null)
+            {
+                bool wasExpanded = item.IsExpanded;
+                item.ClearChildren();
+                item.AddDummyChild();
+                
+                if (wasExpanded)
+                {
+                    item.IsExpanded = false;
+                    item.IsExpanded = true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Refreshes the entire tree view
+        /// </summary>
+        private void RefreshTreeView()
+        {
+            // This is a more extensive refresh that might be needed after metadata changes
+            string currentRoot = null;
+            if (_rootItems.Count > 0)
+            {
+                currentRoot = _rootItems[0].Path;
+            }
+            
+            if (!string.IsNullOrEmpty(currentRoot))
+            {
+                SetRootDirectory(currentRoot);
+            }
+        }
+
+        /// <summary>
+        /// Finds a FileTreeItem by path
+        /// </summary>
+        private FileTreeItem FindItemByPath(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return null;
+                
+            if (_itemCache.TryGetValue(path, out FileTreeItem cachedItem))
+                return cachedItem;
+            
+            // Recursively search through the items
+            foreach (var rootItem in _rootItems)
+            {
+                var foundItem = FindItemByPathRecursive(rootItem, path);
+                if (foundItem != null)
+                    return foundItem;
+            }
+            
+            return null;
+        }
+
+        /// <summary>
+        /// Recursively searches for an item by path
+        /// </summary>
+        private FileTreeItem FindItemByPathRecursive(FileTreeItem parent, string path)
+        {
+            if (parent.Path == path)
+                return parent;
+                
+            foreach (var child in parent.Children)
+            {
+                if (child.Path == path)
+                    return child;
+                    
+                if (child.IsDirectory && child.Children.Count > 0)
+                {
+                    var foundItem = FindItemByPathRecursive(child, path);
+                    if (foundItem != null)
+                        return foundItem;
+                }
+            }
+            
+            return null;
+        }
+        
+        /// <summary>
+        /// Selects an item by path and scrolls it into view
+        /// </summary>
+        public void SelectItemByPath(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return;
+                
+            string absPath = Path.GetFullPath(path);
+            
+            if (!File.Exists(absPath) && !Directory.Exists(absPath))
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Cannot navigate to non-existent path: {absPath}");
+                return;
+            }
+
+            // First, expand parent directories
+            string dirPath = File.Exists(absPath) ? Path.GetDirectoryName(absPath) : absPath;
+            if (dirPath != null)
+            {
+                ExpandPathToRoot(dirPath);
+            }
+            
+            // Now find and select the item
+            var item = FindItemByPath(absPath);
+            if (item != null)
+            {
+                item.IsSelected = true;
+                
+                // Ensure item is visible
+                ListViewItem listViewItem = GetListViewItemForObject(item);
+                listViewItem?.BringIntoView();
+                
+                System.Diagnostics.Debug.WriteLine($"✅ Successfully navigated and highlighted: {absPath}");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Could not find item for path: {absPath}");
+            }
+        }
+
+        /// <summary>
+        /// Gets a ListViewItem for a specific object
+        /// </summary>
+        private ListViewItem GetListViewItemForObject(object obj)
+        {
+            if (treeListView.ItemContainerGenerator.ContainerFromItem(obj) is ListViewItem item)
+            {
+                return item;
+            }
+            
+            // Wait for container generation if needed
+            if (treeListView.ItemContainerGenerator.Status != System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated)
+            {
+                treeListView.UpdateLayout();
+                return treeListView.ItemContainerGenerator.ContainerFromItem(obj) as ListViewItem;
+            }
+            
+            return null;
+        }
+
+        /// <summary>
+        /// Expands all directories in a path from the root
+        /// </summary>
+        private void ExpandPathToRoot(string path)
+        {
+            string rootPath = null;
+            if (_rootItems.Count > 0)
+            {
+                rootPath = _rootItems[0].Path;
+            }
+            
+            if (string.IsNullOrEmpty(rootPath) || !path.StartsWith(rootPath))
+            {
+                return;
+            }
+            
+            // Get relative path from root
+            string relativePath = path.Substring(rootPath.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string[] pathComponents = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            
+            // Start at root
+            string currentPath = rootPath;
+            FileTreeItem currentItem = _rootItems[0];
+            currentItem.IsExpanded = true;
+            
+            // Expand each component
+            foreach (string component in pathComponents)
+            {
+                if (string.IsNullOrEmpty(component))
+                    continue;
+                    
+                currentPath = Path.Combine(currentPath, component);
+                
+                // Find item in current item's children
+                FileTreeItem nextItem = null;
+                foreach (var child in currentItem.Children)
+                {
+                    if (child.Path == currentPath)
+                    {
+                        nextItem = child;
+                        break;
+                    }
+                }
+                
+                if (nextItem == null)
+                {
+                    // Try to create and add the item
+                    if (Directory.Exists(currentPath))
+                    {
+                        nextItem = CreateFileTreeItem(currentPath);
+                        currentItem.Children.Add(nextItem);
+                    }
+                    else
+                    {
+                        // Cannot continue
+                        break;
+                    }
+                }
+                
+                // Expand if directory
+                if (nextItem.IsDirectory)
+                {
+                    nextItem.IsExpanded = true;
+                    currentItem = nextItem;
+                }
+                else
+                {
+                    // End of path
+                    break;
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Auto-resizes all columns
+        /// </summary>
+        private void AutoResizeColumns()
+        {
+            if (!autoResizeEnabled || !(treeListView.View is GridView gridView))
+                return;
+                
+            foreach (GridViewColumn column in gridView.Columns)
+            {
+                // Skip first column (name with indentation)
+                if (gridView.Columns.IndexOf(column) == 0)
+                    continue;
+                    
+                // Auto-size based on header and content
+                column.Width = double.NaN; // Auto-size
+                
+                // Set min width
+                column.MinWidth = 50;
+            }
+        }
+        
         #endregion
 
         #region IDisposable Implementation
+        
+        private bool _disposed = false;
+
         /// <summary>
         /// Releases resources used by this control
         /// </summary>
         public void Dispose()
         {
-            // Unsubscribe from events to prevent memory leaks
-            this.Loaded -= FileTreeView_Loaded;
-            this.SizeChanged -= FileTreeView_SizeChanged;
-            
-            // Dispose timers
-            columnResizeTimer.Stop();
-            
-            // Clear collections to release memory
-            itemCache.Clear();
-            pathCache.Clear();
-            
-            // Dispose any disposable dependencies
-            if (fileSystemModel is IDisposable disposableModel)
-            {
-                disposableModel.Dispose();
-            }
-            
-            // Clean up references
-            metadataManager = null!;
-            fileSystemModel = null!;
-            undoManager = null!;
-            _settingsManager = null!;
+            Dispose(true);
+            GC.SuppressFinalize(this);
         }
+
+        /// <summary>
+        /// Releases the unmanaged resources and optionally releases the managed resources
+        /// </summary>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    // Dispose managed resources
+                    foreach (var item in _rootItems)
+                    {
+                        if (item is IDisposable disposable)
+                        {
+                            disposable.Dispose();
+                        }
+                    }
+                    
+                    // Clear collections
+                    _rootItems.Clear();
+                    _itemCache.Clear();
+                }
+                
+                // Set disposed flag
+                _disposed = true;
+            }
+        }
+        
         #endregion
     }
 }

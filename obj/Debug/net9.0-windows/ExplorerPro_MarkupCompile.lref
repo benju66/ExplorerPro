@@ -1,4 +1,4 @@
-﻿C:\ExplorerPro\obj\Debug\net9.0-windows\GeneratedInternalTypeHelper.g.cs
+﻿
 FC:\ExplorerPro\App.xaml;;
 FC:\ExplorerPro\UI\Controls\DateEditControl.xaml;;
 FC:\ExplorerPro\UI\Controls\PreviewHandlers\ImagePreviewControl.xaml;;
@@ -9,6 +9,7 @@ FC:\ExplorerPro\UI\Dialogs\FilePropertiesDialog.xaml;;
 FC:\ExplorerPro\UI\Dialogs\ManageRecurringItemsDialog.xaml;;
 FC:\ExplorerPro\UI\Dialogs\SettingsDialog.xaml;;
 FC:\ExplorerPro\UI\Dialogs\TextInputDialog.xaml;;
+FC:\ExplorerPro\UI\FileTree\FileTreeDemo.xaml;;
 FC:\ExplorerPro\UI\FileTree\FileTreeView.xaml;;
 FC:\ExplorerPro\UI\MainWindow\MainWindow.xaml;;
 FC:\ExplorerPro\UI\MainWindow\MainWindowContainer.xaml;;
