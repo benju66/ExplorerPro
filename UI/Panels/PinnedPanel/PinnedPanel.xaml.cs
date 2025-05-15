@@ -14,7 +14,6 @@ using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using ExplorerPro.Models;
 using ExplorerPro.UI.FileTree;
-using System.Windows.Threading;
 // Add namespace alias to resolve the conflict
 using MainWindowType = ExplorerPro.UI.MainWindow.MainWindow;
 
@@ -864,7 +863,7 @@ namespace ExplorerPro.UI.Panels.PinnedPanel
             }
             
             // Locate the main file tree and navigate
-            FileTreeView? fileTree = FindActiveFileTree();
+            FileTreeListView? fileTree = FindActiveFileTree();
             if (fileTree == null)
             {
                 _logger?.LogError("No active file tree found for navigation.");
@@ -1050,8 +1049,8 @@ namespace ExplorerPro.UI.Panels.PinnedPanel
         /// <summary>
         /// Finds the active file tree in the main window
         /// </summary>
-        /// <returns>The active FileTreeView, or null if not found</returns>
-        private FileTreeView? FindActiveFileTree()
+        /// <returns>The active FileTreeListView, or null if not found</returns>
+        private FileTreeListView? FindActiveFileTree()
         {
             Window? mainWindow = Window.GetWindow(this);
             if (mainWindow == null)
