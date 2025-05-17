@@ -1,4 +1,4 @@
-// UI/Controls/TreeListView.cs - Targeted Fixes
+// UI/Controls/TreeListView.cs - Fixed Version
 
 using System;
 using System.Windows;
@@ -42,7 +42,7 @@ namespace ExplorerPro.UI.Controls
         }
 
         /// <summary>
-        /// Called when IsExpanded property changes
+        /// Called when IsExpanded property changes - FIXED to ensure LoadChildren is directly called
         /// </summary>
         private static void OnIsExpandedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
@@ -52,32 +52,62 @@ namespace ExplorerPro.UI.Controls
                 {
                     System.Diagnostics.Debug.WriteLine($"[TREELISTVIEW] IsExpanded property changed to {e.NewValue} for {item.DataContext}");
                     
+                    var dataItem = item.DataContext;
+                    
+                    // CRITICAL FIX: Directly invoke the LoadChildren event on the data item when expanded
+                    if ((bool)e.NewValue == true)
+                    {
+                        // Check for HasDummyChild method
+                        var hasDummyChildMethod = dataItem.GetType().GetMethod("HasDummyChild");
+                        bool hasDummy = false;
+                        
+                        if (hasDummyChildMethod != null)
+                        {
+                            hasDummy = (bool)hasDummyChildMethod.Invoke(dataItem, null);
+                        }
+                        
+                        // Check for IsDirectory property
+                        var isDirectoryProperty = dataItem.GetType().GetProperty("IsDirectory");
+                        bool isDirectory = false;
+                        
+                        if (isDirectoryProperty != null)
+                        {
+                            isDirectory = (bool)isDirectoryProperty.GetValue(dataItem);
+                        }
+                        
+                        // If it's a directory and has a dummy child, directly invoke LoadChildren
+                        if (isDirectory && (hasDummy || hasDummyChildMethod == null))
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[TREELISTVIEW] Directly invoking LoadChildren event via reflection");
+                            
+                            // Get the LoadChildren event and invoke it directly
+                            var loadChildrenEvent = dataItem.GetType().GetEvent("LoadChildren");
+                            if (loadChildrenEvent != null)
+                            {
+                                var delegates = DelegateUtilities.GetInvocationList(dataItem, loadChildrenEvent);
+                                if (delegates != null && delegates.Count > 0)
+                                {
+                                    foreach (var del in delegates)
+                                    {
+                                        del.DynamicInvoke(dataItem, EventArgs.Empty);
+                                    }
+                                    System.Diagnostics.Debug.WriteLine($"[TREELISTVIEW] Successfully invoked {delegates.Count} LoadChildren delegates");
+                                }
+                                else
+                                {
+                                    System.Diagnostics.Debug.WriteLine("[TREELISTVIEW] No LoadChildren delegates found to invoke");
+                                }
+                            }
+                        }
+                    }
+                    
                     // Find parent TreeListView
                     TreeListView treeListView = FindParent<TreeListView>(item);
                     if (treeListView != null)
                     {
-                        // Get the DataContext which should be a FileTreeItem
-                        var dataItem = item.DataContext;
-                        
                         // Use Dispatcher to ensure event handling happens after UI updates
-                        // This prevents race conditions between expansion and child loading
                         treeListView.Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
                         {
-                            // Ensure children are loaded when expanded
-                            if ((bool)e.NewValue)
-                            {
-                                // Attempt to identify if this is a FileTreeItem with a HasDummyChild method
-                                var hasDummyChildMethod = dataItem.GetType().GetMethod("HasDummyChild");
-                                if (hasDummyChildMethod != null)
-                                {
-                                    bool hasDummy = (bool)hasDummyChildMethod.Invoke(dataItem, null);
-                                    if (hasDummy)
-                                    {
-                                        System.Diagnostics.Debug.WriteLine($"[TREELISTVIEW] Item has dummy child, ensuring LoadChildren event is raised");
-                                    }
-                                }
-                            }
-                            
                             // Raise expansion event
                             treeListView.RaiseTreeItemExpanded(dataItem, (bool)e.NewValue);
                             
@@ -168,18 +198,64 @@ namespace ExplorerPro.UI.Controls
                         bool isExpanded = GetIsExpanded(container);
                         if (isExpanded)
                         {
-                            System.Diagnostics.Debug.WriteLine($"[TREELISTVIEW] Checking expanded item: {item}");
+                            System.Diagnostics.Debug.WriteLine($"[TREELISTVIEW] Found expanded item: {item}");
                             
-                            // Check if this is a FileTreeItem with HasDummyChild method
-                            var hasDummyChildMethod = item.GetType().GetMethod("HasDummyChild");
-                            if (hasDummyChildMethod != null)
+                            // IMPROVED: More robust checking for directory items that need children loaded
+                            bool isDirectory = false;
+                            var isDirectoryProperty = item.GetType().GetProperty("IsDirectory");
+                            if (isDirectoryProperty != null)
                             {
-                                bool hasDummy = (bool)hasDummyChildMethod.Invoke(item, null);
-                                if (hasDummy)
+                                isDirectory = (bool)isDirectoryProperty.GetValue(item);
+                            }
+                            
+                            if (isDirectory)
+                            {
+                                // Check if this is a FileTreeItem with HasDummyChild method
+                                var hasDummyChildMethod = item.GetType().GetMethod("HasDummyChild");
+                                bool hasDummy = false;
+                                
+                                if (hasDummyChildMethod != null)
                                 {
-                                    System.Diagnostics.Debug.WriteLine($"[TREELISTVIEW] Found expanded item with dummy child, raising event");
+                                    hasDummy = (bool)hasDummyChildMethod.Invoke(item, null);
+                                }
+                                
+                                var childrenProperty = item.GetType().GetProperty("Children");
+                                bool hasNoChildren = false;
+                                
+                                if (childrenProperty != null)
+                                {
+                                    var children = childrenProperty.GetValue(item);
+                                    if (children != null)
+                                    {
+                                        var countProperty = children.GetType().GetProperty("Count");
+                                        if (countProperty != null)
+                                        {
+                                            int count = (int)countProperty.GetValue(children);
+                                            hasNoChildren = count == 0;
+                                        }
+                                    }
+                                }
+                                
+                                if (hasDummy || hasNoChildren)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[TREELISTVIEW] Found expanded item with dummy child or no children, raising event");
                                     
-                                    // Force raise event to ensure children are loaded
+                                    // FIX: Invoke LoadChildren directly for more reliability
+                                    var loadChildrenEvent = item.GetType().GetEvent("LoadChildren");
+                                    if (loadChildrenEvent != null)
+                                    {
+                                        var delegates = DelegateUtilities.GetInvocationList(item, loadChildrenEvent);
+                                        if (delegates != null && delegates.Count > 0)
+                                        {
+                                            foreach (var del in delegates)
+                                            {
+                                                del.DynamicInvoke(item, EventArgs.Empty);
+                                            }
+                                            System.Diagnostics.Debug.WriteLine($"[TREELISTVIEW] Successfully invoked {delegates.Count} LoadChildren delegates");
+                                        }
+                                    }
+                                    
+                                    // Also raise the normal event
                                     RaiseTreeItemExpanded(item, true);
                                 }
                             }
@@ -310,17 +386,46 @@ namespace ExplorerPro.UI.Controls
                         // If it's expanded, make sure children are loaded
                         if (isExpanded)
                         {
-                            // Check if this is a FileTreeItem with HasDummyChild method
-                            var hasDummyChildMethod = itemType.GetMethod("HasDummyChild");
-                            if (hasDummyChildMethod != null)
+                            // NEW APPROACH: Direct invocation for directory items                            
+                            bool isDirectory = false;
+                            var isDirectoryProperty = itemType.GetProperty("IsDirectory");
+                            if (isDirectoryProperty != null)
                             {
-                                bool hasDummy = (bool)hasDummyChildMethod.Invoke(item, null);
+                                isDirectory = (bool)isDirectoryProperty.GetValue(item);
+                            }
+                            
+                            if (isDirectory)
+                            {
+                                // Check if this item has dummy children
+                                bool hasDummy = false;
+                                var hasDummyChildMethod = itemType.GetMethod("HasDummyChild");
+                                if (hasDummyChildMethod != null)
+                                {
+                                    hasDummy = (bool)hasDummyChildMethod.Invoke(item, null);
+                                }
+                                
                                 if (hasDummy)
                                 {
-                                    System.Diagnostics.Debug.WriteLine($"[TREELISTVIEW] Item has dummy child, raising TreeItemExpanded event");
+                                    System.Diagnostics.Debug.WriteLine($"[TREELISTVIEW] Found expanded directory with dummy child, scheduling LoadChildren");
                                     
                                     // Schedule event on a later priority to allow container preparation to complete
                                     Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => {
+                                        // Directly invoke the LoadChildren event
+                                        var loadChildrenEvent = itemType.GetEvent("LoadChildren");
+                                        if (loadChildrenEvent != null)
+                                        {
+                                            var delegates = DelegateUtilities.GetInvocationList(item, loadChildrenEvent);
+                                            if (delegates != null && delegates.Count > 0)
+                                            {
+                                                foreach (var del in delegates)
+                                                {
+                                                    del.DynamicInvoke(item, EventArgs.Empty);
+                                                }
+                                                System.Diagnostics.Debug.WriteLine($"[TREELISTVIEW] Successfully invoked {delegates.Count} LoadChildren delegates");
+                                            }
+                                        }
+                                        
+                                        // Also raise normal event
                                         RaiseTreeItemExpanded(item, true);
                                     }));
                                 }
@@ -360,6 +465,42 @@ namespace ExplorerPro.UI.Controls
         {
             Item = item;
             IsExpanded = isExpanded;
+        }
+    }
+    
+    /// <summary>
+    /// Utility class for working with delegates
+    /// </summary>
+    public static class DelegateUtilities
+    {
+        /// <summary>
+        /// Get the invocation list for an event
+        /// </summary>
+        public static List<Delegate> GetInvocationList(object target, System.Reflection.EventInfo eventInfo)
+        {
+            try
+            {
+                // Get the field that stores the delegate
+                var eventField = target.GetType().GetField(eventInfo.Name,
+                    System.Reflection.BindingFlags.NonPublic | 
+                    System.Reflection.BindingFlags.Instance);
+                
+                if (eventField != null)
+                {
+                    var eventDelegate = eventField.GetValue(target) as Delegate;
+                    if (eventDelegate != null)
+                    {
+                        return new List<Delegate>(eventDelegate.GetInvocationList());
+                    }
+                }
+                
+                return new List<Delegate>();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error getting invocation list: {ex.Message}");
+                return new List<Delegate>();
+            }
         }
     }
 }
