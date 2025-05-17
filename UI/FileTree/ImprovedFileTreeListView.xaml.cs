@@ -96,7 +96,7 @@ namespace ExplorerPro.UI.FileTree
         #endregion
 
         #region Constructor
-        
+
         /// <summary>
         /// Initializes a new instance of the ImprovedFileTreeListView class
         /// </summary>
@@ -105,13 +105,13 @@ namespace ExplorerPro.UI.FileTree
             try
             {
                 InitializeComponent();
-                
+
                 // Initialize file operations
                 fileOperations = new FileOperations.FileOperations();
-                
+
                 // Initialize file icon provider
                 _iconProvider = new FileIconProvider(true);
-                
+
                 // Initialize managers and model
                 InitializeManagersAndModel();
 
@@ -124,39 +124,39 @@ namespace ExplorerPro.UI.FileTree
 
                 // Set the TreeView ItemsSource
                 fileTreeView.ItemsSource = _rootItems;
-                
+
                 // Set up event handlers
                 fileTreeView.SelectedItemChanged += FileTreeView_SelectedItemChanged;
                 fileTreeView.MouseDoubleClick += FileTreeView_MouseDoubleClick;
                 fileTreeView.ContextMenuOpening += FileTreeView_ContextMenuOpening;
-                
+
                 // Add handlers for TreeViewItem expanded event
                 fileTreeView.AddHandler(TreeViewItem.ExpandedEvent, new RoutedEventHandler(TreeViewItem_Expanded));
-                
+
                 // Mouse event handlers for drag and drop
                 fileTreeView.PreviewMouseLeftButtonDown += FileTreeView_PreviewMouseLeftButtonDown;
                 fileTreeView.PreviewMouseLeftButtonUp += FileTreeView_PreviewMouseLeftButtonUp;
                 fileTreeView.MouseMove += FileTreeView_MouseMove;
-                
+
                 // Add drag/drop handlers
                 fileTreeView.AllowDrop = true;
                 fileTreeView.DragEnter += FileTreeView_DragEnter;
                 fileTreeView.DragOver += FileTreeView_DragOver;
                 fileTreeView.Drop += FileTreeView_Drop;
                 fileTreeView.DragLeave += FileTreeView_DragLeave;
-                
+
                 // Setup column headers
                 SetupColumnHeaders();
-                
+
                 // Setup column click events
                 this.Loaded += ImprovedFileTreeListView_Loaded;
-                
+
                 // Add debug logging for initialization
                 System.Diagnostics.Debug.WriteLine("[INIT] ImprovedFileTreeListView initialized");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error initializing ImprovedFileTreeListView: {ex.Message}", 
+                MessageBox.Show($"Error initializing ImprovedFileTreeListView: {ex.Message}",
                     "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
