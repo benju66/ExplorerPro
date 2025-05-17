@@ -402,6 +402,9 @@ namespace ExplorerPro.UI.FileTree
             try {
                 if (_itemCache.TryGetValue(path, out FileTreeItem cachedItem))
                 {
+                    // Always ensure the event handler is attached for cached items
+                    cachedItem.LoadChildren -= Item_LoadChildren; // Remove any existing handler
+                    cachedItem.LoadChildren += Item_LoadChildren; // Re-add handler
                     return cachedItem;
                 }
                 
@@ -436,6 +439,9 @@ namespace ExplorerPro.UI.FileTree
                     IsDirectory = Directory.Exists(path),
                     Type = Directory.Exists(path) ? "Folder" : "File"
                 };
+                
+                // Ensure the event handler is attached even for fallback items
+                fallbackItem.LoadChildren += Item_LoadChildren;
                 
                 return fallbackItem;
             }
@@ -479,8 +485,18 @@ namespace ExplorerPro.UI.FileTree
         {
             if (sender is FileTreeItem item && item.IsDirectory)
             {
-                System.Diagnostics.Debug.WriteLine($"[DEBUG] LoadChildren event fired for: {item.Path}");
-                LoadDirectoryContents(item);
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] LoadChildren event fired for: {item.Path}, Current Children: {item.Children.Count}");
+                
+                // Only load if needed (has dummy child or no children)
+                if (item.HasDummyChild() || item.Children.Count == 0)
+                {
+                    LoadDirectoryContents(item);
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] After loading via direct event, Children count: {item.Children.Count}");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Skipping direct load for {item.Path} - already has {item.Children.Count} real children");
+                }
             }
         }
 
@@ -497,6 +513,13 @@ namespace ExplorerPro.UI.FileTree
             try
             {
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Loading directory contents for: {path}");
+                
+                // Skip if already loaded with real items (not just dummy)
+                if (parentItem.Children.Count > 0 && !parentItem.HasDummyChild())
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Directory {path} already has {parentItem.Children.Count} items loaded, skipping");
+                    return;
+                }
                 
                 // Remove dummy item
                 parentItem.ClearChildren();
@@ -659,8 +682,18 @@ namespace ExplorerPro.UI.FileTree
                 // Check if this is an expansion (not collapse)
                 if (e.IsExpanded)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[DEBUG] TreeListView_ItemExpanded: Expanding directory: {item.Path}");
-                    LoadDirectoryContents(item);
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] TreeListView_ItemExpanded: Expanding directory: {item.Path}, Current Children: {item.Children.Count}, HasDummyChild: {item.HasDummyChild()}");
+                    
+                    // Only load if needed (has dummy child or no children)
+                    if (item.HasDummyChild() || item.Children.Count == 0)
+                    {
+                        LoadDirectoryContents(item);
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] After loading, Children count: {item.Children.Count}");
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Skipping load for {item.Path} - already has {item.Children.Count} real children");
+                    }
                 }
                 else
                 {
