@@ -104,6 +104,8 @@ namespace ExplorerPro.UI.FileTree
         {
             try
             {
+                // Register required converters
+
                 InitializeComponent();
 
                 // Initialize file operations
@@ -317,7 +319,69 @@ namespace ExplorerPro.UI.FileTree
         
         private void ColumnHeader_DragCompleted(object sender, DragCompletedEventArgs e)
         {
+            if (_draggedColumn != null)
+            {
+                // Find the column
+                var column = FindColumnByHeader(_draggedColumn);
+                if (column != null)
+                {
+                    // Update TreeViewItem column widths to match
+                    UpdateColumnWidths(column, column.Width);
+                }
+            }
+            
             _draggedColumn = null;
+        }
+
+        private void UpdateColumnWidths(GridViewColumn resizedColumn, double newWidth)
+        {
+            // Determine which column to resize
+            int columnIndex = -1;
+            if (resizedColumn == NameColumn) columnIndex = 0;
+            else if (resizedColumn == SizeColumn) columnIndex = 1;
+            else if (resizedColumn == TypeColumn) columnIndex = 2;
+            else if (resizedColumn == DateColumn) columnIndex = 3;
+            
+            if (columnIndex < 0)
+                return; // Invalid column
+            
+            // Find all TreeViewItems and update their column widths
+            foreach (var item in fileTreeView.Items)
+            {
+                var treeViewItem = fileTreeView.ItemContainerGenerator.ContainerFromItem(item) as TreeViewItem;
+                if (treeViewItem != null)
+                {
+                    // Find the grid in the template
+                    var grid = FindVisualChild<Grid>(treeViewItem);
+                    if (grid != null && grid.ColumnDefinitions.Count > columnIndex)
+                    {
+                        // Update column width
+                        grid.ColumnDefinitions[columnIndex].Width = new GridLength(newWidth);
+                    }
+                    
+                    // Update child items recursively
+                    UpdateColumnWidthsRecursive(treeViewItem, columnIndex, newWidth);
+                }
+            }
+        }
+
+        private void UpdateColumnWidthsRecursive(TreeViewItem parentItem, int columnIndex, double newWidth)
+        {
+            foreach (var item in parentItem.Items)
+            {
+                var childItem = parentItem.ItemContainerGenerator.ContainerFromItem(item) as TreeViewItem;
+                if (childItem != null)
+                {
+                    var grid = FindVisualChild<Grid>(childItem);
+                    if (grid != null && grid.ColumnDefinitions.Count > columnIndex)
+                    {
+                        grid.ColumnDefinitions[columnIndex].Width = new GridLength(newWidth);
+                    }
+                    
+                    // Continue recursion
+                    UpdateColumnWidthsRecursive(childItem, columnIndex, newWidth);
+                }
+            }
         }
         
         private GridViewColumn FindColumnByHeader(GridViewColumnHeader header)
