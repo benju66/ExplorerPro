@@ -20,9 +20,9 @@ using System.Windows.Automation;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedImprovedFileTreeListView.xaml
+    /// Interaction logic for ImprovedFileTreeListView.xaml
     /// </summary>
-    public partial class ImprovedImprovedFileTreeListView : UserControl, IFileTree, IDisposable
+    public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable
     {
         #region Events
         
@@ -83,15 +83,24 @@ namespace ExplorerPro.UI.FileTree
         private FileIconProvider _iconProvider;
         private List<GridViewColumnHeader> _columnHeaders = new List<GridViewColumnHeader>();
         private ContextMenu treeContextMenu;
+        private GridView _columnHeaderGridView;
+        
+        private GridViewColumn NameColumn { get; set; }
+        private GridViewColumn SizeColumn { get; set; }
+        private GridViewColumn TypeColumn { get; set; }
+        private GridViewColumn DateColumn { get; set; }
+        
+        private GridViewColumnHeader _draggedColumn;
+        private double _originalWidth;
         
         #endregion
 
         #region Constructor
         
         /// <summary>
-        /// Initializes a new instance of the ImprovedImprovedFileTreeListView class
+        /// Initializes a new instance of the ImprovedFileTreeListView class
         /// </summary>
-        public ImprovedImprovedFileTreeListView()
+        public ImprovedFileTreeListView()
         {
             try
             {
@@ -105,6 +114,9 @@ namespace ExplorerPro.UI.FileTree
                 
                 // Initialize managers and model
                 InitializeManagersAndModel();
+
+                // Get the GridView from resources
+                _columnHeaderGridView = (GridView)FindResource("columnHeaderGridView");
 
                 // Create context menu
                 treeContextMenu = new ContextMenu();
@@ -137,14 +149,14 @@ namespace ExplorerPro.UI.FileTree
                 SetupColumnHeaders();
                 
                 // Setup column click events
-                this.Loaded += ImprovedImprovedFileTreeListView_Loaded;
+                this.Loaded += ImprovedFileTreeListView_Loaded;
                 
                 // Add debug logging for initialization
-                System.Diagnostics.Debug.WriteLine("[INIT] ImprovedImprovedFileTreeListView initialized");
+                System.Diagnostics.Debug.WriteLine("[INIT] ImprovedFileTreeListView initialized");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error initializing ImprovedImprovedFileTreeListView: {ex.Message}", 
+                MessageBox.Show($"Error initializing ImprovedFileTreeListView: {ex.Message}", 
                     "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -191,7 +203,7 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
-        private void ImprovedImprovedFileTreeListView_Loaded(object sender, RoutedEventArgs e)
+        private void ImprovedFileTreeListView_Loaded(object sender, RoutedEventArgs e)
         {
             // Load settings
             _showHiddenFiles = _settingsManager.GetSetting("file_view.show_hidden", false);
@@ -210,17 +222,28 @@ namespace ExplorerPro.UI.FileTree
                 GridViewColumn typeColumn = new GridViewColumn { Header = "Type", Width = 120 };
                 GridViewColumn dateColumn = new GridViewColumn { Header = "Date Modified", Width = 150 };
                 
-                // Add columns to the GridView
-                columnHeaderGridView.Columns.Add(nameColumn);
-                columnHeaderGridView.Columns.Add(sizeColumn);
-                columnHeaderGridView.Columns.Add(typeColumn);
-                columnHeaderGridView.Columns.Add(dateColumn);
-                
-                // Store references to the columns for binding
-                NameColumn = nameColumn;
-                SizeColumn = sizeColumn;
-                TypeColumn = typeColumn;
-                DateColumn = dateColumn;
+                // Add columns to the GridView - ensure _columnHeaderGridView is not null
+                if (_columnHeaderGridView != null)
+                {
+                    // Clear any existing columns first
+                    _columnHeaderGridView.Columns.Clear();
+                    
+                    // Add the columns
+                    _columnHeaderGridView.Columns.Add(nameColumn);
+                    _columnHeaderGridView.Columns.Add(sizeColumn);
+                    _columnHeaderGridView.Columns.Add(typeColumn);
+                    _columnHeaderGridView.Columns.Add(dateColumn);
+                    
+                    // Store references to the columns for binding
+                    NameColumn = nameColumn;
+                    SizeColumn = sizeColumn;
+                    TypeColumn = typeColumn;
+                    DateColumn = dateColumn;
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("[ERROR] _columnHeaderGridView is null in SetupColumnHeaders");
+                }
             }
             catch (Exception ex)
             {
@@ -234,6 +257,13 @@ namespace ExplorerPro.UI.FileTree
             {
                 // Find all column headers
                 _columnHeaders.Clear();
+                
+                var headerPresenter = FindVisualChild<GridViewHeaderRowPresenter>(this);
+                if (headerPresenter == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[WARNING] GridViewHeaderRowPresenter not found");
+                    return;
+                }
                 
                 foreach (var header in FindVisualChildren<GridViewColumnHeader>(headerPresenter))
                 {
@@ -253,14 +283,6 @@ namespace ExplorerPro.UI.FileTree
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to make columns resizable: {ex.Message}");
             }
         }
-        
-        private GridViewColumn NameColumn { get; set; }
-        private GridViewColumn SizeColumn { get; set; }
-        private GridViewColumn TypeColumn { get; set; }
-        private GridViewColumn DateColumn { get; set; }
-        
-        private GridViewColumnHeader _draggedColumn;
-        private double _originalWidth;
         
         private void ColumnHeader_DragStarted(object sender, DragStartedEventArgs e)
         {
@@ -302,9 +324,9 @@ namespace ExplorerPro.UI.FileTree
         {
             // Find the column associated with this header
             int index = _columnHeaders.IndexOf(header);
-            if (index >= 0 && index < columnHeaderGridView.Columns.Count)
+            if (index >= 0 && _columnHeaderGridView != null && index < _columnHeaderGridView.Columns.Count)
             {
-                return columnHeaderGridView.Columns[index];
+                return _columnHeaderGridView.Columns[index];
             }
             return null;
         }
@@ -437,9 +459,29 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public void ClearSelection()
         {
-            fileTreeView.SelectedItem = null;
+            // Find the currently selected item and unselect it
+            if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
+            {
+                selectedItem.IsSelected = false;
+            }
+            
+            // Alternative approach if the above doesn't work
+            var selectedTreeViewItem = GetSelectedTreeViewItem();
+            if (selectedTreeViewItem != null)
+            {
+                selectedTreeViewItem.IsSelected = false;
+            }
         }
 
+        /// <summary>
+        /// Gets the currently selected TreeViewItem
+        /// </summary>
+        private TreeViewItem GetSelectedTreeViewItem()
+        {
+            var items = FindVisualChildren<TreeViewItem>(fileTreeView);
+            return items.FirstOrDefault(item => item.IsSelected);
+        }
+        
         /// <summary>
         /// Handles files dropped on the tree view.
         /// </summary>
@@ -511,6 +553,39 @@ namespace ExplorerPro.UI.FileTree
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to set root directory: {ex.Message}");
                 MessageBox.Show($"Error setting root directory: {ex.Message}", 
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        /// <summary>
+        /// Navigates to a path and highlights it in the tree view
+        /// </summary>
+        public void NavigateAndHighlight(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return;
+                
+            try
+            {
+                // If it's a file, navigate to its parent directory
+                if (File.Exists(path))
+                {
+                    string dirPath = Path.GetDirectoryName(path);
+                    if (!string.IsNullOrEmpty(dirPath))
+                    {
+                        SetRootDirectory(dirPath);
+                    }
+                }
+                else if (Directory.Exists(path))
+                {
+                    SetRootDirectory(path);
+                }
+                
+                // Now select the item
+                SelectItemByPath(path);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to navigate and highlight: {ex.Message}");
             }
         }
         
@@ -1687,6 +1762,8 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
         {
+            if (parent == null) yield break;
+            
             int childCount = VisualTreeHelper.GetChildrenCount(parent);
             for (int i = 0; i < childCount; i++)
             {
@@ -1709,6 +1786,8 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
         {
+            if (parent == null) return null;
+            
             int childCount = VisualTreeHelper.GetChildrenCount(parent);
             for (int i = 0; i < childCount; i++)
             {
