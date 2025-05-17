@@ -22,8 +22,79 @@ namespace ExplorerPro.UI.FileTree
     /// <summary>
     /// Interaction logic for ImprovedFileTreeListView.xaml
     /// </summary>
-    public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable
+    public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
+        #region Property Changed Implementation
+        
+        public event PropertyChangedEventHandler PropertyChanged;
+        
+        protected void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+        
+        #endregion
+        
+        #region Column Width Properties
+        
+        private double _nameColumnWidth = 250;
+        public double NameColumnWidth
+        {
+            get { return _nameColumnWidth; }
+            set
+            {
+                if (_nameColumnWidth != value)
+                {
+                    _nameColumnWidth = value;
+                    OnPropertyChanged(nameof(NameColumnWidth));
+                }
+            }
+        }
+        
+        private double _sizeColumnWidth = 100;
+        public double SizeColumnWidth
+        {
+            get { return _sizeColumnWidth; }
+            set
+            {
+                if (_sizeColumnWidth != value)
+                {
+                    _sizeColumnWidth = value;
+                    OnPropertyChanged(nameof(SizeColumnWidth));
+                }
+            }
+        }
+        
+        private double _typeColumnWidth = 120;
+        public double TypeColumnWidth
+        {
+            get { return _typeColumnWidth; }
+            set
+            {
+                if (_typeColumnWidth != value)
+                {
+                    _typeColumnWidth = value;
+                    OnPropertyChanged(nameof(TypeColumnWidth));
+                }
+            }
+        }
+        
+        private double _dateColumnWidth = 150;
+        public double DateColumnWidth
+        {
+            get { return _dateColumnWidth; }
+            set
+            {
+                if (_dateColumnWidth != value)
+                {
+                    _dateColumnWidth = value;
+                    OnPropertyChanged(nameof(DateColumnWidth));
+                }
+            }
+        }
+        
+        #endregion
+
         #region Events
         
         public event EventHandler<string> LocationChanged = delegate { };
@@ -104,8 +175,6 @@ namespace ExplorerPro.UI.FileTree
         {
             try
             {
-                // Register required converters
-
                 InitializeComponent();
 
                 // Initialize file operations
@@ -152,6 +221,9 @@ namespace ExplorerPro.UI.FileTree
 
                 // Setup column click events
                 this.Loaded += ImprovedFileTreeListView_Loaded;
+
+                // Set DataContext to self for bindings
+                DataContext = this;
 
                 // Add debug logging for initialization
                 System.Diagnostics.Debug.WriteLine("[INIT] ImprovedFileTreeListView initialized");
@@ -219,10 +291,38 @@ namespace ExplorerPro.UI.FileTree
             try
             {
                 // Define the columns for the header
-                GridViewColumn nameColumn = new GridViewColumn { Header = "Name", Width = 250 };
-                GridViewColumn sizeColumn = new GridViewColumn { Header = "Size", Width = 100 };
-                GridViewColumn typeColumn = new GridViewColumn { Header = "Type", Width = 120 };
-                GridViewColumn dateColumn = new GridViewColumn { Header = "Date Modified", Width = 150 };
+                NameColumn = new GridViewColumn { 
+                    Header = "Name", 
+                    Width = NameColumnWidth 
+                };
+                
+                SizeColumn = new GridViewColumn { 
+                    Header = "Size", 
+                    Width = SizeColumnWidth 
+                };
+                
+                TypeColumn = new GridViewColumn { 
+                    Header = "Type", 
+                    Width = TypeColumnWidth 
+                };
+                
+                DateColumn = new GridViewColumn { 
+                    Header = "Date Modified", 
+                    Width = DateColumnWidth 
+                };
+                
+                // Bind the column widths to the properties
+                BindingOperations.SetBinding(NameColumn, GridViewColumn.WidthProperty, 
+                    new Binding(nameof(NameColumnWidth)) { Source = this, Mode = BindingMode.TwoWay });
+                
+                BindingOperations.SetBinding(SizeColumn, GridViewColumn.WidthProperty, 
+                    new Binding(nameof(SizeColumnWidth)) { Source = this, Mode = BindingMode.TwoWay });
+                
+                BindingOperations.SetBinding(TypeColumn, GridViewColumn.WidthProperty, 
+                    new Binding(nameof(TypeColumnWidth)) { Source = this, Mode = BindingMode.TwoWay });
+                
+                BindingOperations.SetBinding(DateColumn, GridViewColumn.WidthProperty, 
+                    new Binding(nameof(DateColumnWidth)) { Source = this, Mode = BindingMode.TwoWay });
                 
                 // Add columns to the GridView - ensure _columnHeaderGridView is not null
                 if (_columnHeaderGridView != null)
@@ -231,16 +331,10 @@ namespace ExplorerPro.UI.FileTree
                     _columnHeaderGridView.Columns.Clear();
                     
                     // Add the columns
-                    _columnHeaderGridView.Columns.Add(nameColumn);
-                    _columnHeaderGridView.Columns.Add(sizeColumn);
-                    _columnHeaderGridView.Columns.Add(typeColumn);
-                    _columnHeaderGridView.Columns.Add(dateColumn);
-                    
-                    // Store references to the columns for binding
-                    NameColumn = nameColumn;
-                    SizeColumn = sizeColumn;
-                    TypeColumn = typeColumn;
-                    DateColumn = dateColumn;
+                    _columnHeaderGridView.Columns.Add(NameColumn);
+                    _columnHeaderGridView.Columns.Add(SizeColumn);
+                    _columnHeaderGridView.Columns.Add(TypeColumn);
+                    _columnHeaderGridView.Columns.Add(DateColumn);
                 }
                 else
                 {
@@ -307,81 +401,31 @@ namespace ExplorerPro.UI.FileTree
                 // Calculate new width
                 double newWidth = Math.Max(20, _originalWidth + e.HorizontalChange);
                 
-                // Find the column
-                var column = FindColumnByHeader(_draggedColumn);
-                if (column != null)
+                // Find the column index
+                int index = _columnHeaders.IndexOf(_draggedColumn);
+                
+                // Update the appropriate property based on index
+                switch (index)
                 {
-                    // Set the new width
-                    column.Width = newWidth;
+                    case 0:
+                        NameColumnWidth = newWidth;
+                        break;
+                    case 1:
+                        SizeColumnWidth = newWidth;
+                        break;
+                    case 2:
+                        TypeColumnWidth = newWidth;
+                        break;
+                    case 3:
+                        DateColumnWidth = newWidth;
+                        break;
                 }
             }
         }
         
         private void ColumnHeader_DragCompleted(object sender, DragCompletedEventArgs e)
         {
-            if (_draggedColumn != null)
-            {
-                // Find the column
-                var column = FindColumnByHeader(_draggedColumn);
-                if (column != null)
-                {
-                    // Update TreeViewItem column widths to match
-                    UpdateColumnWidths(column, column.Width);
-                }
-            }
-            
             _draggedColumn = null;
-        }
-
-        private void UpdateColumnWidths(GridViewColumn resizedColumn, double newWidth)
-        {
-            // Determine which column to resize
-            int columnIndex = -1;
-            if (resizedColumn == NameColumn) columnIndex = 0;
-            else if (resizedColumn == SizeColumn) columnIndex = 1;
-            else if (resizedColumn == TypeColumn) columnIndex = 2;
-            else if (resizedColumn == DateColumn) columnIndex = 3;
-            
-            if (columnIndex < 0)
-                return; // Invalid column
-            
-            // Find all TreeViewItems and update their column widths
-            foreach (var item in fileTreeView.Items)
-            {
-                var treeViewItem = fileTreeView.ItemContainerGenerator.ContainerFromItem(item) as TreeViewItem;
-                if (treeViewItem != null)
-                {
-                    // Find the grid in the template
-                    var grid = FindVisualChild<Grid>(treeViewItem);
-                    if (grid != null && grid.ColumnDefinitions.Count > columnIndex)
-                    {
-                        // Update column width
-                        grid.ColumnDefinitions[columnIndex].Width = new GridLength(newWidth);
-                    }
-                    
-                    // Update child items recursively
-                    UpdateColumnWidthsRecursive(treeViewItem, columnIndex, newWidth);
-                }
-            }
-        }
-
-        private void UpdateColumnWidthsRecursive(TreeViewItem parentItem, int columnIndex, double newWidth)
-        {
-            foreach (var item in parentItem.Items)
-            {
-                var childItem = parentItem.ItemContainerGenerator.ContainerFromItem(item) as TreeViewItem;
-                if (childItem != null)
-                {
-                    var grid = FindVisualChild<Grid>(childItem);
-                    if (grid != null && grid.ColumnDefinitions.Count > columnIndex)
-                    {
-                        grid.ColumnDefinitions[columnIndex].Width = new GridLength(newWidth);
-                    }
-                    
-                    // Continue recursion
-                    UpdateColumnWidthsRecursive(childItem, columnIndex, newWidth);
-                }
-            }
         }
         
         private GridViewColumn FindColumnByHeader(GridViewColumnHeader header)
