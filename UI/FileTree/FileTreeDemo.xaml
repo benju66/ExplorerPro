@@ -41,7 +41,7 @@
         </Grid>
         
         <!-- File Tree List View -->
-        <local:FileTreeListView x:Name="fileTreeListView" Grid.Row="1" Margin="5"/>
+        <local:ImprovedFileTreeListView x:Name="ImprovedFileTreeListView" Grid.Row="1" Margin="5"/>
         
         <!-- Status Bar -->
         <Grid Grid.Row="2" Background="#F0F0F0">

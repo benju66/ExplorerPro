@@ -1,30 +1,28 @@
-// UI/FileTree/FileTreeView.xaml.cs - Comprehensive Fix
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Threading; 
-using Microsoft.Win32;
-using Microsoft.Extensions.Logging;
+using System.Windows.Threading;
 using ExplorerPro.Models;
 using ExplorerPro.FileOperations;
-using ExplorerPro.UI.Controls;
 using ExplorerPro.Utilities;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation;
 
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for FileTreeView.xaml
+    /// Interaction logic for ImprovedImprovedFileTreeListView.xaml
     /// </summary>
-    public partial class FileTreeListView : UserControl, IFileTree, IDisposable
+    public partial class ImprovedImprovedFileTreeListView : UserControl, IFileTree, IDisposable
     {
         #region Events
         
@@ -48,7 +46,7 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Gets whether any items are selected
         /// </summary>
-        public bool HasSelectedItems => treeListView.SelectedItem != null;
+        public bool HasSelectedItems => fileTreeView.SelectedItem != null;
         
         /// <summary>
         /// Gets or sets whether to show hidden files
@@ -76,7 +74,6 @@ namespace ExplorerPro.UI.FileTree
         private SettingsManager _settingsManager = null!;
         private string currentFolderPath = string.Empty;
         private bool _showHiddenFiles = false;
-        private bool autoResizeEnabled = true;
         private ObservableCollection<FileTreeItem> _rootItems = new ObservableCollection<FileTreeItem>();
         private Dictionary<string, FileTreeItem> _itemCache = new Dictionary<string, FileTreeItem>();
         private const int CacheLimit = 1000;
@@ -84,15 +81,17 @@ namespace ExplorerPro.UI.FileTree
         private const double DragThreshold = 10.0;
         private readonly IFileOperations fileOperations;
         private FileIconProvider _iconProvider;
+        private List<GridViewColumnHeader> _columnHeaders = new List<GridViewColumnHeader>();
+        private ContextMenu treeContextMenu;
         
         #endregion
 
         #region Constructor
         
         /// <summary>
-        /// Initializes a new instance of the FileTreeListView class
+        /// Initializes a new instance of the ImprovedImprovedFileTreeListView class
         /// </summary>
-        public FileTreeListView()
+        public ImprovedImprovedFileTreeListView()
         {
             try
             {
@@ -107,36 +106,45 @@ namespace ExplorerPro.UI.FileTree
                 // Initialize managers and model
                 InitializeManagersAndModel();
 
-                // Set the TreeListView ItemsSource - IMPORTANT: This is the main binding
-                treeListView.ItemsSource = _rootItems;
+                // Create context menu
+                treeContextMenu = new ContextMenu();
+                fileTreeView.ContextMenu = treeContextMenu;
+
+                // Set the TreeView ItemsSource
+                fileTreeView.ItemsSource = _rootItems;
                 
-                // Set up event handlers for the TreeListView
-                treeListView.SelectedTreeItemChanged += TreeListView_SelectedItemChanged;
-                treeListView.TreeItemExpanded += TreeListView_ItemExpanded;
-                treeListView.MouseDoubleClick += TreeListView_MouseDoubleClick;
-                treeListView.ContextMenuOpening += TreeListView_ContextMenuOpening;
+                // Set up event handlers
+                fileTreeView.SelectedItemChanged += FileTreeView_SelectedItemChanged;
+                fileTreeView.MouseDoubleClick += FileTreeView_MouseDoubleClick;
+                fileTreeView.ContextMenuOpening += FileTreeView_ContextMenuOpening;
+                
+                // Add handlers for TreeViewItem expanded event
+                fileTreeView.AddHandler(TreeViewItem.ExpandedEvent, new RoutedEventHandler(TreeViewItem_Expanded));
                 
                 // Mouse event handlers for drag and drop
-                treeListView.PreviewMouseLeftButtonDown += TreeListView_PreviewMouseLeftButtonDown;
-                treeListView.PreviewMouseLeftButtonUp += TreeListView_PreviewMouseLeftButtonUp;
-                treeListView.MouseMove += TreeListView_MouseMove;
+                fileTreeView.PreviewMouseLeftButtonDown += FileTreeView_PreviewMouseLeftButtonDown;
+                fileTreeView.PreviewMouseLeftButtonUp += FileTreeView_PreviewMouseLeftButtonUp;
+                fileTreeView.MouseMove += FileTreeView_MouseMove;
                 
                 // Add drag/drop handlers
-                treeListView.AllowDrop = true;
-                treeListView.DragEnter += TreeListView_DragEnter;
-                treeListView.DragOver += TreeListView_DragOver;
-                treeListView.Drop += TreeListView_Drop;
-                treeListView.DragLeave += TreeListView_DragLeave;
+                fileTreeView.AllowDrop = true;
+                fileTreeView.DragEnter += FileTreeView_DragEnter;
+                fileTreeView.DragOver += FileTreeView_DragOver;
+                fileTreeView.Drop += FileTreeView_Drop;
+                fileTreeView.DragLeave += FileTreeView_DragLeave;
+                
+                // Setup column headers
+                SetupColumnHeaders();
                 
                 // Setup column click events
-                this.Loaded += FileTreeListView_Loaded;
+                this.Loaded += ImprovedImprovedFileTreeListView_Loaded;
                 
                 // Add debug logging for initialization
-                System.Diagnostics.Debug.WriteLine("[INIT] FileTreeListView initialized");
+                System.Diagnostics.Debug.WriteLine("[INIT] ImprovedImprovedFileTreeListView initialized");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error initializing FileTreeListView: {ex.Message}", 
+                MessageBox.Show($"Error initializing ImprovedImprovedFileTreeListView: {ex.Message}", 
                     "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -183,13 +191,122 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
-        private void FileTreeListView_Loaded(object sender, RoutedEventArgs e)
+        private void ImprovedImprovedFileTreeListView_Loaded(object sender, RoutedEventArgs e)
         {
             // Load settings
             _showHiddenFiles = _settingsManager.GetSetting("file_view.show_hidden", false);
             
-            // Configure columns
-            AutoResizeColumns();
+            // Make column headers resizable
+            MakeColumnsResizable();
+        }
+        
+        private void SetupColumnHeaders()
+        {
+            try
+            {
+                // Define the columns for the header
+                GridViewColumn nameColumn = new GridViewColumn { Header = "Name", Width = 250 };
+                GridViewColumn sizeColumn = new GridViewColumn { Header = "Size", Width = 100 };
+                GridViewColumn typeColumn = new GridViewColumn { Header = "Type", Width = 120 };
+                GridViewColumn dateColumn = new GridViewColumn { Header = "Date Modified", Width = 150 };
+                
+                // Add columns to the GridView
+                columnHeaderGridView.Columns.Add(nameColumn);
+                columnHeaderGridView.Columns.Add(sizeColumn);
+                columnHeaderGridView.Columns.Add(typeColumn);
+                columnHeaderGridView.Columns.Add(dateColumn);
+                
+                // Store references to the columns for binding
+                NameColumn = nameColumn;
+                SizeColumn = sizeColumn;
+                TypeColumn = typeColumn;
+                DateColumn = dateColumn;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to setup column headers: {ex.Message}");
+            }
+        }
+        
+        private void MakeColumnsResizable()
+        {
+            try
+            {
+                // Find all column headers
+                _columnHeaders.Clear();
+                
+                foreach (var header in FindVisualChildren<GridViewColumnHeader>(headerPresenter))
+                {
+                    _columnHeaders.Add(header);
+                    
+                    // Find the grip and add event handlers for resizing
+                    if (FindVisualChild<Thumb>(header) is Thumb thumb)
+                    {
+                        thumb.DragStarted += ColumnHeader_DragStarted;
+                        thumb.DragDelta += ColumnHeader_DragDelta;
+                        thumb.DragCompleted += ColumnHeader_DragCompleted;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to make columns resizable: {ex.Message}");
+            }
+        }
+        
+        private GridViewColumn NameColumn { get; set; }
+        private GridViewColumn SizeColumn { get; set; }
+        private GridViewColumn TypeColumn { get; set; }
+        private GridViewColumn DateColumn { get; set; }
+        
+        private GridViewColumnHeader _draggedColumn;
+        private double _originalWidth;
+        
+        private void ColumnHeader_DragStarted(object sender, DragStartedEventArgs e)
+        {
+            // Find the column being resized
+            if (sender is Thumb thumb)
+            {
+                _draggedColumn = FindAncestor<GridViewColumnHeader>(thumb);
+                if (_draggedColumn != null)
+                {
+                    // Store its original width
+                    _originalWidth = _draggedColumn.ActualWidth;
+                }
+            }
+        }
+        
+        private void ColumnHeader_DragDelta(object sender, DragDeltaEventArgs e)
+        {
+            if (_draggedColumn != null)
+            {
+                // Calculate new width
+                double newWidth = Math.Max(20, _originalWidth + e.HorizontalChange);
+                
+                // Find the column
+                var column = FindColumnByHeader(_draggedColumn);
+                if (column != null)
+                {
+                    // Set the new width
+                    column.Width = newWidth;
+                }
+            }
+        }
+        
+        private void ColumnHeader_DragCompleted(object sender, DragCompletedEventArgs e)
+        {
+            _draggedColumn = null;
+        }
+        
+        private GridViewColumn FindColumnByHeader(GridViewColumnHeader header)
+        {
+            // Find the column associated with this header
+            int index = _columnHeaders.IndexOf(header);
+            if (index >= 0 && index < columnHeaderGridView.Columns.Count)
+            {
+                return columnHeaderGridView.Columns[index];
+            }
+            return null;
         }
         
         #endregion
@@ -209,7 +326,7 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public string? GetSelectedPath()
         {
-            if (treeListView.SelectedItem is FileTreeItem selectedItem)
+            if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
             {
                 return selectedItem.Path;
             }
@@ -252,7 +369,7 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public void CopySelected()
         {
-            if (treeListView.SelectedItem is FileTreeItem selectedItem)
+            if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
             {
                 CopyItem(selectedItem.Path);
             }
@@ -284,7 +401,7 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public void DeleteSelected()
         {
-            if (treeListView.SelectedItem is FileTreeItem selectedItem)
+            if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
             {
                 DeleteItemWithUndo(selectedItem.Path);
             }
@@ -320,7 +437,7 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public void ClearSelection()
         {
-            treeListView.SelectedItem = null;
+            fileTreeView.SelectedItem = null;
         }
 
         /// <summary>
@@ -367,10 +484,6 @@ namespace ExplorerPro.UI.FileTree
                     // Add root item to the collection
                     _rootItems.Add(rootItem);
                     
-                    // Important: Ensure the LoadChildren event is wired up
-                    rootItem.LoadChildren -= Item_LoadChildren; // Remove any existing handler
-                    rootItem.LoadChildren += Item_LoadChildren; // Add the handler
-                    
                     // Load the initial set of children
                     LoadDirectoryContents(rootItem);
                     
@@ -387,9 +500,6 @@ namespace ExplorerPro.UI.FileTree
                     
                     // Log the tree state to help with debugging
                     LogTreeState();
-                    
-                    // IMPROVED: Force UI update
-                    RefreshTreeViewUI();
                 }
                 else 
                 {
@@ -417,9 +527,6 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (_itemCache.TryGetValue(path, out FileTreeItem cachedItem))
                 {
-                    // Always ensure the event handler is attached for cached items
-                    cachedItem.LoadChildren -= Item_LoadChildren; // Remove any existing handler
-                    cachedItem.LoadChildren += Item_LoadChildren; // Re-add handler
                     return cachedItem;
                 }
                 
@@ -430,9 +537,6 @@ namespace ExplorerPro.UI.FileTree
                 
                 // Set icon
                 item.Icon = _iconProvider.GetIcon(path);
-                
-                // Register event handler for loading children
-                item.LoadChildren += Item_LoadChildren;
                 
                 // Cache the item
                 if (_itemCache.Count > CacheLimit)
@@ -455,9 +559,6 @@ namespace ExplorerPro.UI.FileTree
                     IsDirectory = Directory.Exists(path),
                     Type = Directory.Exists(path) ? "Folder" : "File"
                 };
-                
-                // Ensure the event handler is attached even for fallback items
-                fallbackItem.LoadChildren += Item_LoadChildren;
                 
                 return fallbackItem;
             }
@@ -499,32 +600,7 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Loads children when a directory item is expanded
-        /// </summary>
-        private void Item_LoadChildren(object? sender, EventArgs e)
-        {
-            if (sender is FileTreeItem item && item.IsDirectory)
-            {
-                System.Diagnostics.Debug.WriteLine($"[DEBUG] LoadChildren event fired for: {item.Path}, Current Children: {item.Children.Count}");
-                
-                // Only load if needed (has dummy child or no children)
-                if (item.HasDummyChild() || item.Children.Count == 0)
-                {
-                    LoadDirectoryContents(item);
-                    System.Diagnostics.Debug.WriteLine($"[DEBUG] After loading via direct event, Children count: {item.Children.Count}");
-                    
-                    // IMPROVED: Force UI refresh to show the newly loaded children
-                    RefreshTreeViewUI();
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Skipping direct load for {item.Path} - already has {item.Children.Count} real children");
-                }
-            }
-        }
-
-        /// <summary>
-        /// Loads the contents of a directory - FIXED IMPLEMENTATION
+        /// Loads the contents of a directory
         /// </summary>
         private void LoadDirectoryContents(FileTreeItem parentItem)
         {
@@ -596,10 +672,6 @@ namespace ExplorerPro.UI.FileTree
                         
                         // Add to our temporary collection first
                         newChildren.Add(dirItem);
-                        
-                        // Important: Ensure the dirItem has LoadChildren event wired up
-                        dirItem.LoadChildren -= Item_LoadChildren; // Remove any existing handler to avoid duplicates
-                        dirItem.LoadChildren += Item_LoadChildren; // Add the handler
                         
                         // Make sure directory has a dummy child to show expander
                         if (dirItem.Children.Count == 0)
@@ -675,30 +747,11 @@ namespace ExplorerPro.UI.FileTree
                     }
                 }
 
-                // IMPROVED: Add all children to parent at once for better performance
+                // Add all children to parent at once for better performance
                 foreach (var child in newChildren)
                 {
                     parentItem.Children.Add(child);
                 }
-
-                // IMPROVED: Explicitly refresh the UI
-                RefreshTreeViewUI();
-
-                // IMPROVED: Dispatch UI update to ensure changes are visible
-                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
-                    if (parentItem.IsExpanded)
-                    {
-                        // Force a UI update by toggling visibility
-                        var wasVisible = this.IsVisible;
-                        this.Visibility = Visibility.Collapsed;
-                        
-                        // Allow UI to process
-                        Dispatcher.Yield(DispatcherPriority.Render);
-                        
-                        // Restore visibility
-                        this.Visibility = wasVisible ? Visibility.Visible : Visibility.Collapsed;
-                    }
-                }));
                 
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Loaded {parentItem.Children.Count} items for directory: {path}");
             }
@@ -729,55 +782,6 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Forces a refresh of the TreeListView UI
-        /// </summary>
-        private void RefreshTreeViewUI()
-        {
-            try
-            {
-                // Get the CollectionView and refresh it
-                ICollectionView view = CollectionViewSource.GetDefaultView(treeListView.ItemsSource);
-                if (view != null)
-                {
-                    view.Refresh();
-                }
-                
-                // Force layout update
-                treeListView.UpdateLayout();
-                
-                // Dispatch a second update to ensure everything is refreshed
-                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
-                    treeListView.UpdateLayout();
-                    
-                    // Force item container generation
-                    treeListView.Items.Refresh();
-                }));
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing TreeListView UI: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Allows UI to update during lengthy operations
-        /// </summary>
-        private void DoEvents()
-        {
-            var frame = new DispatcherFrame();
-            Dispatcher.CurrentDispatcher.BeginInvoke(
-                DispatcherPriority.Background,
-                new DispatcherOperationCallback(ExitFrame), frame);
-            Dispatcher.PushFrame(frame);
-        }
-
-        private object ExitFrame(object frame)
-        {
-            ((DispatcherFrame)frame).Continue = false;
-            return null;
-        }
-        
-        /// <summary>
         /// Logs the current state of the tree for debugging
         /// </summary>
         private void LogTreeState()
@@ -805,9 +809,9 @@ namespace ExplorerPro.UI.FileTree
         #region Event Handlers
 
         /// <summary>
-        /// Handles TreeListView selection changes
+        /// Handles TreeView selection changes
         /// </summary>
-        private void TreeListView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        private void FileTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (e.NewValue is FileTreeItem item)
             {
@@ -816,61 +820,41 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Handles TreeListView item expansion
+        /// Handles TreeViewItem expanded events
         /// </summary>
-        private void TreeListView_ItemExpanded(object sender, TreeItemExpandedEventArgs e)
+        private void TreeViewItem_Expanded(object sender, RoutedEventArgs e)
         {
-            // It's crucial that this handler correctly identifies the FileTreeItem
-            if (e.Item is FileTreeItem item && item.IsDirectory)
+            if (e.OriginalSource is TreeViewItem treeViewItem && 
+                treeViewItem.DataContext is FileTreeItem item && 
+                item.IsDirectory)
             {
-                // Check if this is an expansion (not collapse)
-                if (e.IsExpanded)
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] TreeViewItem_Expanded: {item.Path}");
+                
+                // Check if we need to load children
+                if (item.HasDummyChild() || item.Children.Count == 0)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[DEBUG] TreeListView_ItemExpanded: Expanding directory: {item.Path}, Current Children: {item.Children.Count}, HasDummyChild: {item.HasDummyChild()}");
-                    
-                    // Only load if needed (has dummy child or no children)
-                    if (item.HasDummyChild() || item.Children.Count == 0)
-                    {
-                        LoadDirectoryContents(item);
-                        System.Diagnostics.Debug.WriteLine($"[DEBUG] After loading, Children count: {item.Children.Count}");
-                        
-                        // IMPROVED: Force UI refresh after loading
-                        RefreshTreeViewUI();
-                    }
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Skipping load for {item.Path} - already has {item.Children.Count} real children");
-                    }
+                    LoadDirectoryContents(item);
                 }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"[DEBUG] TreeListView_ItemExpanded: Collapsing directory: {item.Path}");
-                }
-            }
-            
-            if (autoResizeEnabled)
-            {
-                AutoResizeColumns();
             }
         }
 
         /// <summary>
-        /// Handles TreeListView double-click
+        /// Handles TreeView double-click
         /// </summary>
-        private void TreeListView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        private void FileTreeView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            if (treeListView.SelectedItem is FileTreeItem item)
+            if (fileTreeView.SelectedItem is FileTreeItem item)
             {
                 HandleDoubleClick(item.Path);
             }
         }
 
         /// <summary>
-        /// Handles TreeListView context menu opening
+        /// Handles TreeView context menu opening
         /// </summary>
-        private void TreeListView_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        private void FileTreeView_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
-            if (treeListView.SelectedItem is FileTreeItem item)
+            if (fileTreeView.SelectedItem is FileTreeItem item)
             {
                 BuildContextMenu(item.Path);
             }
@@ -883,15 +867,15 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Starts drag operation when mouse is pressed
         /// </summary>
-        private void TreeListView_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        private void FileTreeView_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            dragStartPosition = e.GetPosition(treeListView);
+            dragStartPosition = e.GetPosition(fileTreeView);
         }
 
         /// <summary>
         /// Ends drag operation when mouse is released
         /// </summary>
-        private void TreeListView_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        private void FileTreeView_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             dragStartPosition = null;
         }
@@ -899,11 +883,11 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Initiates drag operation when mouse moves with button pressed
         /// </summary>
-        private void TreeListView_MouseMove(object sender, MouseEventArgs e)
+        private void FileTreeView_MouseMove(object sender, MouseEventArgs e)
         {
             if (e.LeftButton == MouseButtonState.Pressed && dragStartPosition.HasValue)
             {
-                Point currentPosition = e.GetPosition(treeListView);
+                Point currentPosition = e.GetPosition(fileTreeView);
                 Vector dragVector = currentPosition - dragStartPosition.Value;
                 double dragDistance = Math.Sqrt(Math.Pow(dragVector.X, 2) + Math.Pow(dragVector.Y, 2));
 
@@ -915,33 +899,33 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Handles TreeListView drag enter events
+        /// Handles TreeView drag enter events
         /// </summary>
-        private void TreeListView_DragEnter(object sender, DragEventArgs e)
+        private void FileTreeView_DragEnter(object sender, DragEventArgs e)
         {
             HandleDragEnter(e);
         }
 
         /// <summary>
-        /// Handles TreeListView drag over events
+        /// Handles TreeView drag over events
         /// </summary>
-        private void TreeListView_DragOver(object sender, DragEventArgs e)
+        private void FileTreeView_DragOver(object sender, DragEventArgs e)
         {
             HandleDragOver(e);
         }
 
         /// <summary>
-        /// Handles TreeListView drop events
+        /// Handles TreeView drop events
         /// </summary>
-        private void TreeListView_Drop(object sender, DragEventArgs e)
+        private void FileTreeView_Drop(object sender, DragEventArgs e)
         {
             HandleDropEvent(e);
         }
 
         /// <summary>
-        /// Handles TreeListView drag leave events
+        /// Handles TreeView drag leave events
         /// </summary>
-        private void TreeListView_DragLeave(object sender, DragEventArgs e)
+        private void FileTreeView_DragLeave(object sender, DragEventArgs e)
         {
             Mouse.OverrideCursor = null;
             e.Handled = true;
@@ -956,7 +940,7 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         private void StartDrag()
         {
-            if (treeListView.SelectedItem is FileTreeItem selectedItem)
+            if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
             {
                 List<string> paths = new List<string> { selectedItem.Path };
                 
@@ -967,7 +951,7 @@ namespace ExplorerPro.UI.FileTree
                 DataObject dataObject = new DataObject(DataFormats.FileDrop, paths.ToArray());
                 
                 // Start drag-drop operation
-                DragDrop.DoDragDrop(treeListView, dataObject, DragDropEffects.Copy | DragDropEffects.Move);
+                DragDrop.DoDragDrop(fileTreeView, dataObject, DragDropEffects.Copy | DragDropEffects.Move);
                 
                 // Reset drag start position
                 dragStartPosition = null;
@@ -1006,9 +990,6 @@ namespace ExplorerPro.UI.FileTree
                 if (item != null)
                 {
                     item.IsExpanded = !item.IsExpanded;
-                    
-                    // IMPROVED: Force UI refresh after toggling
-                    RefreshTreeViewUI();
                 }
             }
         }
@@ -1234,7 +1215,7 @@ namespace ExplorerPro.UI.FileTree
         private void HandleDragOver(DragEventArgs e)
         {
             // Get the item under the cursor
-            var item = GetItemFromPoint(e.GetPosition(treeListView));
+            var item = GetItemFromPoint(e.GetPosition(fileTreeView));
             
             if (item != null && item.IsDirectory)
             {
@@ -1256,7 +1237,7 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         private void HandleDropEvent(DragEventArgs e)
         {
-            var item = GetItemFromPoint(e.GetPosition(treeListView));
+            var item = GetItemFromPoint(e.GetPosition(fileTreeView));
             if (item == null || !item.IsDirectory)
             {
                 e.Handled = true;
@@ -1326,14 +1307,11 @@ namespace ExplorerPro.UI.FileTree
                     // Refresh target directory including its children
                     RefreshDirectory(targetPath);
                     
-                    // IMPROVED: Ensure target directory is expanded and children are visible
+                    // Ensure target directory is expanded and children are visible
                     if (item != null)
                     {
                         item.IsExpanded = true;
                         LoadDirectoryContents(item);
-                        
-                        // Force UI update
-                        RefreshTreeViewUI();
                     }
                 }
             }
@@ -1352,17 +1330,19 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         private FileTreeItem GetItemFromPoint(Point point)
         {
-            var result = VisualTreeHelper.HitTest(treeListView, point);
+            HitTestResult result = VisualTreeHelper.HitTest(fileTreeView, point);
             if (result == null)
                 return null;
                 
             DependencyObject obj = result.VisualHit;
-            while (obj != null && !(obj is ListViewItem))
+            
+            // Find TreeViewItem by walking up the visual tree
+            while (obj != null && !(obj is TreeViewItem))
             {
                 obj = VisualTreeHelper.GetParent(obj);
             }
             
-            if (obj is ListViewItem item)
+            if (obj is TreeViewItem item)
             {
                 return item.DataContext as FileTreeItem;
             }
@@ -1456,7 +1436,7 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Refreshes a specific directory - IMPROVED IMPLEMENTATION
+        /// Refreshes a specific directory
         /// </summary>
         private void RefreshDirectory(string directoryPath)
         {
@@ -1482,9 +1462,6 @@ namespace ExplorerPro.UI.FileTree
                     
                     // Ensure it stays expanded
                     item.IsExpanded = true;
-                    
-                    // Force UI update
-                    RefreshTreeViewUI();
                 }
             }
             else
@@ -1604,11 +1581,9 @@ namespace ExplorerPro.UI.FileTree
                 
                 // Ensure item is visible
                 Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
-                    ListViewItem listViewItem = GetListViewItemForObject(item);
-                    listViewItem?.BringIntoView();
-                    
-                    // Force UI update
-                    RefreshTreeViewUI();
+                    // Find the TreeViewItem for this item
+                    var treeViewItem = FindTreeViewItemForData(fileTreeView, item);
+                    treeViewItem?.BringIntoView();
                 }));
                 
                 System.Diagnostics.Debug.WriteLine($"✅ Successfully navigated and highlighted: {absPath}");
@@ -1617,73 +1592,6 @@ namespace ExplorerPro.UI.FileTree
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Could not find item for path: {absPath}");
             }
-        }
-
-        /// <summary>
-        /// Navigates to a path and highlights it in the tree view.
-        /// This method is called from other files that expect it to exist.
-        /// </summary>
-        /// <param name="path">The path to navigate to and highlight</param>
-        public void NavigateAndHighlight(string path)
-        {
-            if (string.IsNullOrEmpty(path))
-                return;
-                
-            try
-            {
-                string absPath = Path.GetFullPath(path);
-                
-                // If it's a directory, set as root
-                if (Directory.Exists(absPath))
-                {
-                    SetRootDirectory(absPath);
-                    return;
-                }
-                
-                // If it's a file, set root to parent directory and select file
-                if (File.Exists(absPath))
-                {
-                    string parentDir = Path.GetDirectoryName(absPath);
-                    if (!string.IsNullOrEmpty(parentDir))
-                    {
-                        SetRootDirectory(parentDir);
-                        
-                        // Allow UI to update before selecting
-                        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
-                        {
-                            SelectItemByPath(absPath);
-                        }));
-                    }
-                    return;
-                }
-                
-                // If neither file nor directory exists
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Path does not exist: {absPath}");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Error in NavigateAndHighlight: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Gets a ListViewItem for a specific object
-        /// </summary>
-        private ListViewItem GetListViewItemForObject(object obj)
-        {
-            if (treeListView.ItemContainerGenerator.ContainerFromItem(obj) is ListViewItem item)
-            {
-                return item;
-            }
-            
-            // Wait for container generation if needed
-            if (treeListView.ItemContainerGenerator.Status != System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated)
-            {
-                treeListView.UpdateLayout();
-                return treeListView.ItemContainerGenerator.ContainerFromItem(obj) as ListViewItem;
-            }
-            
-            return null;
         }
 
         /// <summary>
@@ -1744,9 +1652,6 @@ namespace ExplorerPro.UI.FileTree
                         System.Diagnostics.Debug.WriteLine($"[DEBUG] Creating missing directory item: {currentPath}");
                         nextItem = CreateFileTreeItem(currentPath);
                         currentItem.Children.Add(nextItem);
-                        
-                        // Force UI refresh
-                        RefreshTreeViewUI();
                     }
                     else
                     {
@@ -1763,9 +1668,6 @@ namespace ExplorerPro.UI.FileTree
                     LoadDirectoryContents(nextItem);
                     nextItem.IsExpanded = true;
                     currentItem = nextItem;
-                    
-                    // Force UI refresh
-                    RefreshTreeViewUI();
                 }
                 else
                 {
@@ -1776,29 +1678,95 @@ namespace ExplorerPro.UI.FileTree
             }
         }
         
+        #endregion
+
+        #region Helper Methods
+
         /// <summary>
-        /// Auto-resizes all columns
+        /// Find all visual children of a specific type
         /// </summary>
-        private void AutoResizeColumns()
+        private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
         {
-            if (!autoResizeEnabled || !(treeListView.View is GridView gridView))
-                return;
-                
-            foreach (GridViewColumn column in gridView.Columns)
+            int childCount = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < childCount; i++)
             {
-                // Skip first column (name with indentation)
-                if (gridView.Columns.IndexOf(column) == 0)
-                    continue;
-                    
-                // Auto-size based on header and content
-                column.Width = double.NaN; // Auto-size
+                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
                 
-                // Use Width property for minimum width instead of MinWidth
-                if (column.Width < 50)
+                if (child is T t)
                 {
-                    column.Width = 50;
+                    yield return t;
+                }
+                
+                foreach (var grandChild in FindVisualChildren<T>(child))
+                {
+                    yield return grandChild;
                 }
             }
+        }
+        
+        /// <summary>
+        /// Find a visual child of a specific type
+        /// </summary>
+        private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            int childCount = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < childCount; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+                
+                if (child is T t)
+                {
+                    return t;
+                }
+                
+                T childOfChild = FindVisualChild<T>(child);
+                if (childOfChild != null)
+                {
+                    return childOfChild;
+                }
+            }
+            
+            return null;
+        }
+        
+        /// <summary>
+        /// Find an ancestor of a specific type
+        /// </summary>
+        private static T FindAncestor<T>(DependencyObject current) where T : DependencyObject
+        {
+            while (current != null && !(current is T))
+            {
+                current = VisualTreeHelper.GetParent(current);
+            }
+            
+            return current as T;
+        }
+        
+        /// <summary>
+        /// Find the TreeViewItem that contains the specified data item
+        /// </summary>
+        private TreeViewItem FindTreeViewItemForData(ItemsControl container, object item)
+        {
+            if (container == null || item == null)
+                return null;
+                
+            if (container.ItemContainerGenerator.ContainerFromItem(item) is TreeViewItem tvi)
+                return tvi;
+                
+            // Search in all generated containers
+            for (int i = 0; i < container.Items.Count; i++)
+            {
+                var childContainer = container.ItemContainerGenerator.ContainerFromIndex(i) as TreeViewItem;
+                if (childContainer != null)
+                {
+                    // Check if this is a TreeViewItem
+                    var result = FindTreeViewItemForData(childContainer, item);
+                    if (result != null)
+                        return result;
+                }
+            }
+            
+            return null;
         }
         
         #endregion
@@ -1825,15 +1793,6 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (disposing)
                 {
-                    // Dispose managed resources
-                    foreach (var item in _rootItems)
-                    {
-                        if (item is IDisposable disposable)
-                        {
-                            disposable.Dispose();
-                        }
-                    }
-                    
                     // Clear collections
                     _rootItems.Clear();
                     _itemCache.Clear();

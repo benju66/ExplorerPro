@@ -1366,8 +1366,8 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Get the active file tree.
         /// </summary>
-        /// <returns>The active FileTreeListView or null</returns>
-        public FileTreeListView? GetActiveFileTree()
+        /// <returns>The active ImprovedFileTreeListView or null</returns>
+        public ImprovedFileTreeListView? GetActiveFileTree()
         {
             var container = GetCurrentContainer();
             return container?.FindFileTree();

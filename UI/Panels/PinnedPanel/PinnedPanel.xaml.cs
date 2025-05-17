@@ -863,7 +863,7 @@ namespace ExplorerPro.UI.Panels.PinnedPanel
             }
             
             // Locate the main file tree and navigate
-            FileTreeListView? fileTree = FindActiveFileTree();
+            ImprovedFileTreeListView? fileTree = FindActiveFileTree();
             if (fileTree == null)
             {
                 _logger?.LogError("No active file tree found for navigation.");
@@ -1049,8 +1049,8 @@ namespace ExplorerPro.UI.Panels.PinnedPanel
         /// <summary>
         /// Finds the active file tree in the main window
         /// </summary>
-        /// <returns>The active FileTreeListView, or null if not found</returns>
-        private FileTreeListView? FindActiveFileTree()
+        /// <returns>The active ImprovedFileTreeListView, or null if not found</returns>
+        private ImprovedFileTreeListView? FindActiveFileTree()
         {
             Window? mainWindow = Window.GetWindow(this);
             if (mainWindow == null)

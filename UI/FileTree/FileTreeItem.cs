@@ -175,18 +175,11 @@ namespace ExplorerPro.UI.FileTree
                     _isExpanded = value;
                     OnPropertyChanged(nameof(IsExpanded));
                     
-                    // RESTORED: Direct loading when item is expanded
-                    // This is critical for ensuring children are loaded properly
+                    // Call LoadChildren directly when a directory is expanded
                     if (value && IsDirectory)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[TREE] {Name} expanded, HasDummyChild: {HasDummyChild()}, Path: {Path}");
-                        
-                        // Only load if needed (has dummy child or no children)
-                        if (HasDummyChild() || Children.Count == 0)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[TREE] Directly invoking LoadChildren for {Name}");
-                            LoadChildren?.Invoke(this, EventArgs.Empty);
-                        }
+                        System.Diagnostics.Debug.WriteLine($"Expanding: {Name}, Path: {Path}");
+                        LoadChildren?.Invoke(this, EventArgs.Empty);
                     }
                 }
             }

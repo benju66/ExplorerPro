@@ -15,24 +15,24 @@ namespace ExplorerPro.UI.FileTree
             InitializeComponent();
             
             // Set up event handlers
-            fileTreeListView.LocationChanged += FileTreeListView_LocationChanged;
-            fileTreeListView.ContextMenuActionTriggered += FileTreeListView_ContextMenuActionTriggered;
+            ImprovedFileTreeListView.LocationChanged += ImprovedFileTreeListView_LocationChanged;
+            ImprovedFileTreeListView.ContextMenuActionTriggered += ImprovedFileTreeListView_ContextMenuActionTriggered;
             
             // Start at a default location
             string defaultPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            fileTreeListView.SetRootDirectory(defaultPath);
+            ImprovedFileTreeListView.SetRootDirectory(defaultPath);
             
             // Update path text
             pathTextBox.Text = defaultPath;
         }
         
-        private void FileTreeListView_LocationChanged(object sender, string path)
+        private void ImprovedFileTreeListView_LocationChanged(object sender, string path)
         {
             // Update path textbox
             pathTextBox.Text = path;
         }
         
-        private void FileTreeListView_ContextMenuActionTriggered(object sender, Tuple<string, string> e)
+        private void ImprovedFileTreeListView_ContextMenuActionTriggered(object sender, Tuple<string, string> e)
         {
             string action = e.Item1;
             string path = e.Item2;
@@ -44,12 +44,12 @@ namespace ExplorerPro.UI.FileTree
         private void BackButton_Click(object sender, RoutedEventArgs e)
         {
             // Navigate up
-            string currentPath = fileTreeListView.GetCurrentPath();
+            string currentPath = ImprovedFileTreeListView.GetCurrentPath();
             string parentPath = System.IO.Path.GetDirectoryName(currentPath);
             
             if (!string.IsNullOrEmpty(parentPath))
             {
-                fileTreeListView.SetRootDirectory(parentPath);
+                ImprovedFileTreeListView.SetRootDirectory(parentPath);
             }
         }
         
@@ -66,7 +66,7 @@ namespace ExplorerPro.UI.FileTree
             
             if (System.IO.Directory.Exists(path))
             {
-                fileTreeListView.SetRootDirectory(path);
+                ImprovedFileTreeListView.SetRootDirectory(path);
             }
             else
             {
@@ -77,13 +77,13 @@ namespace ExplorerPro.UI.FileTree
         private void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
             // Refresh the current view
-            fileTreeListView.RefreshView();
+            ImprovedFileTreeListView.RefreshView();
         }
         
         private void ToggleHiddenButton_Click(object sender, RoutedEventArgs e)
         {
             // Toggle showing hidden files
-            fileTreeListView.ToggleShowHidden();
+            ImprovedFileTreeListView.ToggleShowHidden();
         }
     }
 }
