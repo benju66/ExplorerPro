@@ -11,6 +11,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading; // Added missing namespace
 using Microsoft.Win32;
 using Microsoft.Extensions.Logging;
 using ExplorerPro.Models;
@@ -369,8 +370,8 @@ namespace ExplorerPro.UI.FileTree
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to set root directory: {ex.Message}");
-                MessageBox.Show($"Error setting root directory: {ex.Message}", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Error setting root directory: {ex.Message}", 
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         
@@ -570,7 +571,7 @@ namespace ExplorerPro.UI.FileTree
         {
             var frame = new DispatcherFrame();
             Dispatcher.CurrentDispatcher.BeginInvoke(
-                System.Windows.Threading.DispatcherPriority.Background,
+                DispatcherPriority.Background,
                 new DispatcherOperationCallback(ExitFrame), frame);
             Dispatcher.PushFrame(frame);
         }
@@ -731,6 +732,259 @@ namespace ExplorerPro.UI.FileTree
                 dragStartPosition = null;
             }
         }
+        
+        #endregion
+
+        #region Pinned Items Management
+        
+        /// <summary>
+        /// Event handler for when pinned items are updated
+        /// </summary>
+        private void OnPinnedItemsUpdated(object? sender, EventArgs e)
+        {
+            RefreshPinnedItems();
+        }
+        
+        /// <summary>
+        /// Refreshes the pinned items tree
+        /// </summary>
+        public void RefreshPinnedItems()
+        {
+            // Implementation would go here
+        }
+        
+        #endregion
+
+        #region Navigation and Context Menu
+
+        /// <summary>
+        /// Handles a double-click on a tree item
+        /// </summary>
+        private void HandleDoubleClick(string path)
+        {
+            if (File.Exists(path))
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = path,
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to open file:\n{path}\n\n{ex.Message}", 
+                        "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            else if (Directory.Exists(path))
+            {
+                // Find the item and toggle expansion
+                var item = FindItemByPath(path);
+                if (item != null)
+                {
+                    item.IsExpanded = !item.IsExpanded;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Called when a tree item is clicked
+        /// </summary>
+        private void OnTreeItemClicked(string path)
+        {
+            if (string.IsNullOrEmpty(path) || (!File.Exists(path) && !Directory.Exists(path)))
+            {
+                System.Diagnostics.Debug.WriteLine("[WARNING] Clicked on an invalid path, ignoring.");
+                return;
+            }
+
+            // Update current folder path
+            if (Directory.Exists(path))
+            {
+                currentFolderPath = path;
+            }
+            else
+            {
+                currentFolderPath = Path.GetDirectoryName(path) ?? string.Empty;
+            }
+
+            // Notify listeners of location change
+            LocationChanged?.Invoke(this, path);
+            
+            // Notify that this FileTree was clicked
+            FileTreeClicked?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Deletes an item with undo support
+        /// </summary>
+        private void DeleteItemWithUndo(string path)
+        {
+            if (!File.Exists(path) && !Directory.Exists(path))
+            {
+                MessageBox.Show($"'{path}' does not exist.", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (MessageBox.Show($"Are you sure you want to delete:\n{path}?", 
+                "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            {
+                var command = new DeleteItemCommand(fileOperations, this, path);
+                undoManager.ExecuteCommand(command);
+                
+                // Refresh the parent directory
+                RefreshParentDirectory(path);
+            }
+        }
+
+        /// <summary>
+        /// Copies an item to the clipboard
+        /// </summary>
+        private void CopyItem(string path)
+        {
+            if (File.Exists(path) || Directory.Exists(path))
+            {
+                var filePaths = new System.Collections.Specialized.StringCollection();
+                filePaths.Add(path);
+                Clipboard.SetFileDropList(filePaths);
+            }
+            else
+            {
+                MessageBox.Show("The selected file or folder does not exist.", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
+        /// Pastes items from the clipboard
+        /// </summary>
+        private void PasteItem(string targetPath)
+        {
+            if (!Directory.Exists(targetPath))
+            {
+                MessageBox.Show("You can only paste into a directory.", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var files = Clipboard.GetFileDropList();
+            if (files.Count == 0)
+            {
+                MessageBox.Show("No valid file path(s) in clipboard.", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            foreach (string sourcePath in files)
+            {
+                if (File.Exists(sourcePath) || Directory.Exists(sourcePath))
+                {
+                    string newPath = fileOperations.CopyItem(sourcePath, targetPath);
+                    if (string.IsNullOrEmpty(newPath))
+                    {
+                        MessageBox.Show($"Failed to paste item: {sourcePath}", "Error", 
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show($"Clipboard file/folder does not exist: {sourcePath}", "Error", 
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+
+            // Refresh the target directory
+            RefreshDirectory(targetPath);
+        }
+
+        /// <summary>
+        /// Creates a new file
+        /// </summary>
+        private void CreateNewFile(string directoryPath)
+        {
+            if (!Directory.Exists(directoryPath))
+            {
+                MessageBox.Show("Cannot create a file outside a folder.", "Invalid Target", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string newFileName = Microsoft.VisualBasic.Interaction.InputBox(
+                "Enter file name (e.g., new_file.txt):", "Add New File", "");
+            
+            if (!string.IsNullOrWhiteSpace(newFileName))
+            {
+                var command = new CreateFileCommand(fileOperations, this, directoryPath, newFileName);
+                undoManager.ExecuteCommand(command);
+                
+                // Refresh the directory
+                RefreshDirectory(directoryPath);
+            }
+        }
+
+        /// <summary>
+        /// Creates a new folder
+        /// </summary>
+        private void CreateNewFolder(string directoryPath)
+        {
+            if (!Directory.Exists(directoryPath))
+            {
+                MessageBox.Show("Cannot create a folder outside a directory.", "Invalid Target", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string newFolderName = Microsoft.VisualBasic.Interaction.InputBox(
+                "Enter folder name:", "Add New Folder", "");
+            
+            if (!string.IsNullOrWhiteSpace(newFolderName))
+            {
+                var command = new CreateFolderCommand(fileOperations, this, directoryPath, newFolderName);
+                undoManager.ExecuteCommand(command);
+                
+                // Refresh the directory
+                RefreshDirectory(directoryPath);
+            }
+        }
+        
+        /// <summary>
+        /// Builds the context menu for a file or folder
+        /// </summary>
+        private void BuildContextMenu(string selectedPath)
+        {
+            try {
+                // Clear existing items
+                treeContextMenu.Items.Clear();
+    
+                // Create a context menu provider with required dependencies
+                var contextMenuProvider = new ContextMenuProvider(metadataManager, undoManager);
+                
+                // Build the context menu with the action handler
+                ContextMenu menu = contextMenuProvider.BuildContextMenu(selectedPath, 
+                    (action, path) => ContextMenuActionTriggered?.Invoke(this, new Tuple<string, string>(action, path)));
+                
+                // Copy all items from the built menu to our existing menu
+                foreach (var item in menu.Items)
+                {
+                    treeContextMenu.Items.Add(item);
+                }
+            }
+            catch (Exception ex) {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to build context menu: {ex.Message}");
+                // Create minimal context menu
+                treeContextMenu.Items.Clear();
+                var menuItem = new MenuItem { Header = "Refresh" };
+                menuItem.Click += (s, e) => RefreshView();
+                treeContextMenu.Items.Add(menuItem);
+            }
+        }
+        
+        #endregion
+
+        #region Drag and Drop Handlers
 
         /// <summary>
         /// Handles drag enter events
@@ -747,7 +1001,7 @@ namespace ExplorerPro.UI.FileTree
             }
             e.Handled = true;
         }
-
+        
         /// <summary>
         /// Handles drag over events
         /// </summary>
@@ -956,239 +1210,6 @@ namespace ExplorerPro.UI.FileTree
         
         #endregion
 
-        #region Context Menu
-
-        /// <summary>
-        /// Builds the context menu for a file or folder
-        /// </summary>
-        private void BuildContextMenu(string selectedPath)
-        {
-            try {
-                // Clear existing items
-                treeContextMenu.Items.Clear();
-    
-                // Create a context menu provider with required dependencies
-                var contextMenuProvider = new ContextMenuProvider(metadataManager, undoManager);
-                
-                // Build the context menu with the action handler
-                ContextMenu menu = contextMenuProvider.BuildContextMenu(selectedPath, 
-                    (action, path) => ContextMenuActionTriggered?.Invoke(this, new Tuple<string, string>(action, path)));
-                
-                // Copy all items from the built menu to our existing menu
-                foreach (var item in menu.Items)
-                {
-                    treeContextMenu.Items.Add(item);
-                }
-            }
-            catch (Exception ex) {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to build context menu: {ex.Message}");
-                // Create minimal context menu
-                treeContextMenu.Items.Clear();
-                var menuItem = new MenuItem { Header = "Refresh" };
-                menuItem.Click += (s, e) => RefreshView();
-                treeContextMenu.Items.Add(menuItem);
-            }
-        }
-        
-        #endregion
-
-        #region Context Menu Action Handlers
-
-        /// <summary>
-        /// Handles a double-click on a tree item
-        /// </summary>
-        private void HandleDoubleClick(string path)
-        {
-            if (File.Exists(path))
-            {
-                try
-                {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = path,
-                        UseShellExecute = true
-                    });
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Failed to open file:\n{path}\n\n{ex.Message}", 
-                        "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
-            else if (Directory.Exists(path))
-            {
-                // Find the item and toggle expansion
-                var item = FindItemByPath(path);
-                if (item != null)
-                {
-                    item.IsExpanded = !item.IsExpanded;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Called when a tree item is clicked
-        /// </summary>
-        private void OnTreeItemClicked(string path)
-        {
-            if (string.IsNullOrEmpty(path) || (!File.Exists(path) && !Directory.Exists(path)))
-            {
-                System.Diagnostics.Debug.WriteLine("[WARNING] Clicked on an invalid path, ignoring.");
-                return;
-            }
-
-            // Update current folder path
-            if (Directory.Exists(path))
-            {
-                currentFolderPath = path;
-            }
-            else
-            {
-                currentFolderPath = Path.GetDirectoryName(path) ?? string.Empty;
-            }
-
-            // Notify listeners of location change
-            LocationChanged?.Invoke(this, path);
-            
-            // Notify that this FileTree was clicked
-            FileTreeClicked?.Invoke(this, EventArgs.Empty);
-        }
-
-        /// <summary>
-        /// Deletes an item with undo support
-        /// </summary>
-        private void DeleteItemWithUndo(string path)
-        {
-            if (!File.Exists(path) && !Directory.Exists(path))
-            {
-                MessageBox.Show($"'{path}' does not exist.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            if (MessageBox.Show($"Are you sure you want to delete:\n{path}?", 
-                "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
-            {
-                var command = new DeleteItemCommand(fileOperations, this, path);
-                undoManager.ExecuteCommand(command);
-                
-                // Refresh the parent directory
-                RefreshParentDirectory(path);
-            }
-        }
-
-        /// <summary>
-        /// Copies an item to the clipboard
-        /// </summary>
-        private void CopyItem(string path)
-        {
-            if (File.Exists(path) || Directory.Exists(path))
-            {
-                var filePaths = new System.Collections.Specialized.StringCollection();
-                filePaths.Add(path);
-                Clipboard.SetFileDropList(filePaths);
-            }
-            else
-            {
-                MessageBox.Show("The selected file or folder does not exist.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
-        /// <summary>
-        /// Pastes items from the clipboard
-        /// </summary>
-        private void PasteItem(string targetPath)
-        {
-            if (!Directory.Exists(targetPath))
-            {
-                MessageBox.Show("You can only paste into a directory.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var files = Clipboard.GetFileDropList();
-            if (files.Count == 0)
-            {
-                MessageBox.Show("No valid file path(s) in clipboard.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            foreach (string sourcePath in files)
-            {
-                if (File.Exists(sourcePath) || Directory.Exists(sourcePath))
-                {
-                    string newPath = fileOperations.CopyItem(sourcePath, targetPath);
-                    if (string.IsNullOrEmpty(newPath))
-                    {
-                        MessageBox.Show($"Failed to paste item: {sourcePath}", "Error", 
-                            MessageBoxButton.OK, MessageBoxImage.Error);
-                    }
-                }
-                else
-                {
-                    MessageBox.Show($"Clipboard file/folder does not exist: {sourcePath}", "Error", 
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            }
-
-            // Refresh the target directory
-            RefreshDirectory(targetPath);
-        }
-
-        /// <summary>
-        /// Creates a new file
-        /// </summary>
-        private void CreateNewFile(string directoryPath)
-        {
-            if (!Directory.Exists(directoryPath))
-            {
-                MessageBox.Show("Cannot create a file outside a folder.", "Invalid Target", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            string newFileName = Microsoft.VisualBasic.Interaction.InputBox(
-                "Enter file name (e.g., new_file.txt):", "Add New File", "");
-            
-            if (!string.IsNullOrWhiteSpace(newFileName))
-            {
-                var command = new CreateFileCommand(fileOperations, this, directoryPath, newFileName);
-                undoManager.ExecuteCommand(command);
-                
-                // Refresh the directory
-                RefreshDirectory(directoryPath);
-            }
-        }
-
-        /// <summary>
-        /// Creates a new folder
-        /// </summary>
-        private void CreateNewFolder(string directoryPath)
-        {
-            if (!Directory.Exists(directoryPath))
-            {
-                MessageBox.Show("Cannot create a folder outside a directory.", "Invalid Target", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            string newFolderName = Microsoft.VisualBasic.Interaction.InputBox(
-                "Enter folder name:", "Add New Folder", "");
-            
-            if (!string.IsNullOrWhiteSpace(newFolderName))
-            {
-                var command = new CreateFolderCommand(fileOperations, this, directoryPath, newFolderName);
-                undoManager.ExecuteCommand(command);
-                
-                // Refresh the directory
-                RefreshDirectory(directoryPath);
-            }
-        }
-        
-        #endregion
-
         #region Utility Methods
 
         /// <summary>
@@ -1263,7 +1284,9 @@ namespace ExplorerPro.UI.FileTree
             {
                 var foundItem = FindItemByPathRecursive(rootItem, path);
                 if (foundItem != null)
+                {
                     return foundItem;
+                }
             }
             
             return null;
@@ -1331,6 +1354,53 @@ namespace ExplorerPro.UI.FileTree
             else
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Could not find item for path: {absPath}");
+            }
+        }
+
+        /// <summary>
+        /// Navigates to a path and highlights it in the tree view.
+        /// This method is called from other files that expect it to exist.
+        /// </summary>
+        /// <param name="path">The path to navigate to and highlight</param>
+        public void NavigateAndHighlight(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return;
+                
+            try
+            {
+                string absPath = Path.GetFullPath(path);
+                
+                // If it's a directory, set as root
+                if (Directory.Exists(absPath))
+                {
+                    SetRootDirectory(absPath);
+                    return;
+                }
+                
+                // If it's a file, set root to parent directory and select file
+                if (File.Exists(absPath))
+                {
+                    string parentDir = Path.GetDirectoryName(absPath);
+                    if (!string.IsNullOrEmpty(parentDir))
+                    {
+                        SetRootDirectory(parentDir);
+                        
+                        // Allow UI to update before selecting
+                        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                        {
+                            SelectItemByPath(absPath);
+                        }));
+                    }
+                    return;
+                }
+                
+                // If neither file nor directory exists
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Path does not exist: {absPath}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Error in NavigateAndHighlight: {ex.Message}");
             }
         }
 
@@ -1444,8 +1514,11 @@ namespace ExplorerPro.UI.FileTree
                 // Auto-size based on header and content
                 column.Width = double.NaN; // Auto-size
                 
-                // Set min width
-                column.MinWidth = 50;
+                // Use Width property for minimum width instead of MinWidth
+                if (column.Width < 50)
+                {
+                    column.Width = 50;
+                }
             }
         }
         
