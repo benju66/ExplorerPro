@@ -12,6 +12,101 @@
         <GridView x:Key="columnHeaderGridView" x:Name="columnHeaderGridView">
             <!-- Columns will be added programmatically -->
         </GridView>
+        
+        <!-- Style for TreeViewItems to fix column alignment -->
+        <Style x:Key="FileTreeViewItemStyle" TargetType="{x:Type TreeViewItem}">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+            <Setter Property="FontWeight" Value="{Binding FontWeight}"/>
+            <Setter Property="Foreground" Value="{Binding Foreground}"/>
+            <!-- Remove padding to prevent indentation affecting grid columns -->
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TreeViewItem}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            
+                            <!-- This is the item content -->
+                            <Grid x:Name="PART_Header" 
+                                  Grid.Column="1" 
+                                  Background="Transparent"
+                                  Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <!-- Match these with the header columns -->
+                                    <ColumnDefinition Width="250"/> <!-- Name -->
+                                    <ColumnDefinition Width="100"/> <!-- Size -->
+                                    <ColumnDefinition Width="120"/> <!-- Type -->
+                                    <ColumnDefinition Width="150"/> <!-- Date Modified -->
+                                </Grid.ColumnDefinitions>
+                                
+                                <!-- Name Column with Icon - First Column Only -->
+                                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                    <!-- Simple Expander Button -->
+                                    <TextBlock x:Name="Expander"
+                                             Text="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource ExpanderTextConverter}}"
+                                             Visibility="{Binding IsDirectory, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                             FontFamily="Segoe UI Symbol"
+                                             Width="16" Height="16" Margin="1,0,5,0"
+                                             VerticalAlignment="Center"
+                                             FontWeight="Bold"
+                                             TextAlignment="Center"/>
+                                    
+                                    <!-- File/Folder Icon -->
+                                    <Image Source="{Binding Icon}" Width="16" Height="16" Margin="1,0,5,0"/>
+                                    
+                                    <!-- File/Folder Name -->
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                
+                                <!-- Size Column - Always aligned with header -->
+                                <TextBlock Grid.Column="1" Text="{Binding Size}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                                
+                                <!-- Type Column - Always aligned with header -->
+                                <TextBlock Grid.Column="2" Text="{Binding Type}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                                
+                                <!-- Date Modified Column - Always aligned with header -->
+                                <TextBlock Grid.Column="3" Text="{Binding LastModifiedStr}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                            </Grid>
+                            
+                            <!-- This is the indentation area to the left -->
+                            <Border x:Name="IndentBorder" Width="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Margin.Left}" Grid.Column="0" Grid.Row="0"/>
+                            
+                            <!-- ItemsPresenter (Children) -->
+                            <ItemsPresenter x:Name="ItemsHost" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"/>
+                        </Grid>
+                        
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="False">
+                                <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="PART_Header" Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsSelected" Value="True"/>
+                                    <Condition Property="IsSelectionActive" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="PART_Header" Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- Converter for the expander symbol -->
+        <local:ExpanderTextConverter x:Key="ExpanderTextConverter"/>
     </UserControl.Resources>
     
     <Grid>
@@ -30,52 +125,8 @@
         <!-- File TreeView -->
         <TreeView x:Name="fileTreeView" Grid.Row="1" BorderThickness="0"
                  VirtualizingStackPanel.IsVirtualizing="True"
-                 VirtualizingStackPanel.VirtualizationMode="Recycling">
-            <TreeView.ItemTemplate>
-                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <!-- These need to match header column widths -->
-                            <ColumnDefinition Width="250"/> <!-- Name -->
-                            <ColumnDefinition Width="100"/> <!-- Size -->
-                            <ColumnDefinition Width="120"/> <!-- Type -->
-                            <ColumnDefinition Width="150"/> <!-- Date Modified -->
-                        </Grid.ColumnDefinitions>
-                        
-                        <!-- Name Column -->
-                        <StackPanel Grid.Column="0" Orientation="Horizontal">
-                            <Image Source="{Binding Icon}" Width="16" Height="16" Margin="0,0,5,0"/>
-                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" 
-                                      Foreground="{Binding Foreground}" 
-                                      FontWeight="{Binding FontWeight}"/>
-                        </StackPanel>
-                        
-                        <!-- Size Column -->
-                        <TextBlock Grid.Column="1" Text="{Binding Size}" Margin="5,0,0,0" 
-                                  VerticalAlignment="Center" 
-                                  Foreground="{Binding Foreground}" 
-                                  FontWeight="{Binding FontWeight}"/>
-                        
-                        <!-- Type Column -->
-                        <TextBlock Grid.Column="2" Text="{Binding Type}" Margin="5,0,0,0" 
-                                  VerticalAlignment="Center" 
-                                  Foreground="{Binding Foreground}" 
-                                  FontWeight="{Binding FontWeight}"/>
-                        
-                        <!-- Date Modified Column -->
-                        <TextBlock Grid.Column="3" Text="{Binding LastModifiedStr}" Margin="5,0,0,0" 
-                                  VerticalAlignment="Center" 
-                                  Foreground="{Binding Foreground}" 
-                                  FontWeight="{Binding FontWeight}"/>
-                    </Grid>
-                </HierarchicalDataTemplate>
-            </TreeView.ItemTemplate>
-            <TreeView.ItemContainerStyle>
-                <Style TargetType="{x:Type TreeViewItem}">
-                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                    <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
-                </Style>
-            </TreeView.ItemContainerStyle>
+                 VirtualizingStackPanel.VirtualizationMode="Recycling"
+                 ItemContainerStyle="{StaticResource FileTreeViewItemStyle}">
         </TreeView>
     </Grid>
 </UserControl>
