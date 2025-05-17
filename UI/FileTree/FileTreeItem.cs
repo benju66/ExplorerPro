@@ -175,10 +175,23 @@ namespace ExplorerPro.UI.FileTree
                     _isExpanded = value;
                     OnPropertyChanged(nameof(IsExpanded));
                     
+                    // Log expansion state for debugging
+                    System.Diagnostics.Debug.WriteLine($"[TREE] {Name} IsExpanded changed to {value}, HasDummyChild: {HasDummyChild()}");
+                    
                     // Load children when expanded
                     if (value && HasDummyChild())
                     {
-                        LoadChildren?.Invoke(this, EventArgs.Empty);
+                        // Ensure the event is invoked
+                        var handler = LoadChildren;
+                        if (handler != null)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[TREE] Invoking LoadChildren for {Name}");
+                            handler(this, EventArgs.Empty);
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[TREE] LoadChildren is null for {Name}");
+                        }
                     }
                 }
             }

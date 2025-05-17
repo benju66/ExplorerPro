@@ -1,4 +1,4 @@
-// UI/FileTree/FileTreeListView.xaml.cs
+// UI/FileTree/FileTreeView.xaml.cs
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -22,7 +22,7 @@ using ExplorerPro.Utilities;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for FileTreeListView.xaml
+    /// Interaction logic for FileTreeView.xaml
     /// </summary>
     public partial class FileTreeListView : UserControl, IFileTree, IDisposable
     {
@@ -128,6 +128,9 @@ namespace ExplorerPro.UI.FileTree
             
             // Setup column click events
             this.Loaded += FileTreeListView_Loaded;
+            
+            // Add debug logging for initialization
+            System.Diagnostics.Debug.WriteLine("[INIT] FileTreeListView initialized");
         }
         
         #endregion
@@ -340,6 +343,8 @@ namespace ExplorerPro.UI.FileTree
                     return;
                 }
 
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Setting root directory to: {directory}");
+                
                 // Clear root items
                 _rootItems.Clear();
                 _itemCache.Clear();
@@ -351,7 +356,14 @@ namespace ExplorerPro.UI.FileTree
                     // Add root item to the collection
                     _rootItems.Add(rootItem);
                     
-                    // Expand the root item
+                    // Important: Ensure the LoadChildren event is wired up
+                    rootItem.LoadChildren -= Item_LoadChildren; // Remove any existing handler
+                    rootItem.LoadChildren += Item_LoadChildren; // Add the handler
+                    
+                    // Load the initial set of children
+                    LoadDirectoryContents(rootItem);
+                    
+                    // Expand the root item - this should be done AFTER loading children
                     rootItem.IsExpanded = true;
                     
                     // Update current folder path
@@ -360,7 +372,10 @@ namespace ExplorerPro.UI.FileTree
                     // Notify listeners of location change
                     LocationChanged?.Invoke(this, directory);
                     
-                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Set root directory to: {directory}");
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Root directory set to: {directory}, Children count: {rootItem.Children.Count}");
+                    
+                    // Log the tree state to help with debugging
+                    LogTreeState();
                 }
                 else 
                 {
@@ -464,6 +479,7 @@ namespace ExplorerPro.UI.FileTree
         {
             if (sender is FileTreeItem item && item.IsDirectory)
             {
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] LoadChildren event fired for: {item.Path}");
                 LoadDirectoryContents(item);
             }
         }
@@ -480,6 +496,8 @@ namespace ExplorerPro.UI.FileTree
 
             try
             {
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Loading directory contents for: {path}");
+                
                 // Remove dummy item
                 parentItem.ClearChildren();
 
@@ -491,7 +509,7 @@ namespace ExplorerPro.UI.FileTree
 
                 // Get and sort directories first
                 var directories = Directory.GetDirectories(path)
-                    .OrderBy(d => new DirectoryInfo(d).Name);
+                    .OrderBy(d => Path.GetFileName(d));  // Use Path.GetFileName for consistent sorting
 
                 // Add directories
                 foreach (var dir in directories)
@@ -503,18 +521,24 @@ namespace ExplorerPro.UI.FileTree
                             continue;
                             
                         var dirItem = CreateFileTreeItem(dir);
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Adding directory: {dir}");
                         parentItem.Children.Add(dirItem);
+                        
+                        // Important: Ensure the dirItem has LoadChildren event wired up
+                        dirItem.LoadChildren -= Item_LoadChildren; // Remove any existing handler to avoid duplicates
+                        dirItem.LoadChildren += Item_LoadChildren; // Add the handler
                     }
                     catch (UnauthorizedAccessException)
                     {
                         // Skip inaccessible directories
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Skipping inaccessible directory: {dir}");
                         continue;
                     }
                 }
 
                 // Get and sort files
                 var files = Directory.GetFiles(path)
-                    .OrderBy(f => new FileInfo(f).Name);
+                    .OrderBy(f => Path.GetFileName(f));  // Use Path.GetFileName for consistent sorting
 
                 // Add files
                 foreach (var file in files)
@@ -526,21 +550,25 @@ namespace ExplorerPro.UI.FileTree
                             continue;
                             
                         var fileItem = CreateFileTreeItem(file);
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Adding file: {file}");
                         parentItem.Children.Add(fileItem);
                     }
                     catch (UnauthorizedAccessException)
                     {
                         // Skip inaccessible files
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Skipping inaccessible file: {file}");
                         continue;
                     }
                 }
 
                 // Ensure UI updates
                 DoEvents();
+                
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Loaded {parentItem.Children.Count} items for directory: {path}");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to load directory contents: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to load directory contents: {ex.Message} for path {path}");
                 
                 // Add dummy items back in case of failure
                 parentItem.ClearChildren();
@@ -582,6 +610,29 @@ namespace ExplorerPro.UI.FileTree
             return null;
         }
         
+        /// <summary>
+        /// Logs the current state of the tree for debugging
+        /// </summary>
+        private void LogTreeState()
+        {
+            System.Diagnostics.Debug.WriteLine("Current Tree State:");
+            int rootCount = _rootItems?.Count ?? 0;
+            System.Diagnostics.Debug.WriteLine($"Root items count: {rootCount}");
+            
+            if (_rootItems != null && _rootItems.Count > 0)
+            {
+                var rootItem = _rootItems[0];
+                System.Diagnostics.Debug.WriteLine($"Root path: {rootItem.Path}, Has children: {rootItem.Children.Count}");
+                
+                foreach (var child in rootItem.Children)
+                {
+                    System.Diagnostics.Debug.WriteLine($"  - Child: {child.Name}, Is Directory: {child.IsDirectory}, Expanded: {child.IsExpanded}");
+                }
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"Cache size: {_itemCache?.Count ?? 0}");
+        }
+        
         #endregion
 
         #region Event Handlers
@@ -602,9 +653,19 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         private void TreeListView_ItemExpanded(object sender, TreeItemExpandedEventArgs e)
         {
-            if (e.IsExpanded && e.Item is FileTreeItem item && item.IsDirectory)
+            // It's crucial that this handler correctly identifies the FileTreeItem
+            if (e.Item is FileTreeItem item && item.IsDirectory)
             {
-                LoadDirectoryContents(item);
+                // Check if this is an expansion (not collapse)
+                if (e.IsExpanded)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] TreeListView_ItemExpanded: Expanding directory: {item.Path}");
+                    LoadDirectoryContents(item);
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] TreeListView_ItemExpanded: Collapsing directory: {item.Path}");
+                }
             }
             
             if (autoResizeEnabled)
@@ -1100,11 +1161,13 @@ namespace ExplorerPro.UI.FileTree
                     // Refresh target directory
                     if (item.IsExpanded)
                     {
+                        // Force reload by toggling expanded state
                         item.IsExpanded = false;
                         item.IsExpanded = true;
                     }
                     else
                     {
+                        // Expand to show contents
                         item.IsExpanded = true;
                     }
                 }
@@ -1244,7 +1307,8 @@ namespace ExplorerPro.UI.FileTree
                 
                 if (wasExpanded)
                 {
-                    item.IsExpanded = false;
+                    // Force a full reload
+                    LoadDirectoryContents(item);
                     item.IsExpanded = true;
                 }
             }
@@ -1449,6 +1513,9 @@ namespace ExplorerPro.UI.FileTree
             FileTreeItem currentItem = _rootItems[0];
             currentItem.IsExpanded = true;
             
+            // Make sure root children are loaded
+            LoadDirectoryContents(currentItem);
+            
             // Expand each component
             foreach (string component in pathComponents)
             {
@@ -1456,12 +1523,13 @@ namespace ExplorerPro.UI.FileTree
                     continue;
                     
                 currentPath = Path.Combine(currentPath, component);
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Expanding component: {component}, Full path: {currentPath}");
                 
                 // Find item in current item's children
                 FileTreeItem nextItem = null;
                 foreach (var child in currentItem.Children)
                 {
-                    if (child.Path == currentPath)
+                    if (child.Path == currentPath || string.Equals(child.Name, component, StringComparison.OrdinalIgnoreCase))
                     {
                         nextItem = child;
                         break;
@@ -1473,12 +1541,14 @@ namespace ExplorerPro.UI.FileTree
                     // Try to create and add the item
                     if (Directory.Exists(currentPath))
                     {
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Creating missing directory item: {currentPath}");
                         nextItem = CreateFileTreeItem(currentPath);
                         currentItem.Children.Add(nextItem);
                     }
                     else
                     {
                         // Cannot continue
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Path component not found and not a directory: {currentPath}");
                         break;
                     }
                 }
@@ -1486,12 +1556,15 @@ namespace ExplorerPro.UI.FileTree
                 // Expand if directory
                 if (nextItem.IsDirectory)
                 {
+                    // Load children before expanding
+                    LoadDirectoryContents(nextItem);
                     nextItem.IsExpanded = true;
                     currentItem = nextItem;
                 }
                 else
                 {
                     // End of path
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Reached end of path at non-directory: {currentPath}");
                     break;
                 }
             }

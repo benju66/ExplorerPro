@@ -1,4 +1,4 @@
-<!-- UI/FileTree/FileTreeListView.xaml -->
+<!-- UI/FileTree/FileTreeView.xaml -->
 <UserControl x:Class="ExplorerPro.UI.FileTree.FileTreeListView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -16,21 +16,20 @@
         
         <!-- Inverse Boolean to Visibility converter -->
         <local:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter" />
+        
+        <!-- Style for tree list items -->
+        <Style x:Key="FileTreeItemStyle" TargetType="{x:Type ListViewItem}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+            <Setter Property="controls:TreeListView.IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+            <Setter Property="FontWeight" Value="{Binding FontWeight}" />
+            <Setter Property="Foreground" Value="{Binding Foreground}" />
+        </Style>
     </UserControl.Resources>
     
     <Grid>
-        <controls:TreeListView x:Name="treeListView" BorderThickness="0">
-            <controls:TreeListView.Resources>
-                <!-- Style for tree list items -->
-                <Style TargetType="{x:Type ListViewItem}">
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                    <!-- IsExpanded binding handled via ItemContainerStyle in code-behind -->
-                    <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
-                    <Setter Property="FontWeight" Value="{Binding FontWeight}" />
-                    <Setter Property="Foreground" Value="{Binding Foreground}" />
-                </Style>
-            </controls:TreeListView.Resources>
-            
+        <controls:TreeListView x:Name="treeListView" BorderThickness="0" 
+                              ItemContainerStyle="{StaticResource FileTreeItemStyle}">
             <controls:TreeListView.View>
                 <GridView>
                     <!-- Name Column with TreeView-like indentation and icon -->
