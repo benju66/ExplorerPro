@@ -12,6 +12,9 @@
         <GridView x:Key="columnHeaderGridView" x:Name="columnHeaderGridView">
             <!-- Columns will be added programmatically with bindings to the width properties -->
         </GridView>
+        
+        <!-- Add just the LevelToIndentConverter -->
+        <local:LevelToIndentConverter x:Key="LevelToIndentConverter"/>
     </UserControl.Resources>
     
     <Grid>
@@ -27,22 +30,27 @@
                                        Columns="{Binding Source={StaticResource columnHeaderGridView}, Path=Columns}"/>
         </Border>
         
-        <!-- File TreeView with standard configuration -->
+        <!-- File TreeView with simplified indentation fix -->
         <TreeView x:Name="fileTreeView" Grid.Row="1" BorderThickness="0"
                  VirtualizingStackPanel.IsVirtualizing="True"
                  VirtualizingStackPanel.VirtualizationMode="Recycling">
+            
             <TreeView.ItemContainerStyle>
                 <Style TargetType="{x:Type TreeViewItem}">
                     <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
                     <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
                     <Setter Property="FontWeight" Value="{Binding FontWeight}"/>
                     <Setter Property="Foreground" Value="{Binding Foreground}"/>
+                    <!-- Use negative margin to counter TreeView's default indentation -->
+                    <Setter Property="Margin" Value="-19,0,0,0"/>
+                    <Setter Property="Padding" Value="0"/>
                 </Style>
             </TreeView.ItemContainerStyle>
             
             <TreeView.ItemTemplate>
                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                    <Grid>
+                    <!-- Apply positive left margin to compensate for the negative item margin -->
+                    <Grid Margin="19,0,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="{Binding NameColumnWidth, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
                             <ColumnDefinition Width="{Binding SizeColumnWidth, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>

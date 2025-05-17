@@ -284,6 +284,21 @@ namespace ExplorerPro.UI.FileTree
             
             // Make column headers resizable
             MakeColumnsResizable();
+            
+            // Initialize TreeViewItem levels
+            TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
+            
+            // Add handler for TreeView item creation to dynamically update levels
+            fileTreeView.ItemContainerGenerator.StatusChanged += ItemContainerGenerator_StatusChanged;
+        }
+        
+        private void ItemContainerGenerator_StatusChanged(object sender, EventArgs e)
+        {
+            if (fileTreeView.ItemContainerGenerator.Status == System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated)
+            {
+                // Update TreeView item levels whenever containers are generated
+                TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
+            }
         }
         
         private void SetupColumnHeaders()
@@ -650,6 +665,11 @@ namespace ExplorerPro.UI.FileTree
                     
                     // Log the tree state to help with debugging
                     LogTreeState();
+                    
+                    // Ensure tree item levels are initialized
+                    Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
+                        TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
+                    }));
                 }
                 else 
                 {
@@ -1018,6 +1038,11 @@ namespace ExplorerPro.UI.FileTree
                 {
                     LoadDirectoryContents(item);
                 }
+                
+                // Ensure child item levels are updated
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
+                    TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
+                }));
             }
         }
 
@@ -1980,6 +2005,12 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (disposing)
                 {
+                    // Unregister event handlers
+                    if (fileTreeView != null)
+                    {
+                        fileTreeView.ItemContainerGenerator.StatusChanged -= ItemContainerGenerator_StatusChanged;
+                    }
+                    
                     // Clear collections
                     _rootItems.Clear();
                     _itemCache.Clear();
