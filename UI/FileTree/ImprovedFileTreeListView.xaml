@@ -27,7 +27,7 @@
                                        Columns="{Binding Source={StaticResource columnHeaderGridView}, Path=Columns}"/>
         </Border>
         
-        <!-- File TreeView - the x:Name attribute is critical for connecting to code-behind -->
+        <!-- File TreeView with standard configuration -->
         <TreeView x:Name="fileTreeView" Grid.Row="1" BorderThickness="0"
                  VirtualizingStackPanel.IsVirtualizing="True"
                  VirtualizingStackPanel.VirtualizationMode="Recycling">
@@ -44,7 +44,6 @@
                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <!-- Bind column widths to the properties in the code-behind -->
                             <ColumnDefinition Width="{Binding NameColumnWidth, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
                             <ColumnDefinition Width="{Binding SizeColumnWidth, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
                             <ColumnDefinition Width="{Binding TypeColumnWidth, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
@@ -58,13 +57,13 @@
                         </StackPanel>
                         
                         <!-- Size Column -->
-                        <TextBlock Grid.Column="1" Text="{Binding Size}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="{Binding Size}" VerticalAlignment="Center"/>
                         
                         <!-- Type Column -->
-                        <TextBlock Grid.Column="2" Text="{Binding Type}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="{Binding Type}" VerticalAlignment="Center"/>
                         
                         <!-- Date Modified Column -->
-                        <TextBlock Grid.Column="3" Text="{Binding LastModifiedStr}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="3" Text="{Binding LastModifiedStr}" VerticalAlignment="Center"/>
                     </Grid>
                 </HierarchicalDataTemplate>
             </TreeView.ItemTemplate>
