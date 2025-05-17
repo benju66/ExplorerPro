@@ -175,11 +175,19 @@ namespace ExplorerPro.UI.FileTree
                     _isExpanded = value;
                     OnPropertyChanged(nameof(IsExpanded));
                     
-                    // Log expansion state for debugging
-                    System.Diagnostics.Debug.WriteLine($"[TREE] {Name} IsExpanded changed to {value}, Path: {Path}, HasDummyChild: {HasDummyChild()}, HasEventSubscribers: {LoadChildren != null}");
-                    
-                    // NOTE: We have removed direct loading from here to prevent duplicate loading paths
-                    // The TreeListView will handle loading through its event system
+                    // RESTORED: Direct loading when item is expanded
+                    // This is critical for ensuring children are loaded properly
+                    if (value && IsDirectory)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[TREE] {Name} expanded, HasDummyChild: {HasDummyChild()}, Path: {Path}");
+                        
+                        // Only load if needed (has dummy child or no children)
+                        if (HasDummyChild() || Children.Count == 0)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[TREE] Directly invoking LoadChildren for {Name}");
+                            LoadChildren?.Invoke(this, EventArgs.Empty);
+                        }
+                    }
                 }
             }
         }
