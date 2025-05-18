@@ -16,6 +16,13 @@
         <!-- Converter for level to margin -->
         <local:LevelToIndentConverter x:Key="LevelToIndentConverter"/>
         
+        <!-- Boolean to Visibility Converter -->
+        <local:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        
+        <!-- Tree line colors -->
+        <SolidColorBrush x:Key="TreeLineColor" Color="#C0C0C0"/>
+        <SolidColorBrush x:Key="TreeLineHoverColor" Color="#007ACC"/>
+        
         <!-- Expander ToggleButton Style -->
         <Style x:Key="TreeViewExpanderStyle" TargetType="{x:Type ToggleButton}">
             <Setter Property="Focusable" Value="False"/>
@@ -159,6 +166,17 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+
+        <!-- Simplified TreeViewItem style with basic connecting lines -->
+        <Style x:Key="TreeViewItemWithLines" TargetType="{x:Type TreeViewItem}">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+            <Setter Property="FontWeight" Value="{Binding FontWeight}"/>
+            <Setter Property="Foreground" Value="{Binding Foreground}"/>
+            <!-- Remove TreeView's default indentation -->
+            <Setter Property="Margin" Value="-19,0,0,0"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
     </UserControl.Resources>
     
     <Grid>
@@ -169,7 +187,7 @@
         </Grid.RowDefinitions>
         
         <!-- Column Headers with Border for background -->
-        <Border Grid.Row="0" Background="#F0F0F0">
+        <Border Grid.Row="0" Background="#F0F0F0" BorderBrush="#D0D0D0" BorderThickness="0,0,0,1">
             <GridViewHeaderRowPresenter x:Name="headerPresenter" 
                                        Columns="{Binding Source={StaticResource columnHeaderGridView}, Path=Columns}"/>
         </Border>
@@ -177,23 +195,12 @@
         <!-- File TreeView with proper column alignment -->
         <TreeView x:Name="fileTreeView" Grid.Row="1" BorderThickness="0"
                  VirtualizingStackPanel.IsVirtualizing="True"
-                 VirtualizingStackPanel.VirtualizationMode="Recycling">
-            
-            <TreeView.ItemContainerStyle>
-                <Style TargetType="{x:Type TreeViewItem}">
-                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                    <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
-                    <Setter Property="FontWeight" Value="{Binding FontWeight}"/>
-                    <Setter Property="Foreground" Value="{Binding Foreground}"/>
-                    <!-- Remove TreeView's default indentation -->
-                    <Setter Property="Margin" Value="-19,0,0,0"/>
-                    <Setter Property="Padding" Value="0"/>
-                </Style>
-            </TreeView.ItemContainerStyle>
+                 VirtualizingStackPanel.VirtualizationMode="Recycling"
+                 ItemContainerStyle="{StaticResource TreeViewItemWithLines}">
             
             <TreeView.ItemTemplate>
                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                    <!-- Grid with base compensation margin -->
+                    <!-- Grid with base compensation margin and connecting lines -->
                     <Grid Margin="19,0,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="{Binding NameColumnWidth, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
@@ -202,38 +209,94 @@
                             <ColumnDefinition Width="{Binding DateColumnWidth, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
                         </Grid.ColumnDefinitions>
                         
+                        <!-- Background canvas for drawing connecting lines -->
+                        <Canvas Grid.ColumnSpan="4" Background="Transparent"
+                               Margin="{Binding Level, Converter={StaticResource LevelToIndentConverter}}"
+                               Height="20" HorizontalAlignment="Left" Width="1000">
+                            
+                            <!-- Horizontal line to content (for non-root items) -->
+                            <Line x:Name="HorizontalLine"
+                                  X1="0" Y1="10" X2="19" Y2="10"
+                                  Stroke="{StaticResource TreeLineColor}"
+                                  StrokeThickness="1">
+                                <Line.Style>
+                                    <Style TargetType="Line">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Level}" Value="0">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Line.Style>
+                            </Line>
+                            
+                            <!-- Vertical line from parent (for non-root items) -->
+                            <Line x:Name="VerticalLine"
+                                  X1="0" Y1="0" X2="0" Y2="10"
+                                  Stroke="{StaticResource TreeLineColor}"
+                                  StrokeThickness="1">
+                                <Line.Style>
+                                    <Style TargetType="Line">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Level}" Value="0">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Line.Style>
+                            </Line>
+                        </Canvas>
+                        
                         <!-- Name Column with tree indentation and expander -->
                         <StackPanel Grid.Column="0" Orientation="Horizontal"
                                    Margin="{Binding Level, Converter={StaticResource LevelToIndentConverter}}">
                             
                             <!-- Expander Toggle Button -->
                             <ToggleButton Style="{StaticResource Windows11ExpanderStyle}"
-                                         IsChecked="{Binding IsExpanded, Mode=TwoWay}"/>
+                                         IsChecked="{Binding IsExpanded, Mode=TwoWay}">
+                                <ToggleButton.Style>
+                                    <Style TargetType="ToggleButton" BasedOn="{StaticResource Windows11ExpanderStyle}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsDirectory}" Value="False">
+                                                <Setter Property="Visibility" Value="Hidden" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding HasChildren}" Value="False">
+                                                <Setter Property="Visibility" Value="Hidden" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ToggleButton.Style>
+                            </ToggleButton>
                             
                             <!-- File/Folder Icon -->
-                            <Image Source="{Binding Icon}" Width="16" Height="16" Margin="0,0,5,0"/>
+                            <Image Source="{Binding Icon}" Width="16" Height="16" 
+                                   Margin="0,0,5,0" VerticalAlignment="Center"/>
                             
                             <!-- File/Folder Name -->
-                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
                         
-                        <!-- Size Column - left aligned, no additional indentation -->
+                        <!-- Size Column -->
                         <TextBlock Grid.Column="1" Text="{Binding Size}" 
                                   VerticalAlignment="Center" 
-                                  TextAlignment="Left"
-                                  Margin="5,0,0,0"/>
+                                  TextAlignment="Right"
+                                  Margin="5,0"
+                                  TextTrimming="CharacterEllipsis"/>
                         
-                        <!-- Type Column - left aligned, no additional indentation -->
+                        <!-- Type Column -->
                         <TextBlock Grid.Column="2" Text="{Binding Type}" 
                                   VerticalAlignment="Center" 
                                   TextAlignment="Left"
-                                  Margin="5,0,0,0"/>
+                                  Margin="5,0"
+                                  TextTrimming="CharacterEllipsis"/>
                         
-                        <!-- Date Modified Column - left aligned, no additional indentation -->
+                        <!-- Date Modified Column -->
                         <TextBlock Grid.Column="3" Text="{Binding LastModifiedStr}" 
                                   VerticalAlignment="Center" 
                                   TextAlignment="Left"
-                                  Margin="5,0,0,0"/>
+                                  Margin="5,0"
+                                  TextTrimming="CharacterEllipsis"/>
                     </Grid>
                 </HierarchicalDataTemplate>
             </TreeView.ItemTemplate>

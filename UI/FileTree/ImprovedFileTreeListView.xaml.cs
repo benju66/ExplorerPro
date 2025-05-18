@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -620,7 +621,7 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Sets the root directory for the tree view
         /// </summary>
-        public void SetRootDirectory(string directory)
+        public async void SetRootDirectory(string directory)
         {
             try 
             {
@@ -649,8 +650,8 @@ namespace ExplorerPro.UI.FileTree
                     // Add root item to the collection
                     _rootItems.Add(rootItem);
                     
-                    // Load the initial set of children
-                    LoadDirectoryContents(rootItem);
+                    // Load the initial set of children asynchronously
+                    await LoadDirectoryContentsAsync(rootItem);
                     
                     // Expand the root item - this should be done AFTER loading children
                     rootItem.IsExpanded = true;
@@ -847,9 +848,9 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Loads the contents of a directory
+        /// Loads the contents of a directory asynchronously
         /// </summary>
-        private void LoadDirectoryContents(FileTreeItem parentItem)
+        private async Task LoadDirectoryContentsAsync(FileTreeItem parentItem)
         {
             if (parentItem == null || !parentItem.IsDirectory)
             {
@@ -871,44 +872,32 @@ namespace ExplorerPro.UI.FileTree
                     return;
                 }
                 
-                // Remove dummy item and clear all children
+                // Show loading state immediately
+                parentItem.ClearChildren();
+                parentItem.Children.Add(new FileTreeItem { Name = "Loading...", Level = childLevel });
+
+                // Move file system operations to background thread
+                var (directories, files) = await Task.Run(() => {
+                    try 
+                    {
+                        var dirs = Directory.GetDirectories(path).OrderBy(d => Path.GetFileName(d));
+                        var filesList = Directory.GetFiles(path).OrderBy(f => Path.GetFileName(f));
+                        return (dirs, filesList);
+                    }
+                    catch (UnauthorizedAccessException) 
+                    {
+                        throw; // Re-throw to be handled in outer catch
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException($"Error listing directory contents: {ex.Message}", ex);
+                    }
+                });
+
+                // Update UI on main thread
                 parentItem.ClearChildren();
 
-                // Mark as loaded in cache
-                if (_itemCache.ContainsKey(path))
-                {
-                    _itemCache[path] = parentItem;
-                }
-
                 List<FileTreeItem> newChildren = new List<FileTreeItem>();
-
-                // Get and sort directories first
-                IEnumerable<string> directories;
-                try 
-                {
-                    directories = Directory.GetDirectories(path).OrderBy(d => Path.GetFileName(d));
-                }
-                catch (UnauthorizedAccessException) 
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ERROR] Access denied to directory: {path}");
-                    // Add a special "Access Denied" item
-                    parentItem.Children.Add(new FileTreeItem 
-                    { 
-                        Name = "Access Denied", 
-                        Path = path + "\\Access Denied",
-                        Level = childLevel,
-                        Type = "Error",
-                        HasChildren = false
-                    });
-                    parentItem.HasChildren = true; // Even though it's an error, show it has "children"
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ERROR] Error listing directories: {ex.Message}");
-                    parentItem.HasChildren = false;
-                    return;
-                }
 
                 // Add directories
                 foreach (var dir in directories)
@@ -943,37 +932,6 @@ namespace ExplorerPro.UI.FileTree
                         System.Diagnostics.Debug.WriteLine($"[ERROR] Error processing directory {dir}: {ex.Message}");
                         continue;
                     }
-                }
-
-                // Get and sort files
-                IEnumerable<string> files;
-                try 
-                {
-                    files = Directory.GetFiles(path).OrderBy(f => Path.GetFileName(f));
-                }
-                catch (UnauthorizedAccessException) 
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ERROR] Access denied to files in: {path}");
-                    // We can still add the directories we found
-                    foreach (var item in newChildren)
-                    {
-                        parentItem.Children.Add(item);
-                    }
-                    // Update HasChildren based on what we added
-                    parentItem.HasChildren = parentItem.Children.Count > 0;
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ERROR] Error listing files: {ex.Message}");
-                    // We can still add the directories we found
-                    foreach (var item in newChildren)
-                    {
-                        parentItem.Children.Add(item);
-                    }
-                    // Update HasChildren based on what we added
-                    parentItem.HasChildren = parentItem.Children.Count > 0;
-                    return;
                 }
 
                 // Add files
@@ -1015,13 +973,33 @@ namespace ExplorerPro.UI.FileTree
                 
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Loaded {parentItem.Children.Count} items for directory: {path}");
             }
+            catch (UnauthorizedAccessException)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Access denied to directory: {path}");
+                // Add a special "Access Denied" item
+                parentItem.ClearChildren();
+                parentItem.Children.Add(new FileTreeItem 
+                { 
+                    Name = "Access Denied", 
+                    Path = path + "\\Access Denied",
+                    Level = childLevel,
+                    Type = "Error",
+                    HasChildren = false
+                });
+                parentItem.HasChildren = true; // Even though it's an error, show it has "children"
+            }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to load directory contents: {ex.Message} for path {path}");
                 
                 // Clear children and update HasChildren on failure
                 parentItem.ClearChildren();
-                parentItem.HasChildren = false;
+                parentItem.Children.Add(new FileTreeItem { 
+                    Name = $"Error: {ex.Message}", 
+                    Level = childLevel,
+                    Type = "Error"
+                });
+                parentItem.HasChildren = true; // Show error as a "child"
             }
         }
 
@@ -1082,7 +1060,7 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Handles TreeViewItem expanded events
         /// </summary>
-        private void TreeViewItem_Expanded(object sender, RoutedEventArgs e)
+        private async void TreeViewItem_Expanded(object sender, RoutedEventArgs e)
         {
             if (e.OriginalSource is TreeViewItem treeViewItem && 
                 treeViewItem.DataContext is FileTreeItem item && 
@@ -1093,7 +1071,7 @@ namespace ExplorerPro.UI.FileTree
                 // Check if we need to load children
                 if (item.HasDummyChild() || item.Children.Count == 0)
                 {
-                    LoadDirectoryContents(item);
+                    await LoadDirectoryContentsAsync(item);
                 }
                 
                 // Ensure child item levels are updated
@@ -1500,7 +1478,7 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Handles drop events
         /// </summary>
-        private void HandleDropEvent(DragEventArgs e)
+        private async void HandleDropEvent(DragEventArgs e)
         {
             var item = GetItemFromPoint(e.GetPosition(fileTreeView));
             if (item == null || !item.IsDirectory)
@@ -1576,7 +1554,7 @@ namespace ExplorerPro.UI.FileTree
                     if (item != null)
                     {
                         item.IsExpanded = true;
-                        LoadDirectoryContents(item);
+                        await LoadDirectoryContentsAsync(item);
                     }
                 }
             }
@@ -1703,7 +1681,7 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Refreshes a specific directory and updates HasChildren property
         /// </summary>
-        private void RefreshDirectory(string directoryPath)
+        private async void RefreshDirectory(string directoryPath)
         {
             if (string.IsNullOrEmpty(directoryPath))
                 return;
@@ -1720,13 +1698,10 @@ namespace ExplorerPro.UI.FileTree
                 
                 if (hasChildren)
                 {
-                    // Clear all children including any dummy child
-                    item.ClearChildren();
-                    
                     if (wasExpanded)
                     {
-                        // Force a full reload by calling LoadDirectoryContents directly
-                        LoadDirectoryContents(item);
+                        // Force a full reload by calling LoadDirectoryContentsAsync
+                        await LoadDirectoryContentsAsync(item);
                         
                         // Ensure it stays expanded
                         item.IsExpanded = true;
@@ -1872,7 +1847,7 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Expands all directories in a path from the root
         /// </summary>
-        private void ExpandPathToRoot(string path)
+        private async void ExpandPathToRoot(string path)
         {
             string rootPath = null;
             if (_rootItems.Count > 0)
@@ -1897,7 +1872,7 @@ namespace ExplorerPro.UI.FileTree
             currentItem.IsExpanded = true;
             
             // Make sure root children are loaded
-            LoadDirectoryContents(currentItem);
+            await LoadDirectoryContentsAsync(currentItem);
             
             // Expand each component
             foreach (string component in pathComponents)
@@ -1943,7 +1918,7 @@ namespace ExplorerPro.UI.FileTree
                 if (nextItem.IsDirectory)
                 {
                     // Load children before expanding
-                    LoadDirectoryContents(nextItem);
+                    await LoadDirectoryContentsAsync(nextItem);
                     nextItem.IsExpanded = true;
                     currentItem = nextItem;
                 }
