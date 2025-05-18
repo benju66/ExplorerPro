@@ -1,3 +1,4 @@
+// UI/FileTree/Converters.cs
 using System;
 using System.Globalization;
 using System.Windows;
@@ -26,6 +27,70 @@ namespace ExplorerPro.UI.FileTree
             }
             
             return false;
+        }
+    }
+
+    [ValueConversion(typeof(bool), typeof(Visibility))]
+    public class InverseBooleanToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is bool boolValue)
+            {
+                return boolValue ? Visibility.Collapsed : Visibility.Visible;
+            }
+            
+            return Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is Visibility visibility)
+            {
+                return visibility != Visibility.Visible;
+            }
+            
+            return true;
+        }
+    }
+
+    [ValueConversion(typeof(bool), typeof(string))]
+    public class ExpanderTextConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is bool isExpanded)
+            {
+                return isExpanded ? "▼" : "▶"; // Down triangle when expanded, right triangle when collapsed
+            }
+            
+            return "▶"; // Default to collapsed symbol
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return DependencyProperty.UnsetValue;
+        }
+    }
+
+    [ValueConversion(typeof(int), typeof(double))]
+    public class LevelToIndentConverter : IValueConverter
+    {
+        private const double IndentationPerLevel = 19.0;
+        
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is int level)
+            {
+                return IndentationPerLevel * level;
+            }
+            
+            return 0.0;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return DependencyProperty.UnsetValue;
         }
     }
 }
