@@ -94,4 +94,28 @@ namespace ExplorerPro.UI.FileTree
             return DependencyProperty.UnsetValue;
         }
     }
+
+    [ValueConversion(typeof(int), typeof(Thickness))]
+    public class ExpanderRightIndentConverter : IValueConverter
+    {
+        private const double IndentationPerLevel = 19.0;
+        private const double LineSpace = 25.0; // Extra space to move expander right of the line
+        
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is int level)
+            {
+                // Position expander to the right of the connecting lines
+                double leftMargin = (IndentationPerLevel * level) + LineSpace;
+                return new Thickness(leftMargin, 0, 0, 0);
+            }
+            
+            return new Thickness(LineSpace, 0, 0, 0);
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return DependencyProperty.UnsetValue;
+        }
+    }
 }
