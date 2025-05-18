@@ -29,6 +29,7 @@ namespace ExplorerPro.UI.FileTree
         private SolidColorBrush _foreground;
         private FontWeight _fontWeight;
         private ObservableCollection<FileTreeItem> _children;
+        private int _level;
 
         #endregion
 
@@ -250,6 +251,22 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
+        /// Gets or sets the hierarchical level (depth) of this item in the tree
+        /// </summary>
+        public int Level
+        {
+            get => _level;
+            set
+            {
+                if (_level != value)
+                {
+                    _level = value;
+                    OnPropertyChanged(nameof(Level));
+                }
+            }
+        }
+
+        /// <summary>
         /// Gets or sets the icon for the item
         /// </summary>
         public ImageSource Icon { get; set; }
@@ -271,6 +288,7 @@ namespace ExplorerPro.UI.FileTree
             Children = new ObservableCollection<FileTreeItem>();
             Foreground = SystemColors.WindowTextBrush;
             FontWeight = FontWeights.Normal;
+            _level = 0; // Default level is 0 (root level)
             
             // Add dummy child for directories to show expander
             AddDummyChild();
@@ -287,7 +305,8 @@ namespace ExplorerPro.UI.FileTree
             {
                 Name = System.IO.Path.GetFileName(path),
                 Path = path,
-                IsDirectory = isDirectory
+                IsDirectory = isDirectory,
+                Level = 0 // Will be set by the calling code
             };
 
             // For root paths like "C:\", use the path as the name
@@ -339,7 +358,7 @@ namespace ExplorerPro.UI.FileTree
         {
             if (IsDirectory && Children.Count == 0)
             {
-                Children.Add(new FileTreeItem { Name = "Loading..." });
+                Children.Add(new FileTreeItem { Name = "Loading...", Level = this.Level + 1 });
             }
         }
 

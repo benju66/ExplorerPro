@@ -73,7 +73,7 @@ namespace ExplorerPro.UI.FileTree
         }
     }
 
-    [ValueConversion(typeof(int), typeof(double))]
+    [ValueConversion(typeof(int), typeof(Thickness))]
     public class LevelToIndentConverter : IValueConverter
     {
         private const double IndentationPerLevel = 19.0;
@@ -82,10 +82,11 @@ namespace ExplorerPro.UI.FileTree
         {
             if (value is int level)
             {
-                return IndentationPerLevel * level;
+                // Return left margin only - other columns will stay aligned
+                return new Thickness(IndentationPerLevel * level, 0, 0, 0);
             }
             
-            return 0.0;
+            return new Thickness(0);
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

@@ -13,8 +13,140 @@
             <!-- Columns will be added programmatically with bindings to the width properties -->
         </GridView>
         
-        <!-- Add just the LevelToIndentConverter -->
+        <!-- Converter for level to margin -->
         <local:LevelToIndentConverter x:Key="LevelToIndentConverter"/>
+        
+        <!-- Expander ToggleButton Style -->
+        <Style x:Key="TreeViewExpanderStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border Background="Transparent" Width="16" Height="16">
+                            <!-- Default: Collapsed (pointing right) -->
+                            <Path x:Name="ExpandPath"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Stroke="#FF6C6C6C"
+                                  StrokeThickness="1"
+                                  Data="M 6,4 L 10,8 L 6,12" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- Expanded: pointing down -->
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="ExpandPath" Property="Data" Value="M 4,6 L 8,10 L 12,6" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ExpandPath" Property="Stroke" Value="#FF1BBBFA" />
+                                <Setter TargetName="ExpandPath" Property="StrokeThickness" Value="1.5" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ExpandPath" Property="Stroke" Value="#FF003C74" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <!-- Hide the expander for non-directories -->
+                <DataTrigger Binding="{Binding IsDirectory}" Value="False">
+                    <Setter Property="Visibility" Value="Hidden" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        
+        <!-- Alternative Modern Expander Style with filled triangles -->
+        <Style x:Key="ModernTreeViewExpanderStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border Background="Transparent" Width="16" Height="16">
+                            <!-- Default: Collapsed (pointing right) -->
+                            <Path x:Name="ExpandPath"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Fill="#FF6C6C6C"
+                                  Data="M 6,4 L 10,8 L 6,12 Z" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- Expanded: pointing down -->
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="ExpandPath" Property="Data" Value="M 4,6 L 8,10 L 12,6 Z" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ExpandPath" Property="Fill" Value="#FF1BBBFA" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ExpandPath" Property="Fill" Value="#FF003C74" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <!-- Hide the expander for non-directories -->
+                <DataTrigger Binding="{Binding IsDirectory}" Value="False">
+                    <Setter Property="Visibility" Value="Hidden" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        
+        <!-- Windows 11-style Expander with rounded arrows -->
+        <Style x:Key="Windows11ExpanderStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Margin" Value="0,0,2,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border Background="Transparent" Width="20" Height="20" CornerRadius="3">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#0F000000" />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <!-- Default: Collapsed (pointing right) -->
+                            <Path x:Name="ExpandPath"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Stroke="#FF484848"
+                                  StrokeThickness="1.5"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"
+                                  Data="M 8,6 L 12,10 L 8,14" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- Expanded: pointing down -->
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="ExpandPath" Property="Data" Value="M 6,8 L 10,12 L 14,8" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ExpandPath" Property="Stroke" Value="#FF005FB8" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <!-- Hide the expander for non-directories -->
+                <DataTrigger Binding="{Binding IsDirectory}" Value="False">
+                    <Setter Property="Visibility" Value="Hidden" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
     
     <Grid>
@@ -30,7 +162,7 @@
                                        Columns="{Binding Source={StaticResource columnHeaderGridView}, Path=Columns}"/>
         </Border>
         
-        <!-- File TreeView with simplified indentation fix -->
+        <!-- File TreeView with proper column alignment -->
         <TreeView x:Name="fileTreeView" Grid.Row="1" BorderThickness="0"
                  VirtualizingStackPanel.IsVirtualizing="True"
                  VirtualizingStackPanel.VirtualizationMode="Recycling">
@@ -41,7 +173,7 @@
                     <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
                     <Setter Property="FontWeight" Value="{Binding FontWeight}"/>
                     <Setter Property="Foreground" Value="{Binding Foreground}"/>
-                    <!-- Use negative margin to counter TreeView's default indentation -->
+                    <!-- Remove TreeView's default indentation -->
                     <Setter Property="Margin" Value="-19,0,0,0"/>
                     <Setter Property="Padding" Value="0"/>
                 </Style>
@@ -49,7 +181,7 @@
             
             <TreeView.ItemTemplate>
                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                    <!-- Apply positive left margin to compensate for the negative item margin -->
+                    <!-- Grid with base compensation margin -->
                     <Grid Margin="19,0,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="{Binding NameColumnWidth, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
@@ -58,20 +190,38 @@
                             <ColumnDefinition Width="{Binding DateColumnWidth, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
                         </Grid.ColumnDefinitions>
                         
-                        <!-- Name Column -->
-                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <!-- Name Column with tree indentation and expander -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                   Margin="{Binding Level, Converter={StaticResource LevelToIndentConverter}}">
+                            
+                            <!-- Expander Toggle Button -->
+                            <ToggleButton Style="{StaticResource Windows11ExpanderStyle}"
+                                         IsChecked="{Binding IsExpanded, Mode=TwoWay}"/>
+                            
+                            <!-- File/Folder Icon -->
                             <Image Source="{Binding Icon}" Width="16" Height="16" Margin="0,0,5,0"/>
+                            
+                            <!-- File/Folder Name -->
                             <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
                         </StackPanel>
                         
-                        <!-- Size Column -->
-                        <TextBlock Grid.Column="1" Text="{Binding Size}" VerticalAlignment="Center"/>
+                        <!-- Size Column - left aligned, no additional indentation -->
+                        <TextBlock Grid.Column="1" Text="{Binding Size}" 
+                                  VerticalAlignment="Center" 
+                                  TextAlignment="Left"
+                                  Margin="5,0,0,0"/>
                         
-                        <!-- Type Column -->
-                        <TextBlock Grid.Column="2" Text="{Binding Type}" VerticalAlignment="Center"/>
+                        <!-- Type Column - left aligned, no additional indentation -->
+                        <TextBlock Grid.Column="2" Text="{Binding Type}" 
+                                  VerticalAlignment="Center" 
+                                  TextAlignment="Left"
+                                  Margin="5,0,0,0"/>
                         
-                        <!-- Date Modified Column -->
-                        <TextBlock Grid.Column="3" Text="{Binding LastModifiedStr}" VerticalAlignment="Center"/>
+                        <!-- Date Modified Column - left aligned, no additional indentation -->
+                        <TextBlock Grid.Column="3" Text="{Binding LastModifiedStr}" 
+                                  VerticalAlignment="Center" 
+                                  TextAlignment="Left"
+                                  Margin="5,0,0,0"/>
                     </Grid>
                 </HierarchicalDataTemplate>
             </TreeView.ItemTemplate>

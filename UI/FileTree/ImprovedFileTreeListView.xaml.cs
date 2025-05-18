@@ -642,8 +642,8 @@ namespace ExplorerPro.UI.FileTree
                 _rootItems.Clear();
                 _itemCache.Clear();
 
-                // Create root item
-                var rootItem = CreateFileTreeItem(directory);
+                // Create root item with level 0
+                var rootItem = CreateFileTreeItem(directory, 0);
                 if (rootItem != null)
                 {
                     // Add root item to the collection
@@ -722,18 +722,24 @@ namespace ExplorerPro.UI.FileTree
         #region File Tree Item Creation
 
         /// <summary>
-        /// Creates a FileTreeItem for a directory
+        /// Creates a FileTreeItem for a directory with the specified level
         /// </summary>
-        private FileTreeItem CreateFileTreeItem(string path)
+        private FileTreeItem CreateFileTreeItem(string path, int level = 0)
         {
             try 
             {
                 if (_itemCache.TryGetValue(path, out FileTreeItem cachedItem))
                 {
+                    // Update the level of cached item if different
+                    if (cachedItem.Level != level)
+                    {
+                        cachedItem.Level = level;
+                    }
                     return cachedItem;
                 }
                 
                 var item = FileTreeItem.FromPath(path);
+                item.Level = level; // Set the hierarchical level
                 
                 // Apply styling from metadata
                 ApplyMetadataStyling(item);
@@ -759,6 +765,7 @@ namespace ExplorerPro.UI.FileTree
                 {
                     Name = Path.GetFileName(path),
                     Path = path,
+                    Level = level, // Ensure level is set for fallback item too
                     IsDirectory = Directory.Exists(path),
                     Type = Directory.Exists(path) ? "Folder" : "File"
                 };
@@ -814,10 +821,11 @@ namespace ExplorerPro.UI.FileTree
             }
                 
             string path = parentItem.Path;
+            int childLevel = parentItem.Level + 1; // Calculate child level
 
             try
             {
-                System.Diagnostics.Debug.WriteLine($"[DEBUG] Loading directory contents for: {path}");
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Loading directory contents for: {path} at level {childLevel}");
                 
                 // Skip if already loaded with real items (not just dummy)
                 if (parentItem.Children.Count > 0 && !parentItem.HasDummyChild())
@@ -851,6 +859,7 @@ namespace ExplorerPro.UI.FileTree
                     { 
                         Name = "Access Denied", 
                         Path = path + "\\Access Denied",
+                        Level = childLevel,
                         Type = "Error" 
                     });
                     return;
@@ -870,8 +879,8 @@ namespace ExplorerPro.UI.FileTree
                         if (!ShowHiddenFiles && IsHidden(dir))
                             continue;
                             
-                        var dirItem = CreateFileTreeItem(dir);
-                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Adding directory: {dir}");
+                        var dirItem = CreateFileTreeItem(dir, childLevel);
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Adding directory: {dir} at level {childLevel}");
                         
                         // Add to our temporary collection first
                         newChildren.Add(dirItem);
@@ -931,8 +940,8 @@ namespace ExplorerPro.UI.FileTree
                         if (!ShowHiddenFiles && IsHidden(file))
                             continue;
                             
-                        var fileItem = CreateFileTreeItem(file);
-                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Adding file: {file}");
+                        var fileItem = CreateFileTreeItem(file, childLevel);
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] Adding file: {file} at level {childLevel}");
                         
                         // Add to our temporary collection
                         newChildren.Add(fileItem);
@@ -996,11 +1005,11 @@ namespace ExplorerPro.UI.FileTree
             if (_rootItems != null && _rootItems.Count > 0)
             {
                 var rootItem = _rootItems[0];
-                System.Diagnostics.Debug.WriteLine($"Root path: {rootItem.Path}, Has children: {rootItem.Children.Count}");
+                System.Diagnostics.Debug.WriteLine($"Root path: {rootItem.Path}, Level: {rootItem.Level}, Has children: {rootItem.Children.Count}");
                 
                 foreach (var child in rootItem.Children)
                 {
-                    System.Diagnostics.Debug.WriteLine($"  - Child: {child.Name}, Is Directory: {child.IsDirectory}, Expanded: {child.IsExpanded}");
+                    System.Diagnostics.Debug.WriteLine($"  - Child: {child.Name}, Level: {child.Level}, Is Directory: {child.IsDirectory}, Expanded: {child.IsExpanded}");
                 }
             }
             
@@ -1858,7 +1867,7 @@ namespace ExplorerPro.UI.FileTree
                     if (Directory.Exists(currentPath))
                     {
                         System.Diagnostics.Debug.WriteLine($"[DEBUG] Creating missing directory item: {currentPath}");
-                        nextItem = CreateFileTreeItem(currentPath);
+                        nextItem = CreateFileTreeItem(currentPath, currentItem.Level + 1);
                         currentItem.Children.Add(nextItem);
                     }
                     else
