@@ -55,6 +55,10 @@
                 <DataTrigger Binding="{Binding IsDirectory}" Value="False">
                     <Setter Property="Visibility" Value="Hidden" />
                 </DataTrigger>
+                <!-- Hide the expander for directories without children -->
+                <DataTrigger Binding="{Binding HasChildren}" Value="False">
+                    <Setter Property="Visibility" Value="Hidden" />
+                </DataTrigger>
             </Style.Triggers>
         </Style>
         
@@ -93,6 +97,10 @@
             <Style.Triggers>
                 <!-- Hide the expander for non-directories -->
                 <DataTrigger Binding="{Binding IsDirectory}" Value="False">
+                    <Setter Property="Visibility" Value="Hidden" />
+                </DataTrigger>
+                <!-- Hide the expander for directories without children -->
+                <DataTrigger Binding="{Binding HasChildren}" Value="False">
                     <Setter Property="Visibility" Value="Hidden" />
                 </DataTrigger>
             </Style.Triggers>
@@ -143,6 +151,10 @@
             <Style.Triggers>
                 <!-- Hide the expander for non-directories -->
                 <DataTrigger Binding="{Binding IsDirectory}" Value="False">
+                    <Setter Property="Visibility" Value="Hidden" />
+                </DataTrigger>
+                <!-- Hide the expander for directories without children -->
+                <DataTrigger Binding="{Binding HasChildren}" Value="False">
                     <Setter Property="Visibility" Value="Hidden" />
                 </DataTrigger>
             </Style.Triggers>

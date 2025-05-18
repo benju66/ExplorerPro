@@ -747,6 +747,12 @@ namespace ExplorerPro.UI.FileTree
                 // Set icon
                 item.Icon = _iconProvider.GetIcon(path);
                 
+                // For directories, check if they have children to set HasChildren property
+                if (item.IsDirectory)
+                {
+                    item.HasChildren = DirectoryHasAccessibleChildren(path);
+                }
+                
                 // Cache the item
                 if (_itemCache.Count > CacheLimit)
                 {
@@ -767,10 +773,41 @@ namespace ExplorerPro.UI.FileTree
                     Path = path,
                     Level = level, // Ensure level is set for fallback item too
                     IsDirectory = Directory.Exists(path),
-                    Type = Directory.Exists(path) ? "Folder" : "File"
+                    Type = Directory.Exists(path) ? "Folder" : "File",
+                    HasChildren = false // Default to false for fallback items
                 };
                 
                 return fallbackItem;
+            }
+        }
+
+        /// <summary>
+        /// Checks if a directory has accessible children (without loading them all)
+        /// </summary>
+        private bool DirectoryHasAccessibleChildren(string directoryPath)
+        {
+            try
+            {
+                // Quick check - just see if we can enumerate anything
+                var hasDirectories = Directory.EnumerateDirectories(directoryPath)
+                    .Where(d => ShowHiddenFiles || !IsHidden(d))
+                    .Any();
+                    
+                if (hasDirectories) return true;
+                
+                var hasFiles = Directory.EnumerateFiles(directoryPath)
+                    .Where(f => ShowHiddenFiles || !IsHidden(f))
+                    .Any();
+                    
+                return hasFiles;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false; // Can't access, so effectively no children
+            }
+            catch (Exception)
+            {
+                return false; // Error accessing, assume no children
             }
         }
 
@@ -860,13 +897,16 @@ namespace ExplorerPro.UI.FileTree
                         Name = "Access Denied", 
                         Path = path + "\\Access Denied",
                         Level = childLevel,
-                        Type = "Error" 
+                        Type = "Error",
+                        HasChildren = false
                     });
+                    parentItem.HasChildren = true; // Even though it's an error, show it has "children"
                     return;
                 }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"[ERROR] Error listing directories: {ex.Message}");
+                    parentItem.HasChildren = false;
                     return;
                 }
 
@@ -885,10 +925,11 @@ namespace ExplorerPro.UI.FileTree
                         // Add to our temporary collection first
                         newChildren.Add(dirItem);
                         
-                        // Make sure directory has a dummy child to show expander
-                        if (dirItem.Children.Count == 0)
+                        // Make sure directory has correct HasChildren property set
+                        // (This was already done in CreateFileTreeItem, but ensure it's correct)
+                        if (dirItem.IsDirectory && !dirItem.HasChildren)
                         {
-                            dirItem.AddDummyChild();
+                            dirItem.HasChildren = DirectoryHasAccessibleChildren(dir);
                         }
                     }
                     catch (UnauthorizedAccessException)
@@ -918,6 +959,8 @@ namespace ExplorerPro.UI.FileTree
                     {
                         parentItem.Children.Add(item);
                     }
+                    // Update HasChildren based on what we added
+                    parentItem.HasChildren = parentItem.Children.Count > 0;
                     return;
                 }
                 catch (Exception ex)
@@ -928,6 +971,8 @@ namespace ExplorerPro.UI.FileTree
                     {
                         parentItem.Children.Add(item);
                     }
+                    // Update HasChildren based on what we added
+                    parentItem.HasChildren = parentItem.Children.Count > 0;
                     return;
                 }
 
@@ -965,15 +1010,18 @@ namespace ExplorerPro.UI.FileTree
                     parentItem.Children.Add(child);
                 }
                 
+                // Update HasChildren property based on actual loaded children
+                parentItem.HasChildren = parentItem.Children.Count > 0;
+                
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Loaded {parentItem.Children.Count} items for directory: {path}");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to load directory contents: {ex.Message} for path {path}");
                 
-                // Add dummy items back in case of failure
+                // Clear children and update HasChildren on failure
                 parentItem.ClearChildren();
-                parentItem.AddDummyChild();
+                parentItem.HasChildren = false;
             }
         }
 
@@ -1005,11 +1053,11 @@ namespace ExplorerPro.UI.FileTree
             if (_rootItems != null && _rootItems.Count > 0)
             {
                 var rootItem = _rootItems[0];
-                System.Diagnostics.Debug.WriteLine($"Root path: {rootItem.Path}, Level: {rootItem.Level}, Has children: {rootItem.Children.Count}");
+                System.Diagnostics.Debug.WriteLine($"Root path: {rootItem.Path}, Level: {rootItem.Level}, Has children: {rootItem.Children.Count}, HasChildren: {rootItem.HasChildren}");
                 
                 foreach (var child in rootItem.Children)
                 {
-                    System.Diagnostics.Debug.WriteLine($"  - Child: {child.Name}, Level: {child.Level}, Is Directory: {child.IsDirectory}, Expanded: {child.IsExpanded}");
+                    System.Diagnostics.Debug.WriteLine($"  - Child: {child.Name}, Level: {child.Level}, Is Directory: {child.IsDirectory}, HasChildren: {child.HasChildren}, Expanded: {child.IsExpanded}");
                 }
             }
             
@@ -1653,7 +1701,7 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Refreshes a specific directory
+        /// Refreshes a specific directory and updates HasChildren property
         /// </summary>
         private void RefreshDirectory(string directoryPath)
         {
@@ -1666,19 +1714,29 @@ namespace ExplorerPro.UI.FileTree
             {
                 bool wasExpanded = item.IsExpanded;
                 
-                // Clear all children including any dummy child
-                item.ClearChildren();
+                // Check if directory has children before clearing
+                bool hasChildren = DirectoryHasAccessibleChildren(directoryPath);
+                item.HasChildren = hasChildren;
                 
-                // Add a dummy child to show expander
-                item.AddDummyChild();
-                
-                if (wasExpanded)
+                if (hasChildren)
                 {
-                    // Force a full reload by calling LoadDirectoryContents directly
-                    LoadDirectoryContents(item);
+                    // Clear all children including any dummy child
+                    item.ClearChildren();
                     
-                    // Ensure it stays expanded
-                    item.IsExpanded = true;
+                    if (wasExpanded)
+                    {
+                        // Force a full reload by calling LoadDirectoryContents directly
+                        LoadDirectoryContents(item);
+                        
+                        // Ensure it stays expanded
+                        item.IsExpanded = true;
+                    }
+                }
+                else
+                {
+                    // No children - clear everything and collapse
+                    item.ClearChildren();
+                    item.IsExpanded = false;
                 }
             }
             else
@@ -1869,6 +1927,9 @@ namespace ExplorerPro.UI.FileTree
                         System.Diagnostics.Debug.WriteLine($"[DEBUG] Creating missing directory item: {currentPath}");
                         nextItem = CreateFileTreeItem(currentPath, currentItem.Level + 1);
                         currentItem.Children.Add(nextItem);
+                        
+                        // Update parent's HasChildren property
+                        currentItem.HasChildren = true;
                     }
                     else
                     {

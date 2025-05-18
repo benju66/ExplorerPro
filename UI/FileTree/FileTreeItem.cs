@@ -30,6 +30,7 @@ namespace ExplorerPro.UI.FileTree
         private FontWeight _fontWeight;
         private ObservableCollection<FileTreeItem> _children;
         private int _level;
+        private bool _hasChildren;
 
         #endregion
 
@@ -175,7 +176,7 @@ namespace ExplorerPro.UI.FileTree
                 {
                     _isExpanded = value;
                     OnPropertyChanged(nameof(IsExpanded));
-                    
+
                     // Call LoadChildren directly when a directory is expanded
                     if (value && IsDirectory)
                     {
@@ -267,6 +268,22 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
+        /// Gets or sets a value indicating whether this directory has children
+        /// </summary>
+        public bool HasChildren
+        {
+            get => _hasChildren;
+            set
+            {
+                if (_hasChildren != value)
+                {
+                    _hasChildren = value;
+                    OnPropertyChanged(nameof(HasChildren));
+                }
+            }
+        }
+
+        /// <summary>
         /// Gets or sets the icon for the item
         /// </summary>
         public ImageSource Icon { get; set; }
@@ -289,9 +306,9 @@ namespace ExplorerPro.UI.FileTree
             Foreground = SystemColors.WindowTextBrush;
             FontWeight = FontWeights.Normal;
             _level = 0; // Default level is 0 (root level)
-            
-            // Add dummy child for directories to show expander
-            AddDummyChild();
+            _hasChildren = false; // Initialize as false
+
+            // Don't add dummy child anymore - expander will be hidden if no children
         }
 
         /// <summary>
@@ -300,13 +317,14 @@ namespace ExplorerPro.UI.FileTree
         public static FileTreeItem FromPath(string path)
         {
             bool isDirectory = Directory.Exists(path);
-            
+
             var item = new FileTreeItem
             {
                 Name = System.IO.Path.GetFileName(path),
                 Path = path,
                 IsDirectory = isDirectory,
-                Level = 0 // Will be set by the calling code
+                Level = 0, // Will be set by the calling code
+                HasChildren = false // Will be set when children are checked
             };
 
             // For root paths like "C:\", use the path as the name
@@ -325,9 +343,8 @@ namespace ExplorerPro.UI.FileTree
                     item.RawSize = 0; // We don't calculate folder size by default
                     item.LastModified = dirInfo.LastWriteTime;
                     item.LastModifiedStr = DateFormatter.FormatFileDate(dirInfo.LastWriteTime);
-                    
-                    // Add dummy child so folder has expander
-                    item.AddDummyChild();
+
+                    // Don't add dummy child - HasChildren will be set when needed
                 }
                 else
                 {
