@@ -252,8 +252,7 @@
                                    Margin="{Binding Level, Converter={StaticResource LevelToIndentConverter}}">
                             
                             <!-- Expander Toggle Button -->
-                            <ToggleButton Style="{StaticResource Windows11ExpanderStyle}"
-                                         IsChecked="{Binding IsExpanded, Mode=TwoWay}">
+                            <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay}">
                                 <ToggleButton.Style>
                                     <Style TargetType="ToggleButton" BasedOn="{StaticResource Windows11ExpanderStyle}">
                                         <Style.Triggers>
