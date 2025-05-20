@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs (UPDATED for Drag/Drop fixes)
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs (UPDATED with progress UI and enhanced Outlook support)
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -21,7 +21,7 @@ using ExplorerPro.UI.FileTree.Services;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedFileTreeListView.xaml
+    /// Interaction logic for ImprovedFileTreeListView.xaml with enhanced Outlook attachment support
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -226,12 +226,9 @@ namespace ExplorerPro.UI.FileTree
         {
             try
             {
-                // Try to use the global instances first, fall back to new instances if needed
                 _metadataManager = App.MetadataManager ?? MetadataManager.Instance;
                 _undoManager = App.UndoManager ?? UndoManager.Instance;
                 _settingsManager = App.Settings ?? new SettingsManager();
-
-                // Initialize the file system model with required dependencies
                 _fileSystemModel = new CustomFileSystemModel(_metadataManager, _undoManager, _fileOperations);
                 
                 System.Diagnostics.Debug.WriteLine("[DEBUG] File tree components initialized successfully");
@@ -240,7 +237,6 @@ namespace ExplorerPro.UI.FileTree
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to initialize file tree components: {ex.Message}");
                 
-                // Create minimal working instances as fallback
                 try 
                 {
                     if (_metadataManager == null) _metadataManager = new MetadataManager();
@@ -251,7 +247,6 @@ namespace ExplorerPro.UI.FileTree
                 catch (Exception fallbackEx) 
                 {
                     System.Diagnostics.Debug.WriteLine($"[CRITICAL] Failed to create fallback components: {fallbackEx.Message}");
-                    // Last resort - create absolute minimal dependencies
                     _metadataManager = new MetadataManager();
                     _undoManager = new UndoManager();
                     _settingsManager = new SettingsManager();
@@ -264,26 +259,20 @@ namespace ExplorerPro.UI.FileTree
         {
             try
             {
-                // Initialize icon provider
                 var iconProvider = new FileIconProvider(true);
-
-                // Initialize services
                 _fileTreeService = new FileTreeService(_metadataManager, iconProvider);
-                _fileTreeCache = new FileTreeCacheService(1000); // 1000 item cache
+                _fileTreeCache = new FileTreeCacheService(1000);
                 _dragDropService = new FileTreeDragDropService();
 
-                // Subscribe to service events
                 _fileTreeService.ErrorOccurred += (s, error) => 
                 {
-                    MessageBox.Show(error, "File Tree Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Dispatcher.Invoke(() => MessageBox.Show(error, "File Tree Error", MessageBoxButton.OK, MessageBoxImage.Warning));
                 };
 
                 _dragDropService.FilesDropped += async (s, e) => 
                 {
-                    // Refresh the target directory after files are dropped
                     await RefreshDirectoryAsync(e.TargetPath);
                     
-                    // For internal moves, also refresh source directories
                     if (e.IsInternalMove)
                     {
                         var sourceDirectories = e.SourceFiles
@@ -301,7 +290,6 @@ namespace ExplorerPro.UI.FileTree
 
                 _dragDropService.FilesMoved += async (s, e) => 
                 {
-                    // Refresh both source and target directories for moves
                     await RefreshDirectoryAsync(e.TargetPath);
                     
                     foreach (var sourceDir in e.SourceDirectories)
@@ -312,7 +300,20 @@ namespace ExplorerPro.UI.FileTree
 
                 _dragDropService.ErrorOccurred += (s, error) => 
                 {
-                    MessageBox.Show(error, "Drag/Drop Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Dispatcher.Invoke(() => MessageBox.Show(error, "Drag/Drop Error", MessageBoxButton.OK, MessageBoxImage.Warning));
+                };
+
+                // Handle Outlook extraction completion
+                _dragDropService.OutlookExtractionCompleted += (s, e) => 
+                {
+                    Dispatcher.Invoke(() => 
+                    {
+                        HideProgressOverlay();
+                        ShowOutlookExtractionResults(e.Result);
+                        
+                        // Refresh the target directory
+                        _ = RefreshDirectoryAsync(e.TargetPath);
+                    });
                 };
 
                 _fileTreeCache.ItemEvicted += (s, e) => 
@@ -325,26 +326,20 @@ namespace ExplorerPro.UI.FileTree
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to initialize services: {ex.Message}");
-                throw; // Critical failure - can't continue without services
+                throw;
             }
         }
 
         private void SetupEventHandlers()
         {
-            // TreeView event handlers
             fileTreeView.SelectedItemChanged += FileTreeView_SelectedItemChanged;
             fileTreeView.MouseDoubleClick += FileTreeView_MouseDoubleClick;
             fileTreeView.ContextMenuOpening += FileTreeView_ContextMenuOpening;
-
-            // Add handlers for TreeViewItem expanded event
             fileTreeView.AddHandler(TreeViewItem.ExpandedEvent, new RoutedEventHandler(TreeViewItem_Expanded));
-
-            // Mouse event handlers for drag and drop
             fileTreeView.PreviewMouseLeftButtonDown += FileTreeView_PreviewMouseLeftButtonDown;
             fileTreeView.PreviewMouseLeftButtonUp += FileTreeView_PreviewMouseLeftButtonUp;
             fileTreeView.MouseMove += FileTreeView_MouseMove;
 
-            // Add drag/drop handlers
             fileTreeView.AllowDrop = true;
             fileTreeView.DragEnter += FileTreeView_DragEnter;
             fileTreeView.DragOver += FileTreeView_DragOver;
@@ -354,28 +349,123 @@ namespace ExplorerPro.UI.FileTree
 
         private void ImprovedFileTreeListView_Loaded(object sender, RoutedEventArgs e)
         {
-            // Load settings
             _showHiddenFiles = _settingsManager.GetSetting("file_view.show_hidden", false);
-            
-            // Make column headers resizable
             MakeColumnsResizable();
-            
-            // Initialize TreeViewItem levels
             TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
-            
-            // Add handler for TreeView item creation to dynamically update levels
             fileTreeView.ItemContainerGenerator.StatusChanged += ItemContainerGenerator_StatusChanged;
         }
         
         private void ItemContainerGenerator_StatusChanged(object sender, EventArgs e)
         {
-            if (fileTreeView.ItemContainerGenerator.Status == System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated)
+            if (fileTreeView.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
             {
-                // Update TreeView item levels whenever containers are generated
                 TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
             }
         }
         
+        #endregion
+
+        #region Progress UI Management
+
+        /// <summary>
+        /// Shows the progress overlay for Outlook extraction
+        /// </summary>
+        private void ShowProgressOverlay()
+        {
+            ProgressOverlay.Visibility = Visibility.Visible;
+            ExtractionProgress.IsIndeterminate = true;
+            ProgressText.Text = "Analyzing Outlook data...";
+            
+            // Disable the main tree view during extraction
+            fileTreeView.IsEnabled = false;
+        }
+
+        /// <summary>
+        /// Hides the progress overlay
+        /// </summary>
+        private void HideProgressOverlay()
+        {
+            ProgressOverlay.Visibility = Visibility.Collapsed;
+            fileTreeView.IsEnabled = true;
+        }
+
+        /// <summary>
+        /// Updates the progress text
+        /// </summary>
+        /// <param name="message">Progress message</param>
+        private void UpdateProgressText(string message)
+        {
+            ProgressText.Text = message;
+        }
+
+        /// <summary>
+        /// Shows the results of Outlook extraction
+        /// </summary>
+        /// <param name="result">Extraction result</param>
+        private void ShowOutlookExtractionResults(OutlookDataExtractor.ExtractionResult result)
+        {
+            string title;
+            MessageBoxImage icon;
+            string message;
+
+            if (result.Success)
+            {
+                title = "Extraction Complete";
+                icon = result.FilesSkipped > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information;
+                message = $"Successfully extracted {result.FilesExtracted} attachment(s)";
+                
+                if (result.FilesSkipped > 0)
+                {
+                    message += $"\n{result.FilesSkipped} file(s) could not be extracted";
+                }
+                
+                if (result.Errors.Count > 0)
+                {
+                    message += "\n\nIssues encountered:";
+                    foreach (var error in result.Errors.Take(3))
+                    {
+                        message += $"\n• {error}";
+                    }
+                    
+                    if (result.Errors.Count > 3)
+                    {
+                        message += $"\n... and {result.Errors.Count - 3} more";
+                    }
+                }
+            }
+            else
+            {
+                title = "Extraction Failed";
+                icon = MessageBoxImage.Error;
+                message = "Failed to extract any attachments";
+                
+                if (result.Errors.Count > 0)
+                {
+                    message += "\n\nErrors:";
+                    foreach (var error in result.Errors.Take(3))
+                    {
+                        message += $"\n• {error}";
+                    }
+                    
+                    if (result.Errors.Count > 3)
+                    {
+                        message += $"\n... and {result.Errors.Count - 3} more";
+                    }
+                }
+            }
+
+            MessageBox.Show(message, title, MessageBoxButton.OK, icon);
+        }
+
+        /// <summary>
+        /// Handler for cancel button click
+        /// </summary>
+        private void CancelButton_Click(object sender, RoutedEventArgs e)
+        {
+            _dragDropService?.CancelOutlookExtraction();
+            HideProgressOverlay();
+        }
+
         #endregion
 
         #region Column Management
@@ -384,7 +474,6 @@ namespace ExplorerPro.UI.FileTree
         {
             try
             {
-                // Define the columns for the header
                 NameColumn = new GridViewColumn { 
                     Header = "Name", 
                     Width = NameColumnWidth 
@@ -405,7 +494,6 @@ namespace ExplorerPro.UI.FileTree
                     Width = DateColumnWidth 
                 };
                 
-                // Bind the column widths to the properties
                 BindingOperations.SetBinding(NameColumn, GridViewColumn.WidthProperty, 
                     new Binding(nameof(NameColumnWidth)) { Source = this, Mode = BindingMode.TwoWay });
                 
@@ -418,7 +506,6 @@ namespace ExplorerPro.UI.FileTree
                 BindingOperations.SetBinding(DateColumn, GridViewColumn.WidthProperty, 
                     new Binding(nameof(DateColumnWidth)) { Source = this, Mode = BindingMode.TwoWay });
                 
-                // Add columns to the GridView
                 if (_columnHeaderGridView != null)
                 {
                     _columnHeaderGridView.Columns.Clear();
@@ -610,35 +697,21 @@ namespace ExplorerPro.UI.FileTree
 
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Setting root directory to: {directory}");
                 
-                // Clear root items and cache
                 _rootItems.Clear();
                 _fileTreeCache.Clear();
 
-                // Create root item using the service
                 var rootItem = _fileTreeService.CreateFileTreeItem(directory, 0);
                 if (rootItem != null)
                 {
-                    // Add root item to the collection
                     _rootItems.Add(rootItem);
-                    
-                    // Cache the root item
                     _fileTreeCache.SetItem(directory, rootItem);
-                    
-                    // Load the initial set of children asynchronously
                     await LoadDirectoryContentsAsync(rootItem);
-                    
-                    // Expand the root item
                     rootItem.IsExpanded = true;
-                    
-                    // Update current folder path
                     _currentFolderPath = directory;
-                    
-                    // Notify listeners of location change
                     LocationChanged?.Invoke(this, directory);
                     
                     System.Diagnostics.Debug.WriteLine($"[DEBUG] Root directory set to: {directory}, Children count: {rootItem.Children.Count}");
                     
-                    // Ensure tree item levels are initialized
                     Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
                         TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
                     }));
@@ -696,37 +769,29 @@ namespace ExplorerPro.UI.FileTree
 
             try
             {
-                // Skip if already loaded with real items
                 if (parentItem.Children.Count > 0 && !parentItem.HasDummyChild())
                 {
                     return;
                 }
                 
-                // Show loading state
                 parentItem.ClearChildren();
                 parentItem.Children.Add(new FileTreeItem { Name = "Loading...", Level = childLevel });
 
-                // Load children using the service
                 var children = await _fileTreeService.LoadDirectoryAsync(path, _showHiddenFiles, childLevel);
 
-                // Update UI on main thread
                 parentItem.ClearChildren();
 
                 foreach (var child in children)
                 {
                     parentItem.Children.Add(child);
-                    
-                    // Cache the child item
                     _fileTreeCache.SetItem(child.Path, child);
                     
-                    // Hook up LoadChildren event for directories
                     if (child.IsDirectory)
                     {
                         child.LoadChildren += async (s, e) => await LoadDirectoryContentsAsync(child);
                     }
                 }
                 
-                // Update HasChildren property
                 parentItem.HasChildren = parentItem.Children.Count > 0;
                 
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Loaded {parentItem.Children.Count} items for directory: {path}");
@@ -812,7 +877,7 @@ namespace ExplorerPro.UI.FileTree
                 Vector dragVector = currentPosition - _dragStartPosition.Value;
                 double dragDistance = Math.Sqrt(Math.Pow(dragVector.X, 2) + Math.Pow(dragVector.Y, 2));
 
-                if (dragDistance > 10.0) // DragThreshold
+                if (dragDistance > 10.0)
                 {
                     StartDrag();
                 }
@@ -821,6 +886,12 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_DragEnter(object sender, DragEventArgs e)
         {
+            // Show progress overlay for Outlook data
+            if (IsOutlookData(e.Data))
+            {
+                ShowProgressOverlay();
+            }
+            
             _dragDropService.HandleDragEnter(e);
         }
 
@@ -831,7 +902,6 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_Drop(object sender, DragEventArgs e)
         {
-            // Pass the current tree root path to help determine internal vs external drops
             string currentTreePath = _rootItems.Count > 0 ? _rootItems[0].Path : string.Empty;
             _dragDropService.HandleDrop(e, GetItemFromPoint, currentTreePath);
         }
@@ -839,6 +909,23 @@ namespace ExplorerPro.UI.FileTree
         private void FileTreeView_DragLeave(object sender, DragEventArgs e)
         {
             _dragDropService.HandleDragLeave(e);
+        }
+
+        /// <summary>
+        /// Quick check for Outlook data during drag operations
+        /// </summary>
+        private bool IsOutlookData(IDataObject data)
+        {
+            try
+            {
+                return data.GetDataPresent("FileGroupDescriptor") || 
+                       data.GetDataPresent("RenPrivateMessages") ||
+                       data.GetDataPresent("RenPrivateItem");
+            }
+            catch
+            {
+                return false;
+            }
         }
         
         #endregion
@@ -1096,16 +1183,13 @@ namespace ExplorerPro.UI.FileTree
             {
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Refreshing directory: {directoryPath}");
                 
-                // Remove from cache to force reload
                 _fileTreeCache.RemoveWhere(kvp => kvp.Key.StartsWith(directoryPath, StringComparison.OrdinalIgnoreCase));
                 
-                // Find the item in the tree
                 var item = _fileTreeService.FindItemByPath(_rootItems, directoryPath);
                 if (item != null)
                 {
                     bool wasExpanded = item.IsExpanded;
                     
-                    // Clear children and reload
                     item.ClearChildren();
                     item.HasChildren = _fileTreeService.DirectoryHasAccessibleChildren(directoryPath, _showHiddenFiles);
                     
@@ -1119,7 +1203,6 @@ namespace ExplorerPro.UI.FileTree
                 }
                 else if (_rootItems.Count > 0 && string.Equals(_rootItems[0].Path, directoryPath, StringComparison.OrdinalIgnoreCase))
                 {
-                    // Refresh root directory
                     SetRootDirectory(directoryPath);
                 }
                 else
@@ -1127,10 +1210,8 @@ namespace ExplorerPro.UI.FileTree
                     System.Diagnostics.Debug.WriteLine($"[WARNING] Could not find item to refresh: {directoryPath}");
                 }
 
-                // Force UI update
                 Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                 {
-                    // Trigger property changed notifications to update UI
                     OnPropertyChanged(nameof(_rootItems));
                 }));
             }
@@ -1276,6 +1357,9 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (disposing)
                 {
+                    // Cancel any ongoing operations
+                    _dragDropService?.CancelOutlookExtraction();
+                    
                     if (fileTreeView != null)
                     {
                         fileTreeView.ItemContainerGenerator.StatusChanged -= ItemContainerGenerator_StatusChanged;

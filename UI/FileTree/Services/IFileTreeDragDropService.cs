@@ -1,12 +1,13 @@
-// UI/FileTree/Services/IFileTreeDragDropService.cs (UPDATED with Outlook support)
+// UI/FileTree/Services/IFileTreeDragDropService.cs (UPDATED interface)
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Windows;
 
 namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
-    /// Interface for file tree drag and drop operations
+    /// Interface for file tree drag and drop operations with enhanced Outlook support
     /// </summary>
     public interface IFileTreeDragDropService
     {
@@ -63,12 +64,25 @@ namespace ExplorerPro.UI.FileTree.Services
         bool HandleInternalFileMove(string[] droppedFiles, string targetPath, string currentTreePath);
 
         /// <summary>
-        /// Handles Outlook item drops (emails, attachments)
+        /// Handles Outlook item drops (emails, attachments) synchronously
         /// </summary>
         /// <param name="dataObject">Data object from Outlook</param>
         /// <param name="targetPath">Target directory path</param>
         /// <returns>True if handled successfully</returns>
         bool HandleOutlookDrop(DataObject dataObject, string targetPath);
+
+        /// <summary>
+        /// Handles Outlook item drops (emails, attachments) asynchronously
+        /// </summary>
+        /// <param name="dataObject">Data object from Outlook</param>
+        /// <param name="targetPath">Target directory path</param>
+        /// <returns>Task with true if handled successfully</returns>
+        Task<bool> HandleOutlookDropAsync(DataObject dataObject, string targetPath);
+
+        /// <summary>
+        /// Cancels the current Outlook extraction operation
+        /// </summary>
+        void CancelOutlookExtraction();
 
         /// <summary>
         /// Event raised when files are successfully dropped or moved
@@ -84,6 +98,11 @@ namespace ExplorerPro.UI.FileTree.Services
         /// Event raised when an error occurs during drag/drop operations
         /// </summary>
         event EventHandler<string> ErrorOccurred;
+
+        /// <summary>
+        /// Event raised when Outlook extraction is completed
+        /// </summary>
+        event EventHandler<OutlookExtractionCompletedEventArgs> OutlookExtractionCompleted;
     }
 
     /// <summary>
