@@ -1,4 +1,4 @@
-// UI/FileTree/Services/IFileTreeDragDropService.cs (UPDATED)
+// UI/FileTree/Services/IFileTreeDragDropService.cs (UPDATED with Outlook support)
 using System;
 using System.Collections.Generic;
 using System.Windows;
@@ -61,6 +61,14 @@ namespace ExplorerPro.UI.FileTree.Services
         /// <param name="currentTreePath">Current tree root path</param>
         /// <returns>True if files were moved successfully</returns>
         bool HandleInternalFileMove(string[] droppedFiles, string targetPath, string currentTreePath);
+
+        /// <summary>
+        /// Handles Outlook item drops (emails, attachments)
+        /// </summary>
+        /// <param name="dataObject">Data object from Outlook</param>
+        /// <param name="targetPath">Target directory path</param>
+        /// <returns>True if handled successfully</returns>
+        bool HandleOutlookDrop(DataObject dataObject, string targetPath);
 
         /// <summary>
         /// Event raised when files are successfully dropped or moved

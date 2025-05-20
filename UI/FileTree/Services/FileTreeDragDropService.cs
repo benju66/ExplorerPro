@@ -1,19 +1,26 @@
-// UI/FileTree/Services/FileTreeDragDropService.cs (UPDATED)
+// UI/FileTree/Services/FileTreeDragDropService.cs (UPDATED with Outlook support and COM exception handling)
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 
 namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
-    /// Service for handling file tree drag and drop operations
+    /// Service for handling file tree drag and drop operations with Outlook support
     /// </summary>
     public class FileTreeDragDropService : IFileTreeDragDropService
     {
         private const double DragThreshold = 10.0;
+        
+        // Outlook data format constants
+        private const string CFSTR_FILEDESCRIPTOR = "FileGroupDescriptor";
+        private const string CFSTR_FILECONTENTS = "FileContents";
+        private const string CFSTR_OUTLOOKMESSAGE = "RenPrivateMessages";
+        private const string CFSTR_OUTLOOK_ITEM = "RenPrivateItem";
 
         public event EventHandler<FilesDroppedEventArgs> FilesDropped;
         public event EventHandler<FilesMoved> FilesMoved;
@@ -21,7 +28,7 @@ namespace ExplorerPro.UI.FileTree.Services
 
         public void HandleDragEnter(DragEventArgs e)
         {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            if (e.Data.GetDataPresent(DataFormats.FileDrop) || IsOutlookData(e.Data))
             {
                 e.Effects = DragDropEffects.Copy;
             }
@@ -47,11 +54,13 @@ namespace ExplorerPro.UI.FileTree.Services
             if (item != null && item.IsDirectory)
             {
                 // Determine if this is a copy or move operation
-                // For internal drops (within the same tree), default to move
-                // For external drops, default to copy
                 if (e.Data.GetDataPresent(DataFormats.FileDrop))
                 {
                     e.Effects = DragDropEffects.Move; // Default to move for file operations
+                }
+                else if (IsOutlookData(e.Data))
+                {
+                    e.Effects = DragDropEffects.Copy; // Outlook items are always copied
                 }
                 else
                 {
@@ -91,7 +100,7 @@ namespace ExplorerPro.UI.FileTree.Services
 
             try
             {
-                // Handle file drop
+                // Handle standard file drop
                 if (e.Data.GetDataPresent(DataFormats.FileDrop))
                 {
                     string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
@@ -114,6 +123,15 @@ namespace ExplorerPro.UI.FileTree.Services
                         {
                             OnFilesDropped(files, targetPath, DragDropEffects.Copy, false);
                         }
+                    }
+                }
+                // Handle Outlook data
+                else if (IsOutlookData(e.Data))
+                {
+                    success = HandleOutlookDrop(e.Data as DataObject, targetPath);
+                    if (success)
+                    {
+                        OnFilesDropped(new string[0], targetPath, DragDropEffects.Copy, false);
                     }
                 }
             }
@@ -348,6 +366,358 @@ namespace ExplorerPro.UI.FileTree.Services
             return allSucceeded;
         }
 
+        public bool HandleOutlookDrop(DataObject dataObject, string targetPath)
+        {
+            if (dataObject == null || !Directory.Exists(targetPath))
+                return false;
+
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("Starting Outlook drop handling...");
+
+                // Try different approaches with COM exception handling
+                bool success = false;
+
+                // Method 1: Try to handle as email message
+                try
+                {
+                    if (SafeCheckDataPresent(dataObject, CFSTR_OUTLOOKMESSAGE))
+                    {
+                        System.Diagnostics.Debug.WriteLine("Trying to handle as Outlook message...");
+                        success = HandleOutlookMessage(dataObject, targetPath);
+                        if (success)
+                        {
+                            System.Diagnostics.Debug.WriteLine("Successfully handled as Outlook message");
+                            return true;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error handling as message: {ex.Message}");
+                }
+
+                // Method 2: Try to handle as Outlook item
+                try
+                {
+                    if (SafeCheckDataPresent(dataObject, CFSTR_OUTLOOK_ITEM))
+                    {
+                        System.Diagnostics.Debug.WriteLine("Trying to handle as Outlook item...");
+                        success = HandleOutlookItem(dataObject, targetPath);
+                        if (success)
+                        {
+                            System.Diagnostics.Debug.WriteLine("Successfully handled as Outlook item");
+                            return true;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error handling as item: {ex.Message}");
+                }
+
+                // Method 3: Try to handle as file attachments
+                try
+                {
+                    if (SafeCheckDataPresent(dataObject, CFSTR_FILEDESCRIPTOR))
+                    {
+                        System.Diagnostics.Debug.WriteLine("Trying to handle as file attachments...");
+                        success = HandleOutlookAttachments(dataObject, targetPath);
+                        if (success)
+                        {
+                            System.Diagnostics.Debug.WriteLine("Successfully handled as file attachments");
+                            return true;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error handling as attachments: {ex.Message}");
+                }
+
+                // Method 4: Fallback - save as generic Outlook data
+                try
+                {
+                    success = HandleGenericOutlookData(dataObject, targetPath);
+                    if (success)
+                    {
+                        System.Diagnostics.Debug.WriteLine("Successfully handled as generic Outlook data");
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error in fallback handling: {ex.Message}");
+                }
+
+                System.Diagnostics.Debug.WriteLine("All Outlook handling methods failed");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                OnErrorOccurred($"Error handling Outlook drop: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Safely checks if data is present without throwing COM exceptions
+        /// </summary>
+        private bool SafeCheckDataPresent(DataObject dataObject, string format)
+        {
+            try
+            {
+                return dataObject.GetDataPresent(format);
+            }
+            catch (System.Runtime.InteropServices.COMException comEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"COM exception checking format {format}: 0x{comEx.HResult:X}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Exception checking format {format}: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Safely gets data without throwing COM exceptions
+        /// </summary>
+        private object SafeGetData(DataObject dataObject, string format)
+        {
+            try
+            {
+                return dataObject.GetData(format);
+            }
+            catch (System.Runtime.InteropServices.COMException comEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"COM exception getting data {format}: 0x{comEx.HResult:X}");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Exception getting data {format}: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Handles generic Outlook data as a fallback
+        /// </summary>
+        private bool HandleGenericOutlookData(DataObject dataObject, string targetPath)
+        {
+            try
+            {
+                // Try to get any available data format
+                string[] commonFormats = { 
+                    "Text", 
+                    "UnicodeText", 
+                    "Html", 
+                    "Rich Text Format",
+                    "FileContents"
+                };
+
+                foreach (string format in commonFormats)
+                {
+                    try
+                    {
+                        if (SafeCheckDataPresent(dataObject, format))
+                        {
+                            var data = SafeGetData(dataObject, format);
+                            if (data != null)
+                            {
+                                string fileName = $"OutlookData_{DateTime.Now:yyyyMMdd_HHmmss}";
+                                string extension = ".txt";
+                                
+                                if (format.ToLower().Contains("html"))
+                                    extension = ".html";
+                                else if (format.ToLower().Contains("rtf"))
+                                    extension = ".rtf";
+
+                                string filePath = GetUniqueFilePath(Path.Combine(targetPath, fileName + extension));
+
+                                if (data is string text)
+                                {
+                                    File.WriteAllText(filePath, text);
+                                    return true;
+                                }
+                                else if (data is byte[] bytes)
+                                {
+                                    File.WriteAllBytes(filePath, bytes);
+                                    return true;
+                                }
+                                else if (data is MemoryStream stream)
+                                {
+                                    using (var fileStream = File.Create(filePath))
+                                    {
+                                        stream.Seek(0, SeekOrigin.Begin);
+                                        stream.CopyTo(fileStream);
+                                    }
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error with format {format}: {ex.Message}");
+                        continue;
+                    }
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in generic handling: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Detects if the data object contains Outlook data with COM exception handling
+        /// </summary>
+        private bool IsOutlookData(IDataObject data)
+        {
+            try
+            {
+                // Try to detect Outlook data formats safely
+                string[] outlookFormats = {
+                    CFSTR_FILEDESCRIPTOR,
+                    CFSTR_OUTLOOKMESSAGE, 
+                    CFSTR_OUTLOOK_ITEM,
+                    "RenPrivateItem",
+                    "FileGroupDescriptor", // Alternative name
+                    "FileGroupDescriptorW" // Wide version
+                };
+
+                foreach (string format in outlookFormats)
+                {
+                    try
+                    {
+                        if (data.GetDataPresent(format))
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Detected Outlook format: {format}");
+                            return true;
+                        }
+                    }
+                    catch (System.Runtime.InteropServices.COMException comEx)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"COM error checking format {format}: 0x{comEx.HResult:X} - {comEx.Message}");
+                        // Continue checking other formats
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error checking format {format}: {ex.Message}");
+                        // Continue checking other formats
+                    }
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in IsOutlookData: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Handles Outlook email messages with improved error handling
+        /// </summary>
+        private bool HandleOutlookMessage(DataObject dataObject, string targetPath)
+        {
+            try
+            {
+                // Get the message data safely
+                var messageData = SafeGetData(dataObject, CFSTR_OUTLOOKMESSAGE);
+                
+                if (messageData is MemoryStream messageStream)
+                {
+                    // Generate a filename for the email
+                    string fileName = $"Email_{DateTime.Now:yyyyMMdd_HHmmss}.msg";
+                    string filePath = Path.Combine(targetPath, fileName);
+
+                    // Ensure unique filename
+                    filePath = GetUniqueFilePath(filePath);
+
+                    // Save the email
+                    using (var fileStream = File.Create(filePath))
+                    {
+                        messageStream.Seek(0, SeekOrigin.Begin);
+                        messageStream.CopyTo(fileStream);
+                    }
+
+                    return true;
+                }
+                else if (messageData is byte[] messageBytes)
+                {
+                    // Handle byte array format
+                    string fileName = $"Email_{DateTime.Now:yyyyMMdd_HHmmss}.msg";
+                    string filePath = GetUniqueFilePath(Path.Combine(targetPath, fileName));
+
+                    File.WriteAllBytes(filePath, messageBytes);
+                    return true;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error saving Outlook message: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Handles Outlook items (alternative format) with improved error handling
+        /// </summary>
+        private bool HandleOutlookItem(DataObject dataObject, string targetPath)
+        {
+            try
+            {
+                var itemData = SafeGetData(dataObject, CFSTR_OUTLOOK_ITEM);
+                
+                if (itemData is MemoryStream itemStream)
+                {
+                    string fileName = $"OutlookItem_{DateTime.Now:yyyyMMdd_HHmmss}.msg";
+                    string filePath = GetUniqueFilePath(Path.Combine(targetPath, fileName));
+
+                    using (var fileStream = File.Create(filePath))
+                    {
+                        itemStream.Seek(0, SeekOrigin.Begin);
+                        itemStream.CopyTo(fileStream);
+                    }
+
+                    return true;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error saving Outlook item: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Handles Outlook attachments using the OutlookDataExtractor
+        /// </summary>
+        private bool HandleOutlookAttachments(DataObject dataObject, string targetPath)
+        {
+            try
+            {
+                return OutlookDataExtractor.ExtractOutlookFiles(dataObject, targetPath);
+            }
+            catch (Exception ex)
+            {
+                OnErrorOccurred($"Error extracting Outlook attachments: {ex.Message}");
+                return false;
+            }
+        }
+
         /// <summary>
         /// Determines if a drop operation is internal (within the same tree)
         /// </summary>
@@ -390,6 +760,30 @@ namespace ExplorerPro.UI.FileTree.Services
             {
                 throw new InvalidOperationException($"Error copying directory '{sourceDirName}': {ex.Message}", ex);
             }
+        }
+
+        /// <summary>
+        /// Gets a unique file path by appending a number if the file already exists
+        /// </summary>
+        private string GetUniqueFilePath(string originalPath)
+        {
+            if (!File.Exists(originalPath))
+                return originalPath;
+
+            string directory = Path.GetDirectoryName(originalPath);
+            string nameWithoutExt = Path.GetFileNameWithoutExtension(originalPath);
+            string extension = Path.GetExtension(originalPath);
+
+            int counter = 1;
+            string newPath;
+            do
+            {
+                newPath = Path.Combine(directory, $"{nameWithoutExt}_{counter}{extension}");
+                counter++;
+            }
+            while (File.Exists(newPath));
+
+            return newPath;
         }
 
         protected virtual void OnFilesDropped(string[] sourceFiles, string targetPath, DragDropEffects effects, bool isInternalMove)
