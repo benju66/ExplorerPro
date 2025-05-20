@@ -74,6 +74,7 @@
     <Folder Include="Themes\" />
     <Folder Include="UI\Styles\" />
     <Folder Include="Native\" />
+    <Folder Include="UI\FileTree\Resources\" />
   </ItemGroup>
 
   <ItemGroup>

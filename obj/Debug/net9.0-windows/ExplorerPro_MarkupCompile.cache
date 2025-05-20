@@ -10,11 +10,11 @@ none
 false
 TRACE;DEBUG;NET;NET9_0;NETCOREAPP
 C:\ExplorerPro\App.xaml
-21-1943358755
+22-1029206293
 18520384434
 54-1540815199
 238-256500347
-TestWindow.xaml;UI\Controls\DateEditControl.xaml;UI\Controls\PreviewHandlers\ImagePreviewControl.xaml;UI\Controls\PreviewHandlers\PdfPreviewControl.xaml;UI\Dialogs\AddItemDialog.xaml;UI\Dialogs\EditRecurrenceDialog.xaml;UI\Dialogs\FilePropertiesDialog.xaml;UI\Dialogs\ManageRecurringItemsDialog.xaml;UI\Dialogs\SettingsDialog.xaml;UI\Dialogs\TextInputDialog.xaml;UI\FileTree\FileTreeDemo.xaml;UI\FileTree\ImprovedFileTreeListView.xaml;UI\MainWindow\MainWindow.xaml;UI\MainWindow\MainWindowContainer.xaml;UI\MainWindow\MainWindowTabs.xaml;UI\Panels\BookmarksPanel\BookmarksPanel.xaml;UI\Panels\PinnedPanel\PinnedPanel.xaml;UI\Panels\ProcoreLinksPanel\ProcoreLinksPanel.xaml;UI\Panels\ToDoPanel\ToDoPanel.xaml;UI\TabManagement\TabManager.xaml;UI\Toolbar\Toolbar.xaml;
+TestWindow.xaml;UI\Controls\DateEditControl.xaml;UI\Controls\PreviewHandlers\ImagePreviewControl.xaml;UI\Controls\PreviewHandlers\PdfPreviewControl.xaml;UI\Dialogs\AddItemDialog.xaml;UI\Dialogs\EditRecurrenceDialog.xaml;UI\Dialogs\FilePropertiesDialog.xaml;UI\Dialogs\ManageRecurringItemsDialog.xaml;UI\Dialogs\SettingsDialog.xaml;UI\Dialogs\TextInputDialog.xaml;UI\FileTree\FileTreeDemo.xaml;UI\FileTree\ImprovedFileTreeListView.xaml;UI\FileTree\Resources\FileTreeResources.xaml;UI\MainWindow\MainWindow.xaml;UI\MainWindow\MainWindowContainer.xaml;UI\MainWindow\MainWindowTabs.xaml;UI\Panels\BookmarksPanel\BookmarksPanel.xaml;UI\Panels\PinnedPanel\PinnedPanel.xaml;UI\Panels\ProcoreLinksPanel\ProcoreLinksPanel.xaml;UI\Panels\ToDoPanel\ToDoPanel.xaml;UI\TabManagement\TabManager.xaml;UI\Toolbar\Toolbar.xaml;
 
 False
 

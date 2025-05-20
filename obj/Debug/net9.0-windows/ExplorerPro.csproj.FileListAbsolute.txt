@@ -59,6 +59,7 @@ C:\ExplorerPro\bin\Debug\net9.0-windows\nl\PdfiumViewer.resources.dll
 C:\ExplorerPro\bin\Debug\net9.0-windows\runtimes\win\lib\net9.0\Microsoft.Win32.SystemEvents.dll
 C:\ExplorerPro\obj\Debug\net9.0-windows\ExplorerPro.csproj.AssemblyReference.cache
 C:\ExplorerPro\obj\Debug\net9.0-windows\TestWindow.baml
+C:\ExplorerPro\obj\Debug\net9.0-windows\UI\FileTree\Resources\FileTreeResources.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\TestWindow.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Controls\DateEditControl.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Controls\PreviewHandlers\ImagePreviewControl.g.cs
