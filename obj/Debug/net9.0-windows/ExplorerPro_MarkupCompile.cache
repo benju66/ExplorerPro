@@ -16,5 +16,5 @@ C:\ExplorerPro\App.xaml
 238-256500347
 TestWindow.xaml;UI\Controls\DateEditControl.xaml;UI\Controls\PreviewHandlers\ImagePreviewControl.xaml;UI\Controls\PreviewHandlers\PdfPreviewControl.xaml;UI\Dialogs\AddItemDialog.xaml;UI\Dialogs\EditRecurrenceDialog.xaml;UI\Dialogs\FilePropertiesDialog.xaml;UI\Dialogs\ManageRecurringItemsDialog.xaml;UI\Dialogs\SettingsDialog.xaml;UI\Dialogs\TextInputDialog.xaml;UI\FileTree\FileTreeDemo.xaml;UI\FileTree\ImprovedFileTreeListView.xaml;UI\FileTree\Resources\FileTreeResources.xaml;UI\MainWindow\MainWindow.xaml;UI\MainWindow\MainWindowContainer.xaml;UI\MainWindow\MainWindowTabs.xaml;UI\Panels\BookmarksPanel\BookmarksPanel.xaml;UI\Panels\PinnedPanel\PinnedPanel.xaml;UI\Panels\ProcoreLinksPanel\ProcoreLinksPanel.xaml;UI\Panels\ToDoPanel\ToDoPanel.xaml;UI\TabManagement\TabManager.xaml;UI\Toolbar\Toolbar.xaml;
 
-True
+False
 

@@ -412,24 +412,23 @@ namespace ExplorerPro.UI.FileTree
             {
                 title = "Extraction Complete";
                 icon = result.FilesSkipped > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information;
-                message = $"Successfully extracted {result.FilesExtracted} attachment(s)";
+                message = $"Successfully extracted {result.ExtractedFiles.Count} attachment(s)";
                 
                 if (result.FilesSkipped > 0)
                 {
                     message += $"\n{result.FilesSkipped} file(s) could not be extracted";
                 }
                 
-                if (result.Errors.Count > 0)
+                if (result.Errors > 0)  // Fixed: Using Errors as an integer
                 {
                     message += "\n\nIssues encountered:";
-                    foreach (var error in result.Errors.Take(3))
+                    if (!string.IsNullOrEmpty(result.ErrorMessage))
                     {
-                        message += $"\n• {error}";
+                        message += $"\n• {result.ErrorMessage}";
                     }
-                    
-                    if (result.Errors.Count > 3)
+                    else
                     {
-                        message += $"\n... and {result.Errors.Count - 3} more";
+                        message += $"\n• {result.Errors} error(s) occurred during extraction";
                     }
                 }
             }
@@ -439,17 +438,16 @@ namespace ExplorerPro.UI.FileTree
                 icon = MessageBoxImage.Error;
                 message = "Failed to extract any attachments";
                 
-                if (result.Errors.Count > 0)
+                if (result.Errors > 0)  // Fixed: Using Errors as an integer
                 {
                     message += "\n\nErrors:";
-                    foreach (var error in result.Errors.Take(3))
+                    if (!string.IsNullOrEmpty(result.ErrorMessage))
                     {
-                        message += $"\n• {error}";
+                        message += $"\n• {result.ErrorMessage}";
                     }
-                    
-                    if (result.Errors.Count > 3)
+                    else
                     {
-                        message += $"\n... and {result.Errors.Count - 3} more";
+                        message += $"\n• {result.Errors} error(s) occurred during extraction";
                     }
                 }
             }

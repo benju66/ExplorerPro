@@ -54,19 +54,9 @@ namespace ExplorerPro.UI.FileTree.Services
             public int TotalFiles { get; set; }
             
             /// <summary>
-            /// Gets the number of files successfully extracted
-            /// </summary>
-            public int SuccessfulFiles { get { return ExtractedFiles.Count; } }
-            
-            /// <summary>
             /// Gets the number of files that were skipped during extraction
             /// </summary>
             public int FilesSkipped { get; set; }
-            
-            /// <summary>
-            /// Gets the list of files that were successfully extracted (alias for ExtractedFiles)
-            /// </summary>
-            public int FilesExtracted => ExtractedFiles.Count;
             
             /// <summary>
             /// Gets the number of errors that occurred during extraction
