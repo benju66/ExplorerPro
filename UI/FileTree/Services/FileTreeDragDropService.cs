@@ -1,4 +1,4 @@
-// UI/FileTree/Services/FileTreeDragDropService.cs (UPDATED with async Outlook support)
+// UI/FileTree/Services/FileTreeDragDropService.cs (UPDATED for silent Outlook handling)
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -13,7 +13,7 @@ using System.Windows.Threading;
 namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
-    /// Service for handling file tree drag and drop operations with enhanced Outlook support
+    /// Service for handling file tree drag and drop operations with silent Outlook support
     /// </summary>
     public class FileTreeDragDropService : IFileTreeDragDropService
     {
@@ -128,8 +128,8 @@ namespace ExplorerPro.UI.FileTree.Services
                 }
                 else if (IsOutlookData(e.Data))
                 {
-                    // Handle Outlook data asynchronously
-                    _ = HandleOutlookDropAsync(e.Data as DataObject, targetPath);
+                    // Process Outlook data silently without showing UI
+                    _ = HandleOutlookDropSilentlyAsync(e.Data as DataObject, targetPath);
                     success = true; // Return true immediately, actual result will come via event
                 }
             }
@@ -350,15 +350,23 @@ namespace ExplorerPro.UI.FileTree.Services
         public bool HandleOutlookDrop(DataObject dataObject, string targetPath)
         {
             // Synchronous wrapper for backwards compatibility
-            var task = HandleOutlookDropAsync(dataObject, targetPath);
+            var task = HandleOutlookDropSilentlyAsync(dataObject, targetPath);
             task.Wait();
             return task.Result;
         }
 
         /// <summary>
-        /// Handles Outlook drops asynchronously with progress reporting
+        /// Handles Outlook drops silently without progress UI
         /// </summary>
         public async Task<bool> HandleOutlookDropAsync(DataObject dataObject, string targetPath)
+        {
+            return await HandleOutlookDropSilentlyAsync(dataObject, targetPath);
+        }
+
+        /// <summary>
+        /// Handles Outlook drops silently without displaying progress UI
+        /// </summary>
+        private async Task<bool> HandleOutlookDropSilentlyAsync(DataObject dataObject, string targetPath)
         {
             if (dataObject == null || !Directory.Exists(targetPath))
                 return false;
@@ -369,14 +377,9 @@ namespace ExplorerPro.UI.FileTree.Services
 
             try
             {
-                var progress = new Progress<string>(message => 
-                {
-                    // Report progress - this will be handled by the UI
-                    System.Diagnostics.Debug.WriteLine($"[OUTLOOK] {message}");
-                });
-
+                // No progress reporting - silent extraction
                 var result = await OutlookDataExtractor.ExtractOutlookFilesAsync(
-                    dataObject, targetPath, progress, _cancellationTokenSource.Token);
+                    dataObject, targetPath, null, _cancellationTokenSource.Token);
 
                 // Notify completion
                 OnOutlookExtractionCompleted(result, targetPath);
@@ -424,27 +427,23 @@ namespace ExplorerPro.UI.FileTree.Services
                     {
                         if (data.GetDataPresent(format))
                         {
-                            System.Diagnostics.Debug.WriteLine($"Detected Outlook format: {format}");
                             return true;
                         }
                     }
-                    catch (COMException comEx)
+                    catch (COMException)
                     {
-                        System.Diagnostics.Debug.WriteLine($"COM error checking format {format}: 0x{comEx.HResult:X}");
                         continue;
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
-                        System.Diagnostics.Debug.WriteLine($"Error checking format {format}: {ex.Message}");
                         continue;
                     }
                 }
 
                 return false;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"Error in IsOutlookData: {ex.Message}");
                 return false;
             }
         }

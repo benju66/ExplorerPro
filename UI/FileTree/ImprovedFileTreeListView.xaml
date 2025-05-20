@@ -26,28 +26,6 @@
             
             <!-- Boolean to Visibility Converter -->
             <local:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-            
-            <!-- Progress overlay style -->
-            <Style x:Key="ProgressOverlayStyle" TargetType="Border">
-                <Setter Property="Background" Value="#CC000000"/>
-                <Setter Property="CornerRadius" Value="8"/>
-                <Setter Property="Padding" Value="30"/>
-                <Setter Property="Margin" Value="50"/>
-                <Setter Property="HorizontalAlignment" Value="Center"/>
-                <Setter Property="VerticalAlignment" Value="Center"/>
-                <Setter Property="Effect">
-                    <Setter.Value>
-                        <DropShadowEffect Color="Black" BlurRadius="10" ShadowDepth="5" Opacity="0.5"/>
-                    </Setter.Value>
-                </Setter>
-            </Style>
-            
-            <!-- Progress content style - REMOVED PADDING -->
-            <Style x:Key="ProgressContentStyle" TargetType="StackPanel">
-                <Setter Property="Background" Value="White"/>
-                <Setter Property="Width" Value="300"/>
-                <Setter Property="MinHeight" Value="120"/>
-            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
     
@@ -173,45 +151,11 @@
             </TreeView.ItemTemplate>
         </TreeView>
         
-        <!-- Progress overlay for Outlook extraction (initially collapsed) -->
+        <!-- Progress overlay (hidden and no longer used for Outlook extraction) -->
         <Border x:Name="ProgressOverlay" 
-               Style="{StaticResource ProgressOverlayStyle}"
                Visibility="Collapsed"
                Grid.RowSpan="2">
-            <Border Background="White" CornerRadius="5" Padding="20">
-                <StackPanel Style="{StaticResource ProgressContentStyle}">
-                    <!-- Header -->
-                    <TextBlock Text="Extracting Outlook Attachments" 
-                              FontSize="16" 
-                              FontWeight="Bold"
-                              HorizontalAlignment="Center"
-                              Margin="0,0,0,15"/>
-                    
-                    <!-- Progress bar -->
-                    <ProgressBar x:Name="ExtractionProgress" 
-                                Height="8" 
-                                IsIndeterminate="True"
-                                Margin="0,0,0,15"/>
-                    
-                    <!-- Status text -->
-                    <TextBlock x:Name="ProgressText" 
-                              Text="Analyzing Outlook data..."
-                              HorizontalAlignment="Center"
-                              TextWrapping="Wrap"
-                              Margin="0,0,0,15"
-                              MinHeight="20"/>
-                    
-                    <!-- Button panel -->
-                    <StackPanel Orientation="Horizontal" 
-                               HorizontalAlignment="Center">
-                        <Button x:Name="CancelButton" 
-                               Content="Cancel" 
-                               Padding="15,5"
-                               MinWidth="80"
-                               Click="CancelButton_Click"/>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
+            <!-- Content removed since we're not using it anymore -->
         </Border>
     </Grid>
 </UserControl>

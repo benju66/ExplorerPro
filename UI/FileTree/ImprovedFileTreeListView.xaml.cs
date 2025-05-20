@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs (UPDATED with progress UI and enhanced Outlook support)
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs (UPDATED - Silent Outlook handling)
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -21,7 +21,7 @@ using ExplorerPro.UI.FileTree.Services;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedFileTreeListView.xaml with enhanced Outlook attachment support
+    /// Interaction logic for ImprovedFileTreeListView.xaml with silent Outlook attachment support
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -209,6 +209,12 @@ namespace ExplorerPro.UI.FileTree
                 // Set DataContext to self for bindings
                 DataContext = this;
 
+                // Hide the progress overlay - we won't use it for Outlook extraction
+                if (ProgressOverlay != null)
+                {
+                    ProgressOverlay.Visibility = Visibility.Collapsed;
+                }
+
                 System.Diagnostics.Debug.WriteLine("[INIT] ImprovedFileTreeListView initialized with services");
             }
             catch (Exception ex)
@@ -303,15 +309,23 @@ namespace ExplorerPro.UI.FileTree
                     Dispatcher.Invoke(() => MessageBox.Show(error, "Drag/Drop Error", MessageBoxButton.OK, MessageBoxImage.Warning));
                 };
 
-                // Handle Outlook extraction completion
+                // Handle Outlook extraction completion silently
                 _dragDropService.OutlookExtractionCompleted += (s, e) => 
                 {
                     Dispatcher.Invoke(() => 
                     {
-                        HideProgressOverlay();
-                        ShowOutlookExtractionResults(e.Result);
+                        // Only show error message if extraction failed
+                        if (!e.Result.Success && !string.IsNullOrEmpty(e.Result.ErrorMessage))
+                        {
+                            MessageBox.Show(
+                                $"There was a problem extracting Outlook attachments: {e.Result.ErrorMessage}",
+                                "Extraction Problem",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Warning
+                            );
+                        }
                         
-                        // Refresh the target directory
+                        // Refresh the target directory regardless
                         _ = RefreshDirectoryAsync(e.TargetPath);
                     });
                 };
@@ -363,107 +377,6 @@ namespace ExplorerPro.UI.FileTree
             }
         }
         
-        #endregion
-
-        #region Progress UI Management
-
-        /// <summary>
-        /// Shows the progress overlay for Outlook extraction
-        /// </summary>
-        private void ShowProgressOverlay()
-        {
-            ProgressOverlay.Visibility = Visibility.Visible;
-            ExtractionProgress.IsIndeterminate = true;
-            ProgressText.Text = "Analyzing Outlook data...";
-            
-            // Disable the main tree view during extraction
-            fileTreeView.IsEnabled = false;
-        }
-
-        /// <summary>
-        /// Hides the progress overlay
-        /// </summary>
-        private void HideProgressOverlay()
-        {
-            ProgressOverlay.Visibility = Visibility.Collapsed;
-            fileTreeView.IsEnabled = true;
-        }
-
-        /// <summary>
-        /// Updates the progress text
-        /// </summary>
-        /// <param name="message">Progress message</param>
-        private void UpdateProgressText(string message)
-        {
-            ProgressText.Text = message;
-        }
-
-        /// <summary>
-        /// Shows the results of Outlook extraction
-        /// </summary>
-        /// <param name="result">Extraction result</param>
-        private void ShowOutlookExtractionResults(OutlookDataExtractor.ExtractionResult result)
-        {
-            string title;
-            MessageBoxImage icon;
-            string message;
-
-            if (result.Success)
-            {
-                title = "Extraction Complete";
-                icon = result.FilesSkipped > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information;
-                message = $"Successfully extracted {result.ExtractedFiles.Count} attachment(s)";
-                
-                if (result.FilesSkipped > 0)
-                {
-                    message += $"\n{result.FilesSkipped} file(s) could not be extracted";
-                }
-                
-                if (result.Errors > 0)  // Fixed: Using Errors as an integer
-                {
-                    message += "\n\nIssues encountered:";
-                    if (!string.IsNullOrEmpty(result.ErrorMessage))
-                    {
-                        message += $"\n• {result.ErrorMessage}";
-                    }
-                    else
-                    {
-                        message += $"\n• {result.Errors} error(s) occurred during extraction";
-                    }
-                }
-            }
-            else
-            {
-                title = "Extraction Failed";
-                icon = MessageBoxImage.Error;
-                message = "Failed to extract any attachments";
-                
-                if (result.Errors > 0)  // Fixed: Using Errors as an integer
-                {
-                    message += "\n\nErrors:";
-                    if (!string.IsNullOrEmpty(result.ErrorMessage))
-                    {
-                        message += $"\n• {result.ErrorMessage}";
-                    }
-                    else
-                    {
-                        message += $"\n• {result.Errors} error(s) occurred during extraction";
-                    }
-                }
-            }
-
-            MessageBox.Show(message, title, MessageBoxButton.OK, icon);
-        }
-
-        /// <summary>
-        /// Handler for cancel button click
-        /// </summary>
-        private void CancelButton_Click(object sender, RoutedEventArgs e)
-        {
-            _dragDropService?.CancelOutlookExtraction();
-            HideProgressOverlay();
-        }
-
         #endregion
 
         #region Column Management
@@ -884,12 +797,8 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_DragEnter(object sender, DragEventArgs e)
         {
-            // Show progress overlay for Outlook data
-            if (IsOutlookData(e.Data))
-            {
-                ShowProgressOverlay();
-            }
-            
+            // No need to show progress overlay for Outlook data anymore
+            // We're processing it silently like Windows Explorer
             _dragDropService.HandleDragEnter(e);
         }
 
@@ -907,23 +816,6 @@ namespace ExplorerPro.UI.FileTree
         private void FileTreeView_DragLeave(object sender, DragEventArgs e)
         {
             _dragDropService.HandleDragLeave(e);
-        }
-
-        /// <summary>
-        /// Quick check for Outlook data during drag operations
-        /// </summary>
-        private bool IsOutlookData(IDataObject data)
-        {
-            try
-            {
-                return data.GetDataPresent("FileGroupDescriptor") || 
-                       data.GetDataPresent("RenPrivateMessages") ||
-                       data.GetDataPresent("RenPrivateItem");
-            }
-            catch
-            {
-                return false;
-            }
         }
         
         #endregion

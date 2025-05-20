@@ -1,4 +1,4 @@
-// UI/FileTree/Services/OutlookDataExtractor.cs
+// UI/FileTree/Services/OutlookDataExtractor.cs - Fixed for proper filename encoding
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -19,10 +19,12 @@ namespace ExplorerPro.UI.FileTree.Services
         // Outlook data format constants
         private const string CFSTR_FILEDESCRIPTOR = "FileGroupDescriptor";
         private const string CFSTR_FILECONTENTS = "FileContents";
+        private const string CFSTR_FILEDESCRIPTORW = "FileGroupDescriptorW"; // Unicode version
         
         // Structure offset constants for file descriptor
         private const int FILEDESCRIPTOR_FILENAME_OFFSET = 76; // Offset to filename in FILEGROUPDESCRIPTOR structure
-        
+        private const int FILEDESCRIPTOR_FILENAME_LENGTH = 260; // Max filename length in FILEGROUPDESCRIPTOR
+
         /// <summary>
         /// Results of an Outlook extraction operation
         /// </summary>
@@ -130,7 +132,7 @@ namespace ExplorerPro.UI.FileTree.Services
             IProgress<string> progress, 
             CancellationToken cancellationToken)
         {
-            // Report initial progress
+            // Report initial progress if progress callback is provided
             progress?.Report("Starting Outlook extraction...");
             
             // Execute on a background thread
@@ -152,11 +154,18 @@ namespace ExplorerPro.UI.FileTree.Services
                     
                     progress?.Report("Analyzing Outlook data...");
                     
-                    // Try the FileGroupDescriptor approach which contains proper filenames
+                    // Try the Unicode descriptor version first (more reliable for international characters)
+                    if (dataObject.GetDataPresent(CFSTR_FILEDESCRIPTORW))
+                    {
+                        progress?.Report("Found Unicode file descriptors, extracting attachments...");
+                        return ExtractWithFileDescriptor(dataObject, targetPath, true, progress, cancellationToken);
+                    }
+                    
+                    // Then try the standard FileGroupDescriptor
                     if (dataObject.GetDataPresent(CFSTR_FILEDESCRIPTOR))
                     {
                         progress?.Report("Found file descriptors, extracting attachments...");
-                        return ExtractWithFileDescriptor(dataObject, targetPath, progress, cancellationToken);
+                        return ExtractWithFileDescriptor(dataObject, targetPath, false, progress, cancellationToken);
                     }
                     
                     // Check for cancellation
@@ -223,10 +232,16 @@ namespace ExplorerPro.UI.FileTree.Services
                 
                 System.Diagnostics.Debug.WriteLine("[INFO] Beginning Outlook attachment extraction");
                 
-                // Try the FileGroupDescriptor approach which contains proper filenames
+                // Try the Unicode descriptor version first (more reliable for international characters)
+                if (dataObject.GetDataPresent(CFSTR_FILEDESCRIPTORW))
+                {
+                    return ExtractWithFileDescriptor(dataObject, targetPath, true, null, CancellationToken.None);
+                }
+                
+                // Then try the standard FileGroupDescriptor
                 if (dataObject.GetDataPresent(CFSTR_FILEDESCRIPTOR))
                 {
-                    return ExtractWithFileDescriptor(dataObject, targetPath, null, CancellationToken.None);
+                    return ExtractWithFileDescriptor(dataObject, targetPath, false, null, CancellationToken.None);
                 }
                 
                 // Fallback to checking individual formats
@@ -266,6 +281,7 @@ namespace ExplorerPro.UI.FileTree.Services
         private static ExtractionResult ExtractWithFileDescriptor(
             IDataObject dataObject, 
             string targetPath,
+            bool useUnicode,
             IProgress<string> progress = null,
             CancellationToken cancellationToken = default)
         {
@@ -273,7 +289,8 @@ namespace ExplorerPro.UI.FileTree.Services
             {
                 // Get descriptor data as memory stream
                 MemoryStream descriptorStream = null;
-                var descriptorData = dataObject.GetData(CFSTR_FILEDESCRIPTOR);
+                string descriptorFormat = useUnicode ? CFSTR_FILEDESCRIPTORW : CFSTR_FILEDESCRIPTOR;
+                var descriptorData = dataObject.GetData(descriptorFormat);
                 
                 if (descriptorData is MemoryStream memStream)
                 {
@@ -298,7 +315,7 @@ namespace ExplorerPro.UI.FileTree.Services
                 }
                 
                 // Now read the file descriptors which contain the original filenames
-                return ReadAndExtractFiles(descriptorStream, dataObject, targetPath, progress, cancellationToken);
+                return ReadAndExtractFiles(descriptorStream, dataObject, targetPath, useUnicode, progress, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -316,6 +333,7 @@ namespace ExplorerPro.UI.FileTree.Services
             MemoryStream descriptorStream, 
             IDataObject dataObject, 
             string targetPath,
+            bool useUnicode,
             IProgress<string> progress = null,
             CancellationToken cancellationToken = default)
         {
@@ -357,7 +375,7 @@ namespace ExplorerPro.UI.FileTree.Services
                         
                         try
                         {
-                            string fileName = ReadFileNameFromDescriptor(reader);
+                            string fileName = ReadFileNameFromDescriptor(reader, useUnicode);
                             if (string.IsNullOrEmpty(fileName))
                             {
                                 // If no filename found, generate one
@@ -377,7 +395,16 @@ namespace ExplorerPro.UI.FileTree.Services
                             // Ensure we have a valid file extension
                             if (!Path.HasExtension(fileName))
                             {
-                                fileName += ".dat";
+                                // Try to detect file type and add appropriate extension
+                                string extension = DetectFileExtension(dataObject, i);
+                                if (!string.IsNullOrEmpty(extension))
+                                {
+                                    fileName += extension;
+                                }
+                                else
+                                {
+                                    fileName += ".dat"; // Default extension
+                                }
                             }
                             
                             // Extract the file content using the index
@@ -431,34 +458,171 @@ namespace ExplorerPro.UI.FileTree.Services
         }
 
         /// <summary>
-        /// Reads a filename from the file descriptor structure with improved reliability
+        /// Reads a filename from the file descriptor structure with improved Unicode support
         /// </summary>
-        private static string ReadFileNameFromDescriptor(BinaryReader reader)
+        private static string ReadFileNameFromDescriptor(BinaryReader reader, bool useUnicode)
         {
             try
             {
                 long currentPos = reader.BaseStream.Position;
                 
                 // Skip to the filename field in the FILEDESCRIPTOR structure
-                // The exact layout may vary but the filename is typically at offset 76
                 reader.BaseStream.Seek(currentPos + FILEDESCRIPTOR_FILENAME_OFFSET, SeekOrigin.Begin);
                 
-                // Read filename as Unicode (260 characters maximum)
-                byte[] nameBytes = new byte[520]; // 260 * 2 bytes for Unicode
-                int bytesRead = reader.Read(nameBytes, 0, nameBytes.Length);
-                
-                // Convert to string and trim null terminators
-                string fileName = Encoding.Unicode.GetString(nameBytes, 0, bytesRead).TrimEnd('\0');
+                string fileName;
+                if (useUnicode)
+                {
+                    // Read filename as Unicode (260 characters maximum)
+                    byte[] nameBytes = new byte[FILEDESCRIPTOR_FILENAME_LENGTH * 2]; // 260 * 2 bytes for Unicode
+                    int bytesRead = reader.Read(nameBytes, 0, nameBytes.Length);
+                    
+                    // Convert to string and trim null terminators
+                    fileName = Encoding.Unicode.GetString(nameBytes, 0, bytesRead).TrimEnd('\0');
+                }
+                else
+                {
+                    // Read filename as ANSI (260 characters maximum)
+                    byte[] nameBytes = new byte[FILEDESCRIPTOR_FILENAME_LENGTH];
+                    int bytesRead = reader.Read(nameBytes, 0, nameBytes.Length);
+                    
+                    // Convert to string and trim null terminators
+                    // Use the default Windows encoding (usually Windows-1252 or equivalent)
+                    Encoding ansiEncoding = Encoding.GetEncoding(1252);
+                    fileName = ansiEncoding.GetString(nameBytes, 0, bytesRead).TrimEnd('\0');
+                }
                 
                 // Seek to the end of this descriptor for the next one
                 // FILEDESCRIPTOR is typically 592 bytes total
                 reader.BaseStream.Seek(currentPos + 592, SeekOrigin.Begin);
                 
-                return fileName;
+                // Check if we have a valid filename
+                if (!string.IsNullOrEmpty(fileName) && fileName.IndexOfAny(Path.GetInvalidFileNameChars()) < 0)
+                {
+                    return fileName;
+                }
+                else
+                {
+                    // Try to extract at least some valid part of the filename
+                    string cleanedName = SanitizeFileName(fileName);
+                    if (!string.IsNullOrEmpty(cleanedName) && cleanedName.Length > 2)
+                    {
+                        return cleanedName;
+                    }
+                }
+                
+                return string.Empty;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Error reading filename from descriptor: {ex.Message}");
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Detects file extension based on content analysis
+        /// </summary>
+        private static string DetectFileExtension(IDataObject dataObject, int index)
+        {
+            try
+            {
+                // Try to get the file content to detect its type
+                object content = null;
+                
+                // Try different methods to get content
+                string indexedFormat = $"FileContents{index}";
+                if (dataObject.GetDataPresent(indexedFormat))
+                {
+                    content = dataObject.GetData(indexedFormat);
+                }
+                
+                if (content == null)
+                {
+                    string colonFormat = $"FileContents:{index}";
+                    if (dataObject.GetDataPresent(colonFormat))
+                    {
+                        content = dataObject.GetData(colonFormat);
+                    }
+                }
+                
+                if (content == null && dataObject.GetDataPresent(CFSTR_FILECONTENTS))
+                {
+                    var allContents = dataObject.GetData(CFSTR_FILECONTENTS);
+                    if (allContents is object[] contentsArray && index < contentsArray.Length)
+                    {
+                        content = contentsArray[index];
+                    }
+                    else if (index == 0) // Single file case
+                    {
+                        content = allContents;
+                    }
+                }
+                
+                if (content != null)
+                {
+                    byte[] bytes = null;
+                    
+                    if (content is MemoryStream memStream)
+                    {
+                        bytes = new byte[Math.Min(memStream.Length, 16)]; // Read first 16 bytes for signature detection
+                        memStream.Position = 0;
+                        memStream.Read(bytes, 0, bytes.Length);
+                        memStream.Position = 0; // Reset position
+                    }
+                    else if (content is byte[] contentBytes)
+                    {
+                        bytes = new byte[Math.Min(contentBytes.Length, 16)];
+                        Array.Copy(contentBytes, bytes, bytes.Length);
+                    }
+                    else if (content is Stream stream)
+                    {
+                        bytes = new byte[16];
+                        stream.Position = 0;
+                        stream.Read(bytes, 0, bytes.Length);
+                        stream.Position = 0; // Reset position
+                    }
+                    
+                    if (bytes != null && bytes.Length >= 4)
+                    {
+                        // Check for PDF signature (%PDF)
+                        if (bytes[0] == 0x25 && bytes[1] == 0x50 && bytes[2] == 0x44 && bytes[3] == 0x46)
+                        {
+                            return ".pdf";
+                        }
+                        
+                        // Check for JPEG signature
+                        if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+                        {
+                            return ".jpg";
+                        }
+                        
+                        // Check for PNG signature
+                        if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+                        {
+                            return ".png";
+                        }
+                        
+                        // Check for GIF signature
+                        if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38)
+                        {
+                            return ".gif";
+                        }
+                        
+                        // Check for ZIP/Office document signatures (PKZip header)
+                        if (bytes[0] == 0x50 && bytes[1] == 0x4B && bytes[2] == 0x03 && bytes[3] == 0x04)
+                        {
+                            // This could be a ZIP, DOCX, XLSX, PPTX, etc.
+                            // For now, just return .zip - could be enhanced to check deeper
+                            return ".zip";
+                        }
+                    }
+                }
+                
+                return string.Empty; // No detectable extension
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Error detecting file extension: {ex.Message}");
                 return string.Empty;
             }
         }
@@ -561,6 +725,16 @@ namespace ExplorerPro.UI.FileTree.Services
                             }
                             break;
                         }
+                    }
+                }
+                
+                // Try to detect file type and add appropriate extension
+                if (!Path.HasExtension(fileName))
+                {
+                    string extension = DetectFileExtension(dataObject, 0);
+                    if (!string.IsNullOrEmpty(extension))
+                    {
+                        fileName += extension;
                     }
                 }
                 
@@ -672,13 +846,24 @@ namespace ExplorerPro.UI.FileTree.Services
         private static string SanitizeFileName(string fileName)
         {
             if (string.IsNullOrEmpty(fileName))
-                return "Attachment.dat";
+                return "Attachment";
                 
             // Replace invalid filename characters
             foreach (char c in Path.GetInvalidFileNameChars())
             {
                 fileName = fileName.Replace(c, '_');
             }
+            
+            // Remove control characters which might cause display issues
+            StringBuilder sb = new StringBuilder();
+            foreach (char c in fileName)
+            {
+                if (!char.IsControl(c))
+                {
+                    sb.Append(c);
+                }
+            }
+            fileName = sb.ToString();
             
             // Ensure filename isn't too long
             if (fileName.Length > 240)
@@ -687,7 +872,13 @@ namespace ExplorerPro.UI.FileTree.Services
                 fileName = fileName.Substring(0, 240 - extension.Length) + extension;
             }
             
-            return fileName;
+            // Return "Attachment" if we ended up with an empty string
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return "Attachment";
+            }
+            
+            return fileName.Trim();
         }
     }
 }
