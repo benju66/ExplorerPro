@@ -13,6 +13,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Windows.Shapes; // Added for Path and Line
 using ExplorerPro.Models;
 using ExplorerPro.FileOperations;
 using ExplorerPro.Utilities;
@@ -283,7 +284,7 @@ namespace ExplorerPro.UI.FileTree
                     if (e.IsInternalMove)
                     {
                         var sourceDirectories = e.SourceFiles
-                            .Select(f => Path.GetDirectoryName(f))
+                            .Select(f => System.IO.Path.GetDirectoryName(f))
                             .Where(d => !string.IsNullOrEmpty(d))
                             .Distinct()
                             .ToArray();
@@ -572,7 +573,13 @@ namespace ExplorerPro.UI.FileTree
                 var headerPresenter = FindVisualChild<GridViewHeaderRowPresenter>(this);
                 if (headerPresenter != null)
                 {
-                    headerPresenter.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                    // We can't directly set the Background property on GridViewHeaderRowPresenter
+                    // Instead, find parent Border or create a style
+                    var parent = VisualTreeHelper.GetParent(headerPresenter) as Border;
+                    if (parent != null)
+                    {
+                        parent.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                    }
                     
                     // Update column headers
                     foreach (var header in FindVisualChildren<GridViewColumnHeader>(headerPresenter))
@@ -643,10 +650,10 @@ namespace ExplorerPro.UI.FileTree
             // We focus on the Path element inside the toggle button that forms the arrow
             try
             {
-                var path = FindVisualChild<Path>(toggle);
-                if (path != null)
+                var pathElement = FindVisualChild<System.Windows.Shapes.Path>(toggle);
+                if (pathElement != null)
                 {
-                    path.Stroke = GetResource<SolidColorBrush>("TextColor");
+                    pathElement.Stroke = GetResource<SolidColorBrush>("TextColor");
                     
                     // Set up mouse over handling
                     toggle.MouseEnter -= ToggleButton_MouseEnter;
@@ -701,10 +708,10 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (sender is ToggleButton toggle)
                 {
-                    var path = FindVisualChild<Path>(toggle);
-                    if (path != null)
+                    var pathElement = FindVisualChild<System.Windows.Shapes.Path>(toggle);
+                    if (pathElement != null)
                     {
-                        path.Stroke = GetResource<SolidColorBrush>("TreeLineHighlightColor");
+                        pathElement.Stroke = GetResource<SolidColorBrush>("TreeLineHighlightColor");
                     }
                 }
             }
@@ -720,10 +727,10 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (sender is ToggleButton toggle)
                 {
-                    var path = FindVisualChild<Path>(toggle);
-                    if (path != null)
+                    var pathElement = FindVisualChild<System.Windows.Shapes.Path>(toggle);
+                    if (pathElement != null)
                     {
-                        path.Stroke = GetResource<SolidColorBrush>("TextColor");
+                        pathElement.Stroke = GetResource<SolidColorBrush>("TextColor");
                     }
                 }
             }
@@ -814,7 +821,7 @@ namespace ExplorerPro.UI.FileTree
             if (Directory.Exists(selected))
                 return selected;
                 
-            return Path.GetDirectoryName(selected) ?? _currentFolderPath;
+            return System.IO.Path.GetDirectoryName(selected) ?? _currentFolderPath;
         }
 
         public void RefreshView()
@@ -935,7 +942,7 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (File.Exists(path))
                 {
-                    string dirPath = Path.GetDirectoryName(path);
+                    string dirPath = System.IO.Path.GetDirectoryName(path);
                     if (!string.IsNullOrEmpty(dirPath))
                     {
                         SetRootDirectory(dirPath);
@@ -1153,7 +1160,7 @@ namespace ExplorerPro.UI.FileTree
             }
             else
             {
-                _currentFolderPath = Path.GetDirectoryName(path) ?? string.Empty;
+                _currentFolderPath = System.IO.Path.GetDirectoryName(path) ?? string.Empty;
             }
 
             LocationChanged?.Invoke(this, path);
@@ -1342,7 +1349,7 @@ namespace ExplorerPro.UI.FileTree
             if (string.IsNullOrEmpty(path))
                 return;
                 
-            string parentDir = Path.GetDirectoryName(path);
+            string parentDir = System.IO.Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(parentDir))
             {
                 RefreshDirectory(parentDir);

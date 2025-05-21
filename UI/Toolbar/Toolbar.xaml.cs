@@ -29,8 +29,10 @@ namespace ExplorerPro.UI.Toolbar
         private readonly UndoManager _undoManager;
         private readonly SearchEngine _searchEngine;
         private readonly ILogger<Toolbar>? _logger;
-        private readonly Brush _placeholderTextBrush;
-        private readonly Brush _normalTextBrush;
+        
+        // Changed from readonly to normal fields
+        private Brush _placeholderTextBrush;
+        private Brush _normalTextBrush;
         private bool _isPlaceholderVisible = true;
         
         #endregion
@@ -50,7 +52,7 @@ namespace ExplorerPro.UI.Toolbar
             // Initialize the search engine with the fuzzy matcher
             _searchEngine = new SearchEngine(new FuzzySharpMatcher());
             
-            // Initialize text brushes
+            // Initialize text brushes - now in constructor since they're not readonly anymore
             _placeholderTextBrush = new SolidColorBrush(Colors.Gray);
             _normalTextBrush = new SolidColorBrush(Colors.Black);
             
@@ -704,14 +706,8 @@ namespace ExplorerPro.UI.Toolbar
         {
             try
             {
-                // Update standard navigation buttons
-                RefreshButton(UpButton);
-                RefreshButton(RefreshButton);
-                RefreshButton(UndoButton);
-                RefreshButton(RedoButton);
-                RefreshButton(SettingsButton);
-                
-                // Update any other buttons that might exist
+                // Update all buttons by finding them in the visual tree
+                // instead of hard-coding specific button names
                 foreach (var button in FindVisualChildren<Button>(this))
                 {
                     RefreshButton(button);
