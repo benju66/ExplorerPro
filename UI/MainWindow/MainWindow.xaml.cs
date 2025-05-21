@@ -745,6 +745,40 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
+        /// Handler for theme toggle button click
+        /// </summary>
+        private void ToggleThemeButton_Click(object sender, RoutedEventArgs e)
+        {
+            ExplorerPro.Themes.ThemeManager.Instance.ToggleTheme();
+        }
+
+        /// <summary>
+        /// Updates the application theme
+        /// </summary>
+        /// <param name="theme">Theme name ("light" or "dark")</param>
+        public void ApplyTheme(string theme)
+        {
+            try
+            {
+                // Use the ThemeManager
+                var themeEnum = theme?.ToLower() == "dark" ? 
+                    Themes.AppTheme.Dark : Themes.AppTheme.Light;
+                    
+                Themes.ThemeManager.Instance.SwitchTheme(themeEnum);
+                
+                // Save the theme to settings
+                _settingsManager.UpdateSetting("theme", theme.ToLower());
+                _settingsManager.UpdateSetting("ui_preferences.Enable Dark Mode", theme.ToLower() == "dark");
+                
+                Console.WriteLine($"Applied theme: {theme}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error applying theme: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Handler for detach tab menu item click.
         /// </summary>
         private void DetachTabMenuItem_Click(object sender, RoutedEventArgs e)

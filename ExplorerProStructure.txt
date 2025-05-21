@@ -1,12 +1,11 @@
-ExplorerPro/
+C:\ExplorerPro
 ├── App.xaml
 ├── App.xaml.cs
 ├── AssemblyInfo.cs
 ├── ExplorerPro.csproj
 ├── ExplorerPro.sln
 ├── README.md
-├── TestWindow.xaml
-├── TestWindow.xaml.cs
+├── ExplorerProStructure.txt
 
 ├── Assets/
 │   └── Icons/
@@ -18,7 +17,7 @@ ExplorerPro/
 │       ├── link.svg
 │       ├── list-todo.svg
 │       ├── pin.svg
-│       ├── star.svg
+│       └── star.svg
 
 ├── Data/
 │   ├── metadata.json
@@ -27,16 +26,15 @@ ExplorerPro/
 │   ├── procore_links.json
 │   ├── recurrence.json
 │   ├── settings.json
-│   ├── tasks.json
+│   └── tasks.json
 
 ├── FileOperations/
 │   ├── FileIconProvider.cs
 │   ├── FileOperations.cs
 │   ├── FileSystemWatcher.cs
-│   ├── IFileOperations.cs
+│   └── IFileOperations.cs
 
 ├── Models/
-│   ├── BatchFileOperationCommand.cs
 │   ├── Command.cs
 │   ├── ConfigManager.cs
 │   ├── MetadataManager.cs
@@ -45,7 +43,7 @@ ExplorerPro/
 │   ├── SearchEngine.cs
 │   ├── SettingsManager.cs
 │   ├── UndoCommands.cs
-│   ├── UndoManager.cs
+│   └── UndoManager.cs
 
 ├── Native/
 │   └── pdfium.dll
@@ -58,74 +56,53 @@ ExplorerPro/
 │   │       ├── ImagePreviewControl.xaml
 │   │       ├── ImagePreviewControl.xaml.cs
 │   │       ├── PdfPreviewControl.xaml
-│   │       ├── PdfPreviewControl.xaml.cs
-
+│   │       └── PdfPreviewControl.xaml.cs
 │   ├── Converters/
 │   │   └── CommonConverters.cs
-
 │   ├── Dialogs/
-│   │   ├── AddItemDialog.xaml
-│   │   ├── AddItemDialog.xaml.cs
-│   │   ├── ColorPickerDialog.xaml
-│   │   ├── ColorPickerDialog.xaml.cs
-│   │   ├── EditRecurrenceDialog.xaml
-│   │   ├── EditRecurrenceDialog.xaml.cs
-│   │   ├── FilePropertiesDialog.xaml
-│   │   ├── FilePropertiesDialog.xaml.cs
-│   │   ├── InputDialog.cs
-│   │   ├── ManageRecurringItemsDialog.xaml
-│   │   ├── ManageRecurringItemsDialog.xaml.cs
-│   │   ├── RecurringItemViewModel.cs
-│   │   ├── SettingsDialog.xaml
-│   │   ├── SettingsDialog.xaml.cs
-│   │   ├── TextInputDialog.xaml
-│   │   ├── TextInputDialog.xaml.cs
-
+│   │   ├── AddItemDialog.xaml + .cs
+│   │   ├── EditRecurrenceDialog.xaml + .cs
+│   │   ├── FilePropertiesDialog.xaml + .cs
+│   │   ├── ManageRecurringItemsDialog.xaml + .cs
+│   │   ├── SettingsDialog.xaml + .cs
+│   │   ├── TextInputDialog.xaml + .cs
+│   │   └── InputDialog.cs
 │   ├── FileTree/
+│   │   ├── FileTreeDemo.xaml + .cs
+│   │   ├── ImprovedFileTreeListView.xaml + .cs
 │   │   ├── ContextMenuProvider.cs
 │   │   ├── CustomFileSystemModel.cs
-│   │   ├── FileTreeView.xaml
-│   │   ├── FileTreeView.xaml.cs
+│   │   ├── FileTreeItem.cs
 │   │   ├── IFileTree.cs
-
+│   │   ├── TreeViewItemExtensions.cs
+│   │   └── Services/
+│   │       ├── FileTreeCacheService.cs
+│   │       ├── FileTreeDragDropService.cs
+│   │       ├── FileTreeService.cs
+│   │       ├── IFileTreeCache.cs
+│   │       ├── IFileTreeDragDropService.cs
+│   │       ├── IFileTreeService.cs
+│   │       └── OutlookDataExtractor.cs
 │   ├── MainWindow/
-│   │   ├── MainWindow.xaml
-│   │   ├── MainWindow.xaml.cs
-│   │   ├── MainWindowContainer.xaml
-│   │   ├── MainWindowContainer.xaml.cs
-│   │   ├── MainWindowTabs.xaml
-│   │   ├── MainWindowTabs.xaml.cs
-
+│   │   ├── MainWindow.xaml + .cs
+│   │   ├── MainWindowContainer.xaml + .cs
+│   │   └── MainWindowTabs.xaml + .cs
 │   ├── Panels/
-│   │   ├── BookmarksPanel/
-│   │   │   ├── BookmarksPanel.xaml
-│   │   │   ├── BookmarksPanel.xaml.cs
-│   │   ├── PinnedPanel/
-│   │   │   ├── EventArgs.cs
-│   │   │   ├── PinnedPanel.xaml
-│   │   │   ├── PinnedPanel.xaml.cs
-│   │   ├── ProcoreLinksPanel/
-│   │   │   ├── ProcoreLinksPanel.xaml
-│   │   │   ├── ProcoreLinksPanel.xaml.cs
-│   │   ├── ToDoPanel/
-│   │       ├── ToDoPanel.xaml
-│   │       ├── ToDoPanel.xaml.cs
-
+│   │   ├── BookmarksPanel.xaml + .cs
+│   │   ├── PinnedPanel.xaml + .cs
+│   │   ├── PinnedPanel/EventArgs.cs
+│   │   ├── ProcoreLinksPanel.xaml + .cs
+│   │   └── ToDoPanel.xaml + .cs
 │   ├── TabManagement/
 │   │   ├── DraggableTabBar.cs
 │   │   ├── TabHistoryManager.cs
-│   │   ├── TabManager.xaml
-│   │   ├── TabManager.xaml.cs
-
-│   ├── Toolbar/
-│       ├── Toolbar.xaml
-│       ├── Toolbar.xaml.cs
+│   │   └── TabManager.xaml + .cs
+│   └── Toolbar/
+│       └── Toolbar.xaml + .cs
 
 ├── Utilities/
 │   ├── DateFormatter.cs
 │   ├── Extensions.cs
 │   ├── FileSizeFormatter.cs
 │   ├── IconProvider.cs
-│   ├── LRUCache.cs
-│   ├── OutlookAttachmentHandler.cs
-│   ├── PathUtils.cs
+│   └── PathUtils.cs

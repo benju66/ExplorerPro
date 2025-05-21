@@ -54,6 +54,10 @@ namespace ExplorerPro
                 Console.WriteLine("Initializing settings...");
                 InitializeSettings();
 
+                // Initialize the theme manager
+                Console.WriteLine("Initializing theme manager...");
+                Themes.ThemeManager.Instance.Initialize();
+
                 // Initialize global services
                 Console.WriteLine("Initializing services...");
                 InitializeServices();

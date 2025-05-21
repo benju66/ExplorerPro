@@ -59,6 +59,9 @@ C:\ExplorerPro\bin\Debug\net9.0-windows\nl\PdfiumViewer.resources.dll
 C:\ExplorerPro\bin\Debug\net9.0-windows\runtimes\win\lib\net9.0\Microsoft.Win32.SystemEvents.dll
 C:\ExplorerPro\obj\Debug\net9.0-windows\ExplorerPro.csproj.AssemblyReference.cache
 C:\ExplorerPro\obj\Debug\net9.0-windows\TestWindow.baml
+C:\ExplorerPro\obj\Debug\net9.0-windows\Themes\BaseTheme.baml
+C:\ExplorerPro\obj\Debug\net9.0-windows\Themes\DarkTheme.baml
+C:\ExplorerPro\obj\Debug\net9.0-windows\Themes\LightTheme.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\FileTree\Resources\FileTreeResources.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\TestWindow.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Controls\DateEditControl.g.cs
@@ -86,7 +89,6 @@ C:\ExplorerPro\obj\Debug\net9.0-windows\ExplorerPro_Content.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\GeneratedInternalTypeHelper.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\ExplorerPro_MarkupCompile.cache
 C:\ExplorerPro\obj\Debug\net9.0-windows\ExplorerPro_MarkupCompile.lref
-C:\ExplorerPro\obj\Debug\net9.0-windows\App.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Controls\DateEditControl.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Controls\PreviewHandlers\ImagePreviewControl.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Controls\PreviewHandlers\PdfPreviewControl.baml

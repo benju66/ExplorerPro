@@ -1,0 +1,287 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    
+    <!-- 
+    BASE THEME
+    These are common resources used by all themes (light and dark).
+    The theme-specific resources (colors, etc.) are defined in LightTheme.xaml and DarkTheme.xaml.
+    -->
+    
+    <!-- Common Font Sizes -->
+    <System:Double x:Key="SmallFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">11</System:Double>
+    <System:Double x:Key="StandardFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">12</System:Double>
+    <System:Double x:Key="MediumFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">13</System:Double>
+    <System:Double x:Key="LargeFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">14</System:Double>
+    <System:Double x:Key="HeaderFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">16</System:Double>
+    <System:Double x:Key="TitleFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">20</System:Double>
+    
+    <!-- Common Spacing and Margins -->
+    <Thickness x:Key="StandardMargin">8</Thickness>
+    <Thickness x:Key="DoubleMargin">16</Thickness>
+    <Thickness x:Key="HalfMargin">4</Thickness>
+    <Thickness x:Key="SmallMargin">2</Thickness>
+    <Thickness x:Key="ZeroMargin">0</Thickness>
+    
+    <!-- Standard Row/Column Definitions -->
+    <GridLength x:Key="StandardRowHeight">32</GridLength>
+    <GridLength x:Key="StandardColumnWidth">120</GridLength>
+    <GridLength x:Key="SidebarWidth">250</GridLength>
+    
+    <!-- Standard Border Thickness -->
+    <Thickness x:Key="StandardBorderThickness">1</Thickness>
+    <Thickness x:Key="ThickBorderThickness">2</Thickness>
+    <Thickness x:Key="BottomBorderThickness">0,0,0,1</Thickness>
+    <Thickness x:Key="TopBorderThickness">0,1,0,0</Thickness>
+    
+    <!-- Standard Corner Radius -->
+    <CornerRadius x:Key="StandardCornerRadius">3</CornerRadius>
+    <CornerRadius x:Key="LargeCornerRadius">5</CornerRadius>
+    <CornerRadius x:Key="ZeroCornerRadius">0</CornerRadius>
+    
+    <!-- Shared Button Style -->
+    <Style x:Key="BaseButtonStyle" TargetType="{x:Type Button}">
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="BorderThickness" Value="{StaticResource StandardBorderThickness}"/>
+        <Setter Property="Background" Value="{DynamicResource ButtonBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorder}"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource ButtonBackgroundHover}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorderHover}"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{DynamicResource ButtonBackgroundPressed}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorderPressed}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.6"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    
+    <!-- ToolButton Style - Used for toolbar buttons with icons -->
+    <Style x:Key="ToolButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource BaseButtonStyle}">
+        <Setter Property="Width" Value="32"/>
+        <Setter Property="Height" Value="32"/>
+        <Setter Property="Margin" Value="2,0"/>
+        <Setter Property="Padding" Value="4"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource ButtonBackgroundHover}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorderHover}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    
+    <!-- Standard ListView Style -->
+    <Style x:Key="BaseListViewStyle" TargetType="{x:Type ListView}">
+        <Setter Property="Background" Value="{DynamicResource ListViewBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ListViewBorder}"/>
+        <Setter Property="BorderThickness" Value="{StaticResource StandardBorderThickness}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+    </Style>
+    
+    <!-- TreeView Base Style -->
+    <Style x:Key="BaseTreeViewStyle" TargetType="{x:Type TreeView}">
+        <Setter Property="Background" Value="{DynamicResource TreeViewBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource TreeViewBorder}"/>
+        <Setter Property="BorderThickness" Value="{StaticResource StandardBorderThickness}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+    </Style>
+    
+    <!-- TreeViewItem Base Style -->
+    <Style x:Key="BaseTreeViewItemStyle" TargetType="{x:Type TreeViewItem}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Style.Triggers>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="{DynamicResource TreeViewItemSelectedBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TreeViewItemSelectedForeground}"/>
+            </Trigger>
+            <MultiTrigger>
+                <MultiTrigger.Conditions>
+                    <Condition Property="IsSelected" Value="True"/>
+                    <Condition Property="IsSelectionActive" Value="False"/>
+                </MultiTrigger.Conditions>
+                <Setter Property="Background" Value="{DynamicResource TreeViewItemSelectedInactiveBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TreeViewItemSelectedInactiveForeground}"/>
+            </MultiTrigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource TreeViewItemHoverBackground}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    
+    <!-- TabControl Base Style -->
+    <Style x:Key="BaseTabControlStyle" TargetType="{x:Type TabControl}">
+        <Setter Property="Background" Value="{DynamicResource TabControlBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource TabControlBorder}"/>
+        <Setter Property="BorderThickness" Value="{StaticResource StandardBorderThickness}"/>
+    </Style>
+    
+    <!-- TabItem Base Style -->
+    <Style x:Key="BaseTabItemStyle" TargetType="{x:Type TabItem}">
+        <Setter Property="Background" Value="{DynamicResource TabBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource TabBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="{StaticResource StandardBorderThickness}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="Padding" Value="10,5"/>
+        <Setter Property="Margin" Value="0,0,2,0"/>
+        <Style.Triggers>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="{DynamicResource TabSelectedBackground}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource TabSelectedBorderBrush}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TabSelectedForeground}"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource TabHoverBackground}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    
+    <!-- TextBlock Base Style -->
+    <Style x:Key="BaseTextBlockStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="FontSize" Value="{StaticResource StandardFontSize}"/>
+        <Setter Property="TextWrapping" Value="NoWrap"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    
+    <!-- TextBox Base Style -->
+    <Style x:Key="BaseTextBoxStyle" TargetType="{x:Type TextBox}">
+        <Setter Property="Background" Value="{DynamicResource TextBoxBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextBoxForeground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource TextBoxBorder}"/>
+        <Setter Property="BorderThickness" Value="{StaticResource StandardBorderThickness}"/>
+        <Setter Property="Padding" Value="5,2"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource TextBoxBorderHover}"/>
+            </Trigger>
+            <Trigger Property="IsFocused" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource TextBoxBorderFocused}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    
+    <!-- ComboBox Base Style -->
+    <Style x:Key="BaseComboBoxStyle" TargetType="{x:Type ComboBox}">
+        <Setter Property="Background" Value="{DynamicResource ComboBoxBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource ComboBoxForeground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ComboBoxBorder}"/>
+        <Setter Property="BorderThickness" Value="{StaticResource StandardBorderThickness}"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource ComboBoxBorderHover}"/>
+            </Trigger>
+            <Trigger Property="IsDropDownOpen" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource ComboBoxBorderFocused}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    
+    <!-- Menu Base Style -->
+    <Style x:Key="BaseMenuStyle" TargetType="{x:Type Menu}">
+        <Setter Property="Background" Value="{DynamicResource MenuBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource MenuBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="{StaticResource BottomBorderThickness}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+    </Style>
+    
+    <!-- MenuItem Base Style -->
+    <Style x:Key="BaseMenuItemStyle" TargetType="{x:Type MenuItem}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Style.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter Property="Background" Value="{DynamicResource MenuItemHighlightedBackground}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    
+    <!-- ToolBar Base Style -->
+    <Style x:Key="BaseToolBarStyle" TargetType="{x:Type ToolBar}">
+        <Setter Property="Background" Value="{DynamicResource ToolbarBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ToolbarBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="{StaticResource BottomBorderThickness}"/>
+    </Style>
+    
+    <!-- GridSplitter Base Style -->
+    <Style x:Key="BaseGridSplitterStyle" TargetType="{x:Type GridSplitter}">
+        <Setter Property="Background" Value="{DynamicResource GridSplitterBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource GridSplitterBorder}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource GridSplitterHighlight}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    
+    <!-- GroupBox Base Style -->
+    <Style x:Key="BaseGroupBoxStyle" TargetType="{x:Type GroupBox}">
+        <Setter Property="BorderBrush" Value="{DynamicResource GroupBoxBorder}"/>
+        <Setter Property="Background" Value="{DynamicResource GroupBoxBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="BorderThickness" Value="{StaticResource StandardBorderThickness}"/>
+        <Setter Property="Padding" Value="8"/>
+    </Style>
+    
+    <!-- Expander Base Style -->
+    <Style x:Key="BaseExpanderStyle" TargetType="{x:Type Expander}">
+        <Setter Property="BorderBrush" Value="{DynamicResource ExpanderBorder}"/>
+        <Setter Property="Background" Value="{DynamicResource ExpanderBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="BorderThickness" Value="{StaticResource StandardBorderThickness}"/>
+    </Style>
+    
+    <!-- ToggleButton Base Style -->
+    <Style x:Key="BaseToggleButtonStyle" TargetType="{x:Type ToggleButton}">
+        <Setter Property="Background" Value="{DynamicResource ToggleButtonBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource ToggleButtonForeground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ToggleButtonBorder}"/>
+        <Setter Property="BorderThickness" Value="{StaticResource StandardBorderThickness}"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Style.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter Property="Background" Value="{DynamicResource ToggleButtonCheckedBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource ToggleButtonCheckedForeground}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource ToggleButtonCheckedBorder}"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource ToggleButtonBackgroundHover}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource ToggleButtonBorderHover}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    
+    <!-- ScrollViewer Base Style -->
+    <Style x:Key="BaseScrollViewerStyle" TargetType="{x:Type ScrollViewer}">
+        <Setter Property="Background" Value="{DynamicResource ScrollViewerBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ScrollViewerBorder}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    
+    <!-- ScrollBar Base Style -->
+    <Style x:Key="BaseScrollBarStyle" TargetType="{x:Type ScrollBar}">
+        <Setter Property="Background" Value="{DynamicResource ScrollBarTrackBackground}"/>
+        <Style.Triggers>
+            <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Height" Value="12"/>
+                <Setter Property="MinHeight" Value="12"/>
+            </Trigger>
+            <Trigger Property="Orientation" Value="Vertical">
+                <Setter Property="Width" Value="12"/>
+                <Setter Property="MinWidth" Value="12"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+</ResourceDictionary>
