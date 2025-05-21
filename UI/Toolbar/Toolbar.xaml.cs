@@ -7,9 +7,12 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Diagnostics;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Linq;
 using ExplorerPro.Models;
 using ExplorerPro.UI.FileTree;
-using System.Threading.Tasks;
+using ExplorerPro.Themes;
 using Microsoft.Extensions.Logging;
 
 namespace ExplorerPro.UI.Toolbar
@@ -636,6 +639,231 @@ namespace ExplorerPro.UI.Toolbar
         {
             ClearPlaceholder();
             searchBar.Focus();
+        }
+        
+        #endregion
+
+        #region Theme Management
+        
+        /// <summary>
+        /// Refreshes UI elements based on the current theme
+        /// </summary>
+        public void RefreshThemeElements()
+        {
+            try
+            {
+                bool isDarkMode = ThemeManager.Instance.IsDarkMode;
+                
+                // Update toolbar background and border
+                Background = GetResource<SolidColorBrush>("ToolbarBackground");
+                BorderBrush = GetResource<SolidColorBrush>("ToolbarBorderBrush");
+                
+                // Update search bar
+                if (searchBar != null)
+                {
+                    searchBar.Background = GetResource<SolidColorBrush>("TextBoxBackground");
+                    
+                    // Handle placeholder text separately
+                    if (_isPlaceholderVisible)
+                    {
+                        // Update placeholder brush with theme-appropriate color
+                        _placeholderTextBrush = new SolidColorBrush(isDarkMode ? 
+                            Colors.DarkGray : Colors.Gray);
+                        searchBar.Foreground = _placeholderTextBrush;
+                    }
+                    else
+                    {
+                        // Update normal text brush
+                        _normalTextBrush = GetResource<SolidColorBrush>("TextBoxForeground");
+                        searchBar.Foreground = _normalTextBrush;
+                    }
+                    
+                    // Update border
+                    searchBar.BorderBrush = GetResource<SolidColorBrush>("TextBoxBorder");
+                }
+                
+                // Update all buttons
+                RefreshToolbarButtons();
+                
+                // If the toolbar has a context menu, update it
+                RefreshContextMenu();
+                
+                _logger?.LogInformation("Toolbar theme elements refreshed successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error refreshing toolbar theme elements");
+                // Non-critical error, continue
+            }
+        }
+        
+        /// <summary>
+        /// Refreshes all buttons in the toolbar
+        /// </summary>
+        private void RefreshToolbarButtons()
+        {
+            try
+            {
+                // Update standard navigation buttons
+                RefreshButton(UpButton);
+                RefreshButton(RefreshButton);
+                RefreshButton(UndoButton);
+                RefreshButton(RedoButton);
+                RefreshButton(SettingsButton);
+                
+                // Update any other buttons that might exist
+                foreach (var button in FindVisualChildren<Button>(this))
+                {
+                    RefreshButton(button);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error refreshing toolbar buttons");
+            }
+        }
+        
+        /// <summary>
+        /// Refreshes a single button with theme-appropriate styling
+        /// </summary>
+        private void RefreshButton(Button button)
+        {
+            if (button == null) return;
+            
+            try
+            {
+                // Apply theme resources to button
+                button.Background = GetResource<SolidColorBrush>("ButtonBackground");
+                button.Foreground = GetResource<SolidColorBrush>("ButtonForeground");
+                button.BorderBrush = GetResource<SolidColorBrush>("ButtonBorder");
+                
+                // If the button contains an image, ensure it's visible against the background
+                var image = FindVisualChild<Image>(button);
+                if (image != null)
+                {
+                    // Special handling for image buttons
+                    button.Background = Brushes.Transparent;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error refreshing button");
+            }
+        }
+        
+        /// <summary>
+        /// Refreshes the context menu if it exists
+        /// </summary>
+        private void RefreshContextMenu()
+        {
+            try
+            {
+                if (searchBar?.ContextMenu != null)
+                {
+                    var menu = searchBar.ContextMenu;
+                    
+                    // Apply theme resources to context menu
+                    menu.Background = GetResource<SolidColorBrush>("ContextMenuBackground");
+                    menu.Foreground = GetResource<SolidColorBrush>("TextColor");
+                    menu.BorderBrush = GetResource<SolidColorBrush>("ContextMenuBorder");
+                    
+                    // Update all menu items
+                    foreach (var item in menu.Items)
+                    {
+                        if (item is MenuItem menuItem)
+                        {
+                            menuItem.Background = GetResource<SolidColorBrush>("MenuItemBackground");
+                            menuItem.Foreground = GetResource<SolidColorBrush>("TextColor");
+                            menuItem.BorderBrush = GetResource<SolidColorBrush>("MenuItemBorder");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error refreshing context menu");
+            }
+        }
+        
+        /// <summary>
+        /// Helper method to get a resource from the current theme
+        /// </summary>
+        private T GetResource<T>(string resourceKey) where T : class
+        {
+            try
+            {
+                if (Application.Current.Resources[resourceKey] is T resource)
+                {
+                    return resource;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Error getting resource '{resourceKey}'");
+            }
+            
+            // Default values for common types
+            if (typeof(T) == typeof(SolidColorBrush))
+            {
+                if (resourceKey.Contains("Background"))
+                    return new SolidColorBrush(Colors.White) as T;
+                if (resourceKey.Contains("Foreground") || resourceKey.Contains("Text"))
+                    return new SolidColorBrush(Colors.Black) as T;
+                if (resourceKey.Contains("Border"))
+                    return new SolidColorBrush(Colors.Gray) as T;
+            }
+            
+            return default;
+        }
+        
+        /// <summary>
+        /// Finds the first visual child of the specified type
+        /// </summary>
+        private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            if (parent == null) return null;
+            
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+                
+                if (child is T t)
+                {
+                    return t;
+                }
+                
+                T childOfChild = FindVisualChild<T>(child);
+                if (childOfChild != null)
+                {
+                    return childOfChild;
+                }
+            }
+            
+            return null;
+        }
+        
+        /// <summary>
+        /// Finds all visual children of the specified type
+        /// </summary>
+        private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
+        {
+            if (parent == null) yield break;
+            
+            int childCount = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < childCount; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+                
+                if (child is T t)
+                {
+                    yield return t;
+                }
+                
+                foreach (var grandChild in FindVisualChildren<T>(child))
+                {
+                    yield return grandChild;
+                }
+            }
         }
         
         #endregion

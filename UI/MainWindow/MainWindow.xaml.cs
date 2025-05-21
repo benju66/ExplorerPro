@@ -19,6 +19,7 @@ using ExplorerPro.UI.TabManagement;
 using ExplorerPro.UI.Panels;
 using ExplorerPro.UI.Panels.PinnedPanel;
 using ExplorerPro.Utilities;
+using ExplorerPro.Themes;
 // Add reference to System.Windows.Forms but use an alias
 using WinForms = System.Windows.Forms;
 using WPF = System.Windows;
@@ -86,6 +87,9 @@ namespace ExplorerPro.UI.MainWindow
                 // Now initialize the component
                 InitializeComponent();
                 
+                // Setup theme handlers
+                SetupThemeHandlers();
+                
                 // Connect events only if MainTabs exists
                 if (MainTabs != null)
                 {
@@ -133,6 +137,19 @@ namespace ExplorerPro.UI.MainWindow
             Console.WriteLine($"Error initializing main window: {ex.Message}");
             MessageBox.Show($"Error initializing application: {ex.Message}\n\nThe application may have limited functionality.",
                 "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        /// <summary>
+        /// Setup handlers for theme changes
+        /// </summary>
+        private void SetupThemeHandlers()
+        {
+            // Subscribe to theme change events
+            ThemeManager.Instance.ThemeChanged += (s, theme) => {
+                Dispatcher.Invoke(() => {
+                    RefreshThemeElements();
+                });
+            };
         }
 
         #endregion
@@ -199,6 +216,9 @@ namespace ExplorerPro.UI.MainWindow
 
                         // Refresh pinned panels
                         RefreshAllPinnedPanels();
+                        
+                        // Refresh theme elements
+                        RefreshThemeElements();
                     }
                     catch (Exception ex)
                     {
@@ -365,6 +385,9 @@ namespace ExplorerPro.UI.MainWindow
             RegisterShortcut(Key.OemMinus, ModifierKeys.Control, ZoomOut, "Zoom Out");
             RegisterShortcut(Key.D0, ModifierKeys.Control, ZoomReset, "Reset Zoom");
 
+            // Theme shortcut
+            RegisterShortcut(Key.T, ModifierKeys.Control | ModifierKeys.Shift, () => ThemeManager.Instance.ToggleTheme(), "Toggle Theme");
+
             // Utility shortcuts
             RegisterShortcut(Key.F1, ModifierKeys.None, ShowHelp, "Help");
             RegisterShortcut(Key.OemComma, ModifierKeys.Control, OpenSettings, "Settings");
@@ -404,6 +427,174 @@ namespace ExplorerPro.UI.MainWindow
             {
                 Console.WriteLine($"Error registering shortcut {description}: {ex.Message}");
             }
+        }
+
+        #endregion
+
+        #region Theme Management
+
+        /// <summary>
+        /// Refreshes UI elements based on the current theme
+        /// </summary>
+        public void RefreshThemeElements()
+        {
+            try
+            {
+                // Get current theme information
+                bool isDarkMode = ThemeManager.Instance.IsDarkMode;
+                
+                // Update window-level UI elements
+                Background = GetResource<SolidColorBrush>("WindowBackground");
+                Foreground = GetResource<SolidColorBrush>("TextColor");
+                
+                // Status bar elements
+                if (StatusText != null)
+                {
+                    StatusText.Foreground = GetResource<SolidColorBrush>("TextColor");
+                }
+                
+                if (ItemCountText != null)
+                {
+                    ItemCountText.Foreground = GetResource<SolidColorBrush>("TextColor");
+                }
+                
+                if (SelectionText != null)
+                {
+                    SelectionText.Foreground = GetResource<SolidColorBrush>("TextColor");
+                }
+                
+                // Main tab control
+                if (MainTabs != null)
+                {
+                    MainTabs.Background = GetResource<SolidColorBrush>("TabControlBackground");
+                    
+                    // Refresh all tab items
+                    foreach (var item in MainTabs.Items)
+                    {
+                        if (item is TabItem tabItem)
+                        {
+                            tabItem.Background = GetResource<SolidColorBrush>("TabBackground");
+                            tabItem.Foreground = GetResource<SolidColorBrush>("TextColor");
+                            
+                            // If this tab is selected, apply selected style
+                            if (tabItem.IsSelected)
+                            {
+                                tabItem.Background = GetResource<SolidColorBrush>("TabSelectedBackground");
+                                tabItem.Foreground = GetResource<SolidColorBrush>("TabSelectedForeground");
+                            }
+                            
+                            // Update containers within tabs
+                            if (tabItem.Content is MainWindowContainer container)
+                            {
+                                container.RefreshThemeElements();
+                            }
+                        }
+                    }
+                }
+                
+                // Refresh toolbar
+                if (Toolbar != null)
+                {
+                    Toolbar.RefreshThemeElements();
+                }
+                
+                // Update theme-sensitive button content
+                UpdateThemeToggleButtonContent();
+                
+                Console.WriteLine("MainWindow theme elements refreshed successfully");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error refreshing main window theme elements: {ex.Message}");
+                // Non-critical error, continue
+            }
+        }
+        
+        /// <summary>
+        /// Updates the theme toggle button content based on the current theme
+        /// </summary>
+        private void UpdateThemeToggleButtonContent()
+        {
+            try
+            {
+                // Find the theme toggle button if it exists
+                Button toggleThemeButton = FindToggleThemeButton();
+                if (toggleThemeButton != null)
+                {
+                    bool isDarkMode = ThemeManager.Instance.IsDarkMode;
+                    
+                    // Update button content based on theme
+                    // This assumes the button uses an icon or text that should change with the theme
+                    toggleThemeButton.ToolTip = isDarkMode ? "Switch to Light Theme" : "Switch to Dark Theme";
+                    
+                    // If the button contains an image, we could switch the image here
+                    // Example: (toggleThemeButton.Content as Image).Source = new BitmapImage(new Uri(...));
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error updating theme toggle button: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Finds the theme toggle button in the UI
+        /// </summary>
+        private Button FindToggleThemeButton()
+        {
+            // Implement searching for your theme toggle button
+            // This is a placeholder, adjust to your actual UI structure
+            return null;
+        }
+        
+        /// <summary>
+        /// Helper method to get a resource from the current theme
+        /// </summary>
+        private T GetResource<T>(string resourceKey) where T : class
+        {
+            return ThemeManager.Instance.GetResource<T>(resourceKey);
+        }
+        
+        /// <summary>
+        /// Updates the application theme
+        /// </summary>
+        /// <param name="theme">Theme name ("light" or "dark")</param>
+        public void ApplyTheme(string theme)
+        {
+            try
+            {
+                // Use the ThemeManager
+                var themeEnum = theme?.ToLower() == "dark" ? 
+                    Themes.AppTheme.Dark : Themes.AppTheme.Light;
+                    
+                Themes.ThemeManager.Instance.SwitchTheme(themeEnum);
+                
+                // Save the theme to settings
+                _settingsManager.UpdateSetting("theme", theme.ToLower());
+                _settingsManager.UpdateSetting("ui_preferences.Enable Dark Mode", theme.ToLower() == "dark");
+                
+                Console.WriteLine($"Applied theme: {theme}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error applying theme: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Handles the theme toggle button click
+        /// </summary>
+        private void ToggleThemeButton_Click(object sender, RoutedEventArgs e)
+        {
+            ThemeManager.Instance.ToggleTheme();
+        }
+        
+        /// <summary>
+        /// Handles command to toggle theme from menu or shortcut
+        /// </summary>
+        private void ToggleThemeCommand_Executed(object sender, System.Windows.Input.ExecutedRoutedEventArgs e)
+        {
+            ThemeManager.Instance.ToggleTheme();
         }
 
         #endregion
@@ -742,40 +933,6 @@ namespace ExplorerPro.UI.MainWindow
         private void ToggleSplitViewMenuItem_Click(object sender, RoutedEventArgs e)
         {
             ToggleSplitView();
-        }
-
-        /// <summary>
-        /// Handler for theme toggle button click
-        /// </summary>
-        private void ToggleThemeButton_Click(object sender, RoutedEventArgs e)
-        {
-            ExplorerPro.Themes.ThemeManager.Instance.ToggleTheme();
-        }
-
-        /// <summary>
-        /// Updates the application theme
-        /// </summary>
-        /// <param name="theme">Theme name ("light" or "dark")</param>
-        public void ApplyTheme(string theme)
-        {
-            try
-            {
-                // Use the ThemeManager
-                var themeEnum = theme?.ToLower() == "dark" ? 
-                    Themes.AppTheme.Dark : Themes.AppTheme.Light;
-                    
-                Themes.ThemeManager.Instance.SwitchTheme(themeEnum);
-                
-                // Save the theme to settings
-                _settingsManager.UpdateSetting("theme", theme.ToLower());
-                _settingsManager.UpdateSetting("ui_preferences.Enable Dark Mode", theme.ToLower() == "dark");
-                
-                Console.WriteLine($"Applied theme: {theme}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error applying theme: {ex.Message}");
-            }
         }
 
         /// <summary>
@@ -1286,43 +1443,6 @@ namespace ExplorerPro.UI.MainWindow
             catch (Exception ex)
             {
                 Console.WriteLine($"Error applying saved settings: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Apply theme to the UI.
-        /// </summary>
-        /// <param name="theme">Theme name (light or dark)</param>
-        public void ApplyTheme(string theme)
-        {
-            try
-            {
-                if (theme == "light")
-                {
-                    // Use system theme
-                    Resources.Clear();
-                    Resources.MergedDictionaries.Clear();
-                }
-                else if (theme == "dark")
-                {
-                    // Load dark theme
-                    ResourceDictionary darkTheme = new ResourceDictionary
-                    {
-                        Source = new Uri("/ExplorerPro;component/Themes/DarkTheme.xaml", UriKind.Relative)
-                    };
-                    
-                    Resources.MergedDictionaries.Clear();
-                    Resources.MergedDictionaries.Add(darkTheme);
-                }
-                
-                // Save theme
-                _settingsManager.UpdateSetting("theme", theme);
-                
-                Console.WriteLine($"Applied theme: {theme}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error applying theme: {ex.Message}");
             }
         }
 
@@ -2261,6 +2381,30 @@ namespace ExplorerPro.UI.MainWindow
             }
             
             return false;
+        }
+        
+        /// <summary>
+        /// Finds all visual children of the specified type
+        /// </summary>
+        public static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
+        {
+            if (parent == null) yield break;
+            
+            int childCount = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < childCount; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+                
+                if (child is T t)
+                {
+                    yield return t;
+                }
+                
+                foreach (var grandChild in FindVisualChildren<T>(child))
+                {
+                    yield return grandChild;
+                }
+            }
         }
 
         #endregion

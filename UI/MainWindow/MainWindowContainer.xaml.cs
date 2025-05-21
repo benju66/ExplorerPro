@@ -14,6 +14,7 @@ using ExplorerPro.UI.Panels.PinnedPanel;
 using ExplorerPro.UI.Panels.BookmarksPanel;
 using ExplorerPro.UI.Panels.ToDoPanel;
 using ExplorerPro.UI.Panels.ProcoreLinksPanel;
+using ExplorerPro.Themes;
 
 namespace ExplorerPro.UI.MainWindow
 {
@@ -1447,6 +1448,234 @@ namespace ExplorerPro.UI.MainWindow
             catch (Exception ex)
             {
                 Console.WriteLine($"Error checking console empty: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region Theme Management
+
+        /// <summary>
+        /// Refreshes UI elements based on the current theme
+        /// </summary>
+        public void RefreshThemeElements()
+        {
+            try
+            {
+                // Get current theme information
+                bool isDarkMode = ThemeManager.Instance.IsDarkMode;
+                
+                // Update container-level UI elements
+                MainGrid.Background = GetResource<SolidColorBrush>("WindowBackground");
+                
+                // Update dock area
+                if (DockArea != null)
+                {
+                    DockArea.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                }
+                
+                // Update panel containers
+                RefreshPanelContainer(LeftColumnContainer);
+                RefreshPanelContainer(RightColumnContainer);
+                RefreshPanelContainer(PinnedPanelContainer);
+                RefreshPanelContainer(ToDoPanelContainer);
+                RefreshPanelContainer(ProcorePanelContainer);
+                RefreshPanelContainer(BookmarksPanelContainer);
+                
+                // Update console area
+                if (ConsoleArea != null)
+                {
+                    ConsoleArea.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                    ConsoleArea.BorderBrush = GetResource<SolidColorBrush>("BorderColor");
+                }
+                
+                // Drop indicator
+                if (DropIndicator != null)
+                {
+                    DropIndicator.Background = GetResource<SolidColorBrush>(isDarkMode ? 
+                        "DropIndicatorBackgroundDark" : "DropIndicatorBackgroundLight");
+                    DropIndicator.BorderBrush = GetResource<SolidColorBrush>("BorderColor");
+                }
+                
+                // Update all content controls
+                UpdateContentControls();
+                
+                // Update tab managers
+                RefreshTabManagers();
+                
+                // Update file tree
+                var fileTree = FindFileTree();
+                if (fileTree != null)
+                {
+                    fileTree.RefreshThemeElements();
+                }
+                
+                Console.WriteLine("MainWindowContainer theme elements refreshed successfully");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error refreshing container theme elements: {ex.Message}");
+                // Non-critical error, continue
+            }
+        }
+        
+        /// <summary>
+        /// Updates all content controls with theme-appropriate colors
+        /// </summary>
+        private void UpdateContentControls()
+        {
+            try
+            {
+                // Update all Content controls in this container
+                if (MainContent != null)
+                {
+                    MainContent.Background = GetResource<SolidColorBrush>("WindowBackground");
+                }
+                
+                if (PinnedPanelContent != null)
+                {
+                    PinnedPanelContent.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                }
+                
+                if (BookmarksPanelContent != null)
+                {
+                    BookmarksPanelContent.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                }
+                
+                if (ToDoPanelContent != null)
+                {
+                    ToDoPanelContent.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                }
+                
+                if (ProcorePanelContent != null)
+                {
+                    ProcorePanelContent.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                }
+                
+                if (ConsoleContent != null)
+                {
+                    ConsoleContent.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error updating content controls: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Refreshes a panel container with theme-appropriate styling
+        /// </summary>
+        private void RefreshPanelContainer(Border container)
+        {
+            if (container == null) return;
+            
+            try
+            {
+                container.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                container.BorderBrush = GetResource<SolidColorBrush>("BorderColor");
+                
+                // Update panel headers inside containers
+                foreach (var textBlock in FindVisualChildren<TextBlock>(container))
+                {
+                    if (textBlock.Parent is DockPanel && textBlock.Text.Contains("Panel"))
+                    {
+                        // This looks like a panel header
+                        textBlock.Background = GetResource<SolidColorBrush>("GroupBoxHeaderBackground");
+                        textBlock.Foreground = GetResource<SolidColorBrush>("TextColor");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error refreshing panel container: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Refreshes tab managers in the split view
+        /// </summary>
+        private void RefreshTabManagers()
+        {
+            try
+            {
+                // Refresh main tab manager
+                if (_tabManager != null)
+                {
+                    // The tab manager might need its own RefreshThemeElements method
+                    // For now, we'll update the TabControl background directly
+                    var tabControl = FindTabControl(_tabManager);
+                    if (tabControl != null)
+                    {
+                        tabControl.Background = GetResource<SolidColorBrush>("TabControlBackground");
+                    }
+                }
+                
+                // Refresh right tab manager if in split view
+                if (_rightTabManager != null && _splitViewActive)
+                {
+                    var tabControl = FindTabControl(_rightTabManager);
+                    if (tabControl != null)
+                    {
+                        tabControl.Background = GetResource<SolidColorBrush>("TabControlBackground");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error refreshing tab managers: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Helper to find TabControl within a TabManager
+        /// </summary>
+        private TabControl FindTabControl(object tabManager)
+        {
+            try
+            {
+                if (tabManager is DependencyObject dependencyObject)
+                {
+                    return FindVisualChildren<TabControl>(dependencyObject).FirstOrDefault();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error finding TabControl: {ex.Message}");
+            }
+            
+            return null;
+        }
+        
+        /// <summary>
+        /// Helper method to get a resource from the current theme
+        /// </summary>
+        private T GetResource<T>(string resourceKey) where T : class
+        {
+            return ThemeManager.Instance.GetResource<T>(resourceKey);
+        }
+        
+        /// <summary>
+        /// Finds all visual children of the specified type
+        /// </summary>
+        public static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
+        {
+            if (parent == null) yield break;
+            
+            int childCount = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < childCount; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+                
+                if (child is T t)
+                {
+                    yield return t;
+                }
+                
+                foreach (var grandChild in FindVisualChildren<T>(child))
+                {
+                    yield return grandChild;
+                }
             }
         }
 

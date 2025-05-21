@@ -6,12 +6,70 @@
     <Application.Resources>
         <!-- Application resources use merged dictionaries for theme support -->
         <ResourceDictionary>
-            <!-- The ThemeManager will replace these dictionaries at runtime -->
+            <!-- The ThemeManager will dynamically manage these dictionaries at runtime -->
             <ResourceDictionary.MergedDictionaries>
-                <!-- BaseTheme.xaml and the theme-specific xaml will be loaded by ThemeManager -->
+                <!-- Intentionally empty - ThemeManager will populate dynamically -->
             </ResourceDictionary.MergedDictionaries>
             
-            <!-- Any global non-theme specific resources can be defined here -->
+            <!-- Global resource references for theme-aware controls -->
+            <!-- Default styles that apply the theme resources -->
+            <Style TargetType="{x:Type Window}" BasedOn="{StaticResource {x:Type Window}}">
+                <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            </Style>
+            
+            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="Background" Value="{DynamicResource ButtonBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorder}"/>
+            </Style>
+            
+            <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource {x:Type TextBox}}">
+                <Setter Property="Background" Value="{DynamicResource TextBoxBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TextBoxForeground}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource TextBoxBorder}"/>
+            </Style>
+            
+            <Style TargetType="{x:Type ComboBox}" BasedOn="{StaticResource {x:Type ComboBox}}">
+                <Setter Property="Background" Value="{DynamicResource ComboBoxBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource ComboBoxForeground}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource ComboBoxBorder}"/>
+            </Style>
+            
+            <Style TargetType="{x:Type ListView}" BasedOn="{StaticResource {x:Type ListView}}">
+                <Setter Property="Background" Value="{DynamicResource ListViewBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource ListViewBorder}"/>
+            </Style>
+            
+            <Style TargetType="{x:Type TreeView}" BasedOn="{StaticResource {x:Type TreeView}}">
+                <Setter Property="Background" Value="{DynamicResource TreeViewBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource TreeViewBorder}"/>
+            </Style>
+            
+            <Style TargetType="{x:Type TabControl}" BasedOn="{StaticResource {x:Type TabControl}}">
+                <Setter Property="Background" Value="{DynamicResource TabControlBackground}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource TabControlBorder}"/>
+            </Style>
+            
+            <Style TargetType="{x:Type Menu}" BasedOn="{StaticResource {x:Type Menu}}">
+                <Setter Property="Background" Value="{DynamicResource MenuBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource MenuBorderBrush}"/>
+            </Style>
+            
+            <Style TargetType="{x:Type ContextMenu}" BasedOn="{StaticResource {x:Type ContextMenu}}">
+                <Setter Property="Background" Value="{DynamicResource ContextMenuBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource ContextMenuBorder}"/>
+            </Style>
+            
+            <Style TargetType="{x:Type ToolTip}" BasedOn="{StaticResource {x:Type ToolTip}}">
+                <Setter Property="Background" Value="{DynamicResource ToolTipBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource ToolTipText}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource ToolTipBorder}"/>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

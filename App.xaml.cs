@@ -4,6 +4,7 @@ using System.Windows;
 using System.Threading.Tasks;
 using ExplorerPro.Models;
 using ExplorerPro.Utilities;
+using ExplorerPro.Themes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -54,9 +55,8 @@ namespace ExplorerPro
                 Console.WriteLine("Initializing settings...");
                 InitializeSettings();
 
-                // Initialize the theme manager
-                Console.WriteLine("Initializing theme manager...");
-                Themes.ThemeManager.Instance.Initialize();
+                // Initialize theme system
+                InitializeThemeSystem();
 
                 // Initialize global services
                 Console.WriteLine("Initializing services...");
@@ -92,6 +92,71 @@ namespace ExplorerPro
             catch (Exception ex)
             {
                 HandleStartupError(ex, "Critical error during startup", true);
+            }
+        }
+
+        /// <summary>
+        /// Initialize themes early in the application startup
+        /// </summary>
+        private void InitializeThemeSystem()
+        {
+            try
+            {
+                Console.WriteLine("Initializing theme system...");
+                
+                // Get theme from settings
+                string savedTheme = Settings?.GetSetting<string>("theme", "light") ?? "light";
+                bool isDarkMode = savedTheme.Equals("dark", StringComparison.OrdinalIgnoreCase);
+                
+                // Initialize and apply the theme
+                ThemeManager.Instance.Initialize();
+                
+                // Subscribe to theme change events for settings persistence
+                ThemeManager.Instance.ThemeChanged += (s, theme) => {
+                    Console.WriteLine($"Theme changed to: {theme}");
+                    
+                    // Save to settings
+                    if (Settings != null)
+                    {
+                        Settings.UpdateSetting("theme", theme.ToString().ToLower());
+                        Settings.UpdateSetting("ui_preferences.Enable Dark Mode", theme == AppTheme.Dark);
+                    }
+                };
+                
+                Console.WriteLine($"Theme system initialized with theme: {savedTheme}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error initializing theme system: {ex.Message}");
+                // Continue with application startup even if theme initialization fails
+            }
+        }
+        
+        /// <summary>
+        /// Update the application theme overrides from App.xaml
+        /// </summary>
+        private void UpdateAppResources()
+        {
+            try
+            {
+                // Clear old theme dictionaries and add new ones
+                var resourcesToRemove = new ResourceDictionary[Resources.MergedDictionaries.Count];
+                Resources.MergedDictionaries.CopyTo(resourcesToRemove, 0);
+                
+                foreach (var dict in resourcesToRemove)
+                {
+                    if (dict.Source != null && dict.Source.ToString().Contains("/Themes/"))
+                    {
+                        Resources.MergedDictionaries.Remove(dict);
+                    }
+                }
+                
+                // Let the ThemeManager handle adding the correct theme dictionaries
+                ThemeManager.Instance.RefreshThemeResources();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error updating app resources: {ex.Message}");
             }
         }
 

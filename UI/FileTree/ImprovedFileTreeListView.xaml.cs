@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs (UPDATED - Silent Outlook handling)
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs (UPDATED - Silent Outlook handling + Theme Support)
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -17,6 +17,7 @@ using ExplorerPro.Models;
 using ExplorerPro.FileOperations;
 using ExplorerPro.Utilities;
 using ExplorerPro.UI.FileTree.Services;
+using ExplorerPro.Themes;
 
 namespace ExplorerPro.UI.FileTree
 {
@@ -367,6 +368,9 @@ namespace ExplorerPro.UI.FileTree
             MakeColumnsResizable();
             TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
             fileTreeView.ItemContainerGenerator.StatusChanged += ItemContainerGenerator_StatusChanged;
+            
+            // Apply theme settings on load
+            RefreshThemeElements();
         }
         
         private void ItemContainerGenerator_StatusChanged(object sender, EventArgs e)
@@ -495,6 +499,292 @@ namespace ExplorerPro.UI.FileTree
         private void ColumnHeader_DragCompleted(object sender, DragCompletedEventArgs e)
         {
             _draggedColumn = null;
+        }
+        
+        #endregion
+
+        #region Theme Management
+        
+        /// <summary>
+        /// Refreshes UI elements based on the current theme
+        /// </summary>
+        public void RefreshThemeElements()
+        {
+            try
+            {
+                bool isDarkMode = ThemeManager.Instance.IsDarkMode;
+                
+                // Update main grid background
+                if (MainGrid != null)
+                {
+                    MainGrid.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                }
+                
+                // Update column headers
+                RefreshColumnHeaders();
+                
+                // Update TreeView
+                if (fileTreeView != null)
+                {
+                    fileTreeView.Background = GetResource<SolidColorBrush>("TreeViewBackground");
+                    fileTreeView.BorderBrush = GetResource<SolidColorBrush>("TreeViewBorder");
+                    fileTreeView.Foreground = GetResource<SolidColorBrush>("TextColor");
+                    
+                    // Update TreeViewItems
+                    RefreshTreeViewItems();
+                }
+                
+                // Update progress overlay if visible
+                if (ProgressOverlay != null && ProgressOverlay.Visibility == Visibility.Visible)
+                {
+                    ProgressOverlay.Background = GetResource<SolidColorBrush>(isDarkMode ? 
+                        "BackgroundColor" : "BackgroundColor");
+                    
+                    // Make background semi-transparent
+                    if (ProgressOverlay.Background is SolidColorBrush brush)
+                    {
+                        Color color = brush.Color;
+                        ProgressOverlay.Background = new SolidColorBrush(
+                            Color.FromArgb(200, color.R, color.G, color.B));
+                    }
+                }
+                
+                // Refresh dynamic resources in DataTemplates
+                RefreshDataTemplateResources();
+                
+                Console.WriteLine("FileTree theme elements refreshed successfully");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing file tree theme: {ex.Message}");
+                // Non-critical error, continue
+            }
+        }
+        
+        /// <summary>
+        /// Refreshes column headers with theme-appropriate styling
+        /// </summary>
+        private void RefreshColumnHeaders()
+        {
+            try
+            {
+                // Update the header presenter background
+                var headerPresenter = FindVisualChild<GridViewHeaderRowPresenter>(this);
+                if (headerPresenter != null)
+                {
+                    headerPresenter.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                    
+                    // Update column headers
+                    foreach (var header in FindVisualChildren<GridViewColumnHeader>(headerPresenter))
+                    {
+                        header.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                        header.Foreground = GetResource<SolidColorBrush>("TextColor");
+                        header.BorderBrush = GetResource<SolidColorBrush>("BorderColor");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing column headers: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Refreshes TreeViewItems with theme-appropriate styling
+        /// </summary>
+        private void RefreshTreeViewItems()
+        {
+            try
+            {
+                // Get theme colors for tree lines
+                var treeLine = GetResource<SolidColorBrush>("TreeLineColor");
+                var treeLineHighlight = GetResource<SolidColorBrush>("TreeLineHighlightColor");
+                
+                // Update all TreeViewItems
+                foreach (var item in FindVisualChildren<TreeViewItem>(fileTreeView))
+                {
+                    // Apply theme to the TreeViewItem
+                    item.Foreground = GetResource<SolidColorBrush>("TextColor");
+                    
+                    // Update tree lines in the item
+                    foreach (var line in FindVisualChildren<Line>(item))
+                    {
+                        line.Stroke = treeLine;
+                        
+                        // Set up mouse over handling for lines
+                        if (line.Parent is UIElement parent)
+                        {
+                            parent.MouseEnter -= TreeLine_MouseEnter;
+                            parent.MouseLeave -= TreeLine_MouseLeave;
+                            
+                            parent.MouseEnter += TreeLine_MouseEnter;
+                            parent.MouseLeave += TreeLine_MouseLeave;
+                        }
+                    }
+                    
+                    // Update toggle buttons
+                    foreach (var toggle in FindVisualChildren<ToggleButton>(item))
+                    {
+                        RefreshTreeViewToggleButton(toggle);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing tree view items: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Refreshes a TreeView toggle button (expander) with theme-appropriate styling
+        /// </summary>
+        private void RefreshTreeViewToggleButton(ToggleButton toggle)
+        {
+            // We focus on the Path element inside the toggle button that forms the arrow
+            try
+            {
+                var path = FindVisualChild<Path>(toggle);
+                if (path != null)
+                {
+                    path.Stroke = GetResource<SolidColorBrush>("TextColor");
+                    
+                    // Set up mouse over handling
+                    toggle.MouseEnter -= ToggleButton_MouseEnter;
+                    toggle.MouseLeave -= ToggleButton_MouseLeave;
+                    
+                    toggle.MouseEnter += ToggleButton_MouseEnter;
+                    toggle.MouseLeave += ToggleButton_MouseLeave;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing toggle button: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Event handler for mouse enter on tree lines
+        /// </summary>
+        private void TreeLine_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            try
+            {
+                foreach (var line in FindVisualChildren<Line>(sender as DependencyObject))
+                {
+                    line.Stroke = GetResource<SolidColorBrush>("TreeLineHighlightColor");
+                }
+            }
+            catch { /* Ignore errors in UI effects */ }
+        }
+        
+        /// <summary>
+        /// Event handler for mouse leave on tree lines
+        /// </summary>
+        private void TreeLine_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            try
+            {
+                foreach (var line in FindVisualChildren<Line>(sender as DependencyObject))
+                {
+                    line.Stroke = GetResource<SolidColorBrush>("TreeLineColor");
+                }
+            }
+            catch { /* Ignore errors in UI effects */ }
+        }
+        
+        /// <summary>
+        /// Event handler for mouse enter on toggle buttons
+        /// </summary>
+        private void ToggleButton_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            try
+            {
+                if (sender is ToggleButton toggle)
+                {
+                    var path = FindVisualChild<Path>(toggle);
+                    if (path != null)
+                    {
+                        path.Stroke = GetResource<SolidColorBrush>("TreeLineHighlightColor");
+                    }
+                }
+            }
+            catch { /* Ignore errors in UI effects */ }
+        }
+        
+        /// <summary>
+        /// Event handler for mouse leave on toggle buttons
+        /// </summary>
+        private void ToggleButton_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            try
+            {
+                if (sender is ToggleButton toggle)
+                {
+                    var path = FindVisualChild<Path>(toggle);
+                    if (path != null)
+                    {
+                        path.Stroke = GetResource<SolidColorBrush>("TextColor");
+                    }
+                }
+            }
+            catch { /* Ignore errors in UI effects */ }
+        }
+        
+        /// <summary>
+        /// Refreshes resources in data templates
+        /// </summary>
+        private void RefreshDataTemplateResources()
+        {
+            try
+            {
+                // This is more complex as it involves updating resources referenced in data templates
+                // The most effective approach is to force a refresh of the template
+                
+                // Force ItemTemplate refresh by briefly changing a dependency property
+                // This is a bit of a hack but can trigger template regeneration
+                if (fileTreeView.ItemTemplate != null)
+                {
+                    var template = fileTreeView.ItemTemplate;
+                    fileTreeView.ItemTemplate = null;
+                    fileTreeView.UpdateLayout();
+                    fileTreeView.ItemTemplate = template;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing data templates: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Helper method to get a resource from the current theme
+        /// </summary>
+        private T GetResource<T>(string resourceKey) where T : class
+        {
+            try
+            {
+                if (Application.Current.Resources[resourceKey] is T resource)
+                {
+                    return resource;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Error getting resource '{resourceKey}': {ex.Message}");
+            }
+            
+            // Default values for common types
+            if (typeof(T) == typeof(SolidColorBrush))
+            {
+                if (resourceKey.Contains("Background"))
+                    return new SolidColorBrush(Colors.White) as T;
+                if (resourceKey.Contains("Foreground") || resourceKey.Contains("Text"))
+                    return new SolidColorBrush(Colors.Black) as T;
+                if (resourceKey.Contains("Border"))
+                    return new SolidColorBrush(Colors.Gray) as T;
+            }
+            
+            return default;
         }
         
         #endregion
