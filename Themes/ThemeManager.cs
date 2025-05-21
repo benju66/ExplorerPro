@@ -1,4 +1,4 @@
-// Themes/ThemeManager.cs
+// Themes/ThemeManager.cs - Enhanced with improved theme handling
 using System;
 using System.Windows;
 using System.Windows.Media;
@@ -42,6 +42,16 @@ namespace ExplorerPro.Themes
         /// </summary>
         public event EventHandler<AppTheme> ThemeChanged;
         
+        /// <summary>
+        /// Event that fires before theme resources are refreshed
+        /// </summary>
+        public event EventHandler<AppTheme> ThemeRefreshing;
+        
+        /// <summary>
+        /// Event that fires after theme resources are refreshed
+        /// </summary>
+        public event EventHandler<AppTheme> ThemeRefreshed;
+        
         #endregion
         
         #region Properties
@@ -56,6 +66,11 @@ namespace ExplorerPro.Themes
         /// </summary>
         public bool IsDarkMode => CurrentTheme == AppTheme.Dark;
         
+        /// <summary>
+        /// Gets a dictionary of default fallback resources for when resources aren't found
+        /// </summary>
+        public Dictionary<string, object> DefaultResources { get; private set; }
+        
         #endregion
         
         #region Private Fields
@@ -63,6 +78,13 @@ namespace ExplorerPro.Themes
         private readonly SettingsManager _settingsManager;
         private bool _isInitialized = false;
         private readonly Dictionary<string, ResourceDictionary> _themeCache = new Dictionary<string, ResourceDictionary>();
+        
+        // Theme-specific resource cache
+        private Dictionary<string, object> _darkThemeResources = new Dictionary<string, object>();
+        private Dictionary<string, object> _lightThemeResources = new Dictionary<string, object>();
+        
+        // List of windows to notify of theme changes
+        private readonly List<WeakReference<Window>> _registeredWindows = new List<WeakReference<Window>>();
         
         #endregion
         
@@ -80,6 +102,9 @@ namespace ExplorerPro.Themes
             string savedTheme = _settingsManager.GetSetting<string>("theme", "light");
             CurrentTheme = savedTheme.Equals("dark", StringComparison.OrdinalIgnoreCase) ? 
                 AppTheme.Dark : AppTheme.Light;
+            
+            // Initialize default resources
+            InitializeDefaultResources();
                 
             Console.WriteLine($"ThemeManager created with initial theme: {CurrentTheme}");
         }
@@ -112,6 +137,12 @@ namespace ExplorerPro.Themes
                 
                 _isInitialized = true;
                 Console.WriteLine("ThemeManager initialized successfully");
+                
+                // Register for application exit to clean up resources
+                Application.Current.Exit += (s, e) => Cleanup();
+                
+                // Monitor application windows
+                Application.Current.Activated += Application_Activated;
             }
             catch (Exception ex)
             {
@@ -180,8 +211,15 @@ namespace ExplorerPro.Themes
                 Console.WriteLine($"Error getting theme brush '{resourceKey}': {ex.Message}");
             }
             
-            // Return a default brush if not found
-            return new SolidColorBrush(Colors.Gray);
+            // Try to get default brush from our default resources
+            if (DefaultResources.TryGetValue(resourceKey, out var defaultBrush) && 
+                defaultBrush is SolidColorBrush defaultSolidBrush)
+            {
+                return defaultSolidBrush;
+            }
+            
+            // Return a theme-appropriate default brush if not found
+            return new SolidColorBrush(IsDarkMode ? Colors.Gray : Colors.DarkGray);
         }
         
         /// <summary>
@@ -198,10 +236,70 @@ namespace ExplorerPro.Themes
                 {
                     return Application.Current.Resources[resourceKey] as T;
                 }
+                
+                // Try to get from cached theme resources
+                var themeCache = IsDarkMode ? _darkThemeResources : _lightThemeResources;
+                if (themeCache.TryGetValue(resourceKey, out var cachedResource) && 
+                    cachedResource is T typedResource)
+                {
+                    return typedResource;
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error getting theme resource '{resourceKey}': {ex.Message}");
+            }
+            
+            // Look in default resources
+            if (DefaultResources.TryGetValue(resourceKey, out var defaultResource) && 
+                defaultResource is T typedDefault)
+            {
+                return typedDefault;
+            }
+            
+            return default;
+        }
+        
+        /// <summary>
+        /// Gets a specifically themed resource (from light or dark theme regardless of current setting)
+        /// </summary>
+        /// <typeparam name="T">Type of resource to get</typeparam>
+        /// <param name="resourceKey">Key of the resource</param>
+        /// <param name="theme">Theme to use</param>
+        /// <returns>The resource or default if not found</returns>
+        public T GetThemedResource<T>(string resourceKey, AppTheme theme) where T : class
+        {
+            try
+            {
+                // Try to get from cached theme resources for the specific theme
+                var themeCache = theme == AppTheme.Dark ? _darkThemeResources : _lightThemeResources;
+                if (themeCache.TryGetValue(resourceKey, out var cachedResource) && 
+                    cachedResource is T typedResource)
+                {
+                    return typedResource;
+                }
+                
+                // Try to load the resource from the theme dictionary if not cached
+                if (themeCache.Count == 0)
+                {
+                    // No resources cached yet, load the theme dictionary
+                    var themeDictionary = LoadThemeDictionary(theme);
+                    if (themeDictionary != null && themeDictionary.Contains(resourceKey))
+                    {
+                        return themeDictionary[resourceKey] as T;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting themed resource '{resourceKey}': {ex.Message}");
+            }
+            
+            // Look in default resources
+            if (DefaultResources.TryGetValue(resourceKey, out var defaultResource) && 
+                defaultResource is T typedDefault)
+            {
+                return typedDefault;
             }
             
             return default;
@@ -212,12 +310,156 @@ namespace ExplorerPro.Themes
         /// </summary>
         public void RefreshThemeResources()
         {
-            ApplyTheme(CurrentTheme);
+            try
+            {
+                // Notify before refreshing
+                ThemeRefreshing?.Invoke(this, CurrentTheme);
+                
+                // Re-apply current theme
+                ApplyTheme(CurrentTheme);
+                
+                // Notify after refreshing
+                ThemeRefreshed?.Invoke(this, CurrentTheme);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error refreshing theme resources: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Registers a window to be notified of theme changes
+        /// </summary>
+        /// <param name="window">Window to register</param>
+        public void RegisterWindow(Window window)
+        {
+            if (window == null)
+                return;
+                
+            // Check if window is already registered
+            foreach (var weakRef in _registeredWindows)
+            {
+                if (weakRef.TryGetTarget(out var existingWindow) && existingWindow == window)
+                {
+                    return; // Already registered
+                }
+            }
+            
+            // Add window to registration list
+            _registeredWindows.Add(new WeakReference<Window>(window));
+            
+            // Force window to refresh its theme immediately
+            RefreshWindowTheme(window);
+            
+            Console.WriteLine($"Window registered for theme updates: {window.GetType().Name}");
+        }
+        
+        /// <summary>
+        /// Creates or gets a fallback resource with appropriate theme values
+        /// </summary>
+        /// <param name="resourceKey">The resource key</param>
+        /// <returns>A theme-appropriate resource</returns>
+        public object GetFallbackResource(string resourceKey)
+        {
+            // Return existing fallback if already created
+            if (DefaultResources.TryGetValue(resourceKey, out var existingResource))
+            {
+                return existingResource;
+            }
+            
+            // Create appropriate fallback based on resource key pattern
+            if (resourceKey.Contains("Background"))
+            {
+                var brush = new SolidColorBrush(IsDarkMode ? Colors.Black : Colors.White);
+                DefaultResources[resourceKey] = brush;
+                return brush;
+            }
+            else if (resourceKey.Contains("Foreground") || resourceKey.Contains("Text"))
+            {
+                var brush = new SolidColorBrush(IsDarkMode ? Colors.LightGray : Colors.Black);
+                DefaultResources[resourceKey] = brush;
+                return brush;
+            }
+            else if (resourceKey.Contains("Border"))
+            {
+                var brush = new SolidColorBrush(IsDarkMode ? Colors.DarkGray : Colors.LightGray);
+                DefaultResources[resourceKey] = brush;
+                return brush;
+            }
+            
+            // Return null for unknown resource types
+            return null;
         }
         
         #endregion
         
         #region Private Methods
+        
+        /// <summary>
+        /// Initializes default fallback resources
+        /// </summary>
+        private void InitializeDefaultResources()
+        {
+            DefaultResources = new Dictionary<string, object>();
+            
+            // Add standard fallbacks for the dark theme
+            DefaultResources["TextColor_Dark"] = new SolidColorBrush(Colors.LightGray);
+            DefaultResources["WindowBackground_Dark"] = new SolidColorBrush(Colors.Black);
+            DefaultResources["BackgroundColor_Dark"] = new SolidColorBrush(Color.FromRgb(30, 30, 30));
+            DefaultResources["BorderColor_Dark"] = new SolidColorBrush(Colors.DarkGray);
+            
+            // Add standard fallbacks for the light theme
+            DefaultResources["TextColor_Light"] = new SolidColorBrush(Colors.Black);
+            DefaultResources["WindowBackground_Light"] = new SolidColorBrush(Colors.White);
+            DefaultResources["BackgroundColor_Light"] = new SolidColorBrush(Color.FromRgb(245, 245, 245));
+            DefaultResources["BorderColor_Light"] = new SolidColorBrush(Colors.LightGray);
+        }
+        
+        /// <summary>
+        /// Handles Application.Activated event to track new windows
+        /// </summary>
+        private void Application_Activated(object sender, EventArgs e)
+        {
+            try
+            {
+                // Look for new windows to register
+                foreach (Window window in Application.Current.Windows)
+                {
+                    bool isRegistered = false;
+                    
+                    // Check if already registered
+                    foreach (var weakRef in _registeredWindows)
+                    {
+                        if (weakRef.TryGetTarget(out var registeredWindow) && registeredWindow == window)
+                        {
+                            isRegistered = true;
+                            break;
+                        }
+                    }
+                    
+                    // Register if not already registered
+                    if (!isRegistered)
+                    {
+                        RegisterWindow(window);
+                    }
+                }
+                
+                // Clean up dead references
+                CleanupDeadWindowReferences();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in Application_Activated: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Removes references to closed windows
+        /// </summary>
+        private void CleanupDeadWindowReferences()
+        {
+            _registeredWindows.RemoveAll(weakRef => !weakRef.TryGetTarget(out _));
+        }
         
         /// <summary>
         /// Applies theme resources to the application
@@ -256,18 +498,21 @@ namespace ExplorerPro.Themes
                 {
                     app.Resources.MergedDictionaries.Add(GetOrCreateResourceDictionary(
                         "/ExplorerPro;component/Themes/DarkTheme.xaml", "dark"));
+                        
+                    // Cache dark theme resources
+                    CacheThemeResources(_darkThemeResources, AppTheme.Dark);
                 }
                 else
                 {
                     app.Resources.MergedDictionaries.Add(GetOrCreateResourceDictionary(
                         "/ExplorerPro;component/Themes/LightTheme.xaml", "light"));
+                        
+                    // Cache light theme resources
+                    CacheThemeResources(_lightThemeResources, AppTheme.Light);
                 }
                 
-                // Notify all windows to refresh their UI
-                foreach (Window window in Application.Current.Windows)
-                {
-                    RefreshWindowTheme(window);
-                }
+                // Notify all registered windows to refresh their UI
+                NotifyWindowsOfThemeChange();
                 
                 Console.WriteLine($"Theme resources applied: {theme}");
             }
@@ -285,6 +530,52 @@ namespace ExplorerPro.Themes
                     // Critical error in theming - nothing more we can do
                 }
             }
+        }
+        
+        /// <summary>
+        /// Caches resources from a theme for faster lookup
+        /// </summary>
+        private void CacheThemeResources(Dictionary<string, object> cache, AppTheme theme)
+        {
+            try
+            {
+                // Clear existing cache
+                cache.Clear();
+                
+                // Get the theme dictionary
+                var themeDictionary = LoadThemeDictionary(theme);
+                if (themeDictionary == null)
+                    return;
+                    
+                // Cache all resources
+                foreach (var key in themeDictionary.Keys)
+                {
+                    if (key is string stringKey)
+                    {
+                        cache[stringKey] = themeDictionary[key];
+                    }
+                }
+                
+                Console.WriteLine($"Cached {cache.Count} resources for {theme} theme");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error caching theme resources: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Loads a theme's resource dictionary
+        /// </summary>
+        private ResourceDictionary LoadThemeDictionary(AppTheme theme)
+        {
+            string uri = theme == AppTheme.Dark 
+                ? "/ExplorerPro;component/Themes/DarkTheme.xaml" 
+                : "/ExplorerPro;component/Themes/LightTheme.xaml";
+                
+            string cacheKey = theme == AppTheme.Dark ? "dark" : "light";
+            
+            return GetOrCreateResourceDictionary(uri, cacheKey);
         }
         
         /// <summary>
@@ -334,6 +625,26 @@ namespace ExplorerPro.Themes
             {
                 Source = new Uri("/ExplorerPro;component/Themes/LightTheme.xaml", UriKind.Relative)
             });
+            
+            Console.WriteLine("Loaded base theme as fallback");
+        }
+        
+        /// <summary>
+        /// Notifies all registered windows of theme changes
+        /// </summary>
+        private void NotifyWindowsOfThemeChange()
+        {
+            // Clean up dead references first
+            CleanupDeadWindowReferences();
+            
+            // Refresh each registered window
+            foreach (var weakRef in _registeredWindows)
+            {
+                if (weakRef.TryGetTarget(out var window))
+                {
+                    RefreshWindowTheme(window);
+                }
+            }
         }
         
         /// <summary>
@@ -347,10 +658,38 @@ namespace ExplorerPro.Themes
                 {
                     mainWindow.RefreshThemeElements();
                 }
+                else
+                {
+                    // Try to find and invoke RefreshThemeElements on other window types
+                    var refreshMethod = window.GetType().GetMethod("RefreshThemeElements");
+                    refreshMethod?.Invoke(window, null);
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error refreshing window theme: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Cleans up resources when the application exits
+        /// </summary>
+        private void Cleanup()
+        {
+            try
+            {
+                // Clear caches
+                _themeCache.Clear();
+                _darkThemeResources.Clear();
+                _lightThemeResources.Clear();
+                DefaultResources.Clear();
+                _registeredWindows.Clear();
+                
+                Console.WriteLine("ThemeManager resources cleaned up");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during ThemeManager cleanup: {ex.Message}");
             }
         }
         

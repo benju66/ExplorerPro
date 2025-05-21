@@ -4,6 +4,7 @@
     <!-- 
     LIGHT THEME
     These resources define the light theme appearance for the application.
+    Optimized for better readability and consistent application.
     -->
     
     <!-- Primary Color Palette -->
@@ -22,8 +23,8 @@
     <!-- Base UI Colors -->
     <SolidColorBrush x:Key="WindowBackground" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="BackgroundColor" Color="#F5F5F5"/>
-    <SolidColorBrush x:Key="TextColor" Color="#333333"/>
-    <SolidColorBrush x:Key="SubtleTextColor" Color="#767676"/>
+    <SolidColorBrush x:Key="TextColor" Color="#1E1E1E"/> <!-- Darker text for better contrast -->
+    <SolidColorBrush x:Key="SubtleTextColor" Color="#717171"/> <!-- Readable gray for secondary text -->
     <SolidColorBrush x:Key="BorderColor" Color="#DDDDDD"/>
     
     <!-- Status Colors -->
@@ -34,7 +35,7 @@
     
     <!-- Button Colors -->
     <SolidColorBrush x:Key="ButtonBackground" Color="#F0F0F0"/>
-    <SolidColorBrush x:Key="ButtonForeground" Color="#333333"/>
+    <SolidColorBrush x:Key="ButtonForeground" Color="#1E1E1E"/>
     <SolidColorBrush x:Key="ButtonBorder" Color="#CCCCCC"/>
     <SolidColorBrush x:Key="ButtonBackgroundHover" Color="#E0E0E0"/>
     <SolidColorBrush x:Key="ButtonBorderHover" Color="#BBBBBB"/>
@@ -43,7 +44,7 @@
     
     <!-- ToggleButton Colors -->
     <SolidColorBrush x:Key="ToggleButtonBackground" Color="#F0F0F0"/>
-    <SolidColorBrush x:Key="ToggleButtonForeground" Color="#333333"/>
+    <SolidColorBrush x:Key="ToggleButtonForeground" Color="#1E1E1E"/>
     <SolidColorBrush x:Key="ToggleButtonBorder" Color="#CCCCCC"/>
     <SolidColorBrush x:Key="ToggleButtonBackgroundHover" Color="#E0E0E0"/>
     <SolidColorBrush x:Key="ToggleButtonBorderHover" Color="#BBBBBB"/>
@@ -56,7 +57,7 @@
     <SolidColorBrush x:Key="ListViewBorder" Color="#DDDDDD"/>
     <SolidColorBrush x:Key="ListViewItemHoverBackground" Color="#F5F9FC"/>
     <SolidColorBrush x:Key="ListViewItemSelectedBackground" Color="#CCE8FF"/>
-    <SolidColorBrush x:Key="ListViewItemSelectedForeground" Color="#000000"/>
+    <SolidColorBrush x:Key="ListViewItemSelectedForeground" Color="#1E1E1E"/>
     <SolidColorBrush x:Key="ListViewItemAlternateBackground" Color="#F9F9F9"/>
     
     <!-- TreeView Colors -->
@@ -64,9 +65,9 @@
     <SolidColorBrush x:Key="TreeViewBorder" Color="#DDDDDD"/>
     <SolidColorBrush x:Key="TreeViewItemHoverBackground" Color="#F5F9FC"/>
     <SolidColorBrush x:Key="TreeViewItemSelectedBackground" Color="#CCE8FF"/>
-    <SolidColorBrush x:Key="TreeViewItemSelectedForeground" Color="#000000"/>
+    <SolidColorBrush x:Key="TreeViewItemSelectedForeground" Color="#1E1E1E"/>
     <SolidColorBrush x:Key="TreeViewItemSelectedInactiveBackground" Color="#E5E5E5"/>
-    <SolidColorBrush x:Key="TreeViewItemSelectedInactiveForeground" Color="#333333"/>
+    <SolidColorBrush x:Key="TreeViewItemSelectedInactiveForeground" Color="#1E1E1E"/>
     <SolidColorBrush x:Key="TreeLineColor" Color="#C0C0C0"/>
     <SolidColorBrush x:Key="TreeLineHighlightColor" Color="#007ACC"/>
     
@@ -77,19 +78,19 @@
     <SolidColorBrush x:Key="TabSelectedBackground" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="TabSelectedBorderBrush" Color="#999999"/>
     <SolidColorBrush x:Key="TabBorderBrush" Color="#CCCCCC"/>
-    <SolidColorBrush x:Key="TabSelectedForeground" Color="#333333"/>
+    <SolidColorBrush x:Key="TabSelectedForeground" Color="#1E1E1E"/>
     <SolidColorBrush x:Key="TabHoverBackground" Color="#E5E5E5"/>
     
     <!-- TextBox Colors -->
     <SolidColorBrush x:Key="TextBoxBackground" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="TextBoxForeground" Color="#333333"/>
+    <SolidColorBrush x:Key="TextBoxForeground" Color="#1E1E1E"/>
     <SolidColorBrush x:Key="TextBoxBorder" Color="#CCCCCC"/>
     <SolidColorBrush x:Key="TextBoxBorderHover" Color="#999999"/>
     <SolidColorBrush x:Key="TextBoxBorderFocused" Color="#007ACC"/>
     
     <!-- ComboBox Colors -->
     <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="ComboBoxForeground" Color="#333333"/>
+    <SolidColorBrush x:Key="ComboBoxForeground" Color="#1E1E1E"/>
     <SolidColorBrush x:Key="ComboBoxBorder" Color="#CCCCCC"/>
     <SolidColorBrush x:Key="ComboBoxBorderHover" Color="#999999"/>
     <SolidColorBrush x:Key="ComboBoxBorderFocused" Color="#007ACC"/>
@@ -145,13 +146,17 @@
     <!-- Tooltip Colors -->
     <SolidColorBrush x:Key="ToolTipBackground" Color="#F0F0F0"/>
     <SolidColorBrush x:Key="ToolTipBorder" Color="#CCCCCC"/>
-    <SolidColorBrush x:Key="ToolTipText" Color="#333333"/>
+    <SolidColorBrush x:Key="ToolTipText" Color="#1E1E1E"/>
+    
+    <!-- Additional Colors for Custom Components -->
+    <SolidColorBrush x:Key="DropIndicatorBackgroundLight" Color="#33007ACC"/>
+    <SolidColorBrush x:Key="DropIndicatorBorderLight" Color="#0078D7"/>
     
     <!-- Override System Colors -->
     <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#CCE8FF"/>
     <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="#F0F0F0"/>
     <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#333333"/>
+    <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#1E1E1E"/>
     <SolidColorBrush x:Key="{x:Static SystemColors.ActiveBorderBrushKey}" Color="#999999"/>
     <SolidColorBrush x:Key="{x:Static SystemColors.InactiveBorderBrushKey}" Color="#CCCCCC"/>
 </ResourceDictionary>

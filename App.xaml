@@ -28,12 +28,28 @@
                 <Setter Property="Background" Value="{DynamicResource TextBoxBackground}"/>
                 <Setter Property="Foreground" Value="{DynamicResource TextBoxForeground}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource TextBoxBorder}"/>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="BorderBrush" Value="{DynamicResource TextBoxBorderHover}"/>
+                    </Trigger>
+                    <Trigger Property="IsFocused" Value="True">
+                        <Setter Property="BorderBrush" Value="{DynamicResource TextBoxBorderFocused}"/>
+                    </Trigger>
+                </Style.Triggers>
             </Style>
             
             <Style TargetType="{x:Type ComboBox}" BasedOn="{StaticResource {x:Type ComboBox}}">
                 <Setter Property="Background" Value="{DynamicResource ComboBoxBackground}"/>
                 <Setter Property="Foreground" Value="{DynamicResource ComboBoxForeground}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource ComboBoxBorder}"/>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="BorderBrush" Value="{DynamicResource ComboBoxBorderHover}"/>
+                    </Trigger>
+                    <Trigger Property="IsDropDownOpen" Value="True">
+                        <Setter Property="BorderBrush" Value="{DynamicResource ComboBoxBorderFocused}"/>
+                    </Trigger>
+                </Style.Triggers>
             </Style>
             
             <Style TargetType="{x:Type ListView}" BasedOn="{StaticResource {x:Type ListView}}">
@@ -48,15 +64,62 @@
                 <Setter Property="BorderBrush" Value="{DynamicResource TreeViewBorder}"/>
             </Style>
             
+            <Style TargetType="{x:Type TreeViewItem}" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+                <Style.Triggers>
+                    <Trigger Property="IsSelected" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource TreeViewItemSelectedBackground}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource TreeViewItemSelectedForeground}"/>
+                    </Trigger>
+                    <MultiTrigger>
+                        <MultiTrigger.Conditions>
+                            <Condition Property="IsSelected" Value="True"/>
+                            <Condition Property="IsSelectionActive" Value="False"/>
+                        </MultiTrigger.Conditions>
+                        <Setter Property="Background" Value="{DynamicResource TreeViewItemSelectedInactiveBackground}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource TreeViewItemSelectedInactiveForeground}"/>
+                    </MultiTrigger>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource TreeViewItemHoverBackground}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            
             <Style TargetType="{x:Type TabControl}" BasedOn="{StaticResource {x:Type TabControl}}">
                 <Setter Property="Background" Value="{DynamicResource TabControlBackground}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource TabControlBorder}"/>
+            </Style>
+            
+            <Style TargetType="{x:Type TabItem}" BasedOn="{StaticResource {x:Type TabItem}}">
+                <Setter Property="Background" Value="{DynamicResource TabBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource TabBorderBrush}"/>
+                <Style.Triggers>
+                    <Trigger Property="IsSelected" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource TabSelectedBackground}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource TabSelectedForeground}"/>
+                        <Setter Property="BorderBrush" Value="{DynamicResource TabSelectedBorderBrush}"/>
+                    </Trigger>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource TabHoverBackground}"/>
+                    </Trigger>
+                </Style.Triggers>
             </Style>
             
             <Style TargetType="{x:Type Menu}" BasedOn="{StaticResource {x:Type Menu}}">
                 <Setter Property="Background" Value="{DynamicResource MenuBackground}"/>
                 <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource MenuBorderBrush}"/>
+            </Style>
+            
+            <Style TargetType="{x:Type MenuItem}" BasedOn="{StaticResource {x:Type MenuItem}}">
+                <Setter Property="Background" Value="{DynamicResource MenuItemBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+                <Style.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource MenuItemHighlightedBackground}"/>
+                    </Trigger>
+                </Style.Triggers>
             </Style>
             
             <Style TargetType="{x:Type ContextMenu}" BasedOn="{StaticResource {x:Type ContextMenu}}">
@@ -69,6 +132,40 @@
                 <Setter Property="Background" Value="{DynamicResource ToolTipBackground}"/>
                 <Setter Property="Foreground" Value="{DynamicResource ToolTipText}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource ToolTipBorder}"/>
+            </Style>
+            
+            <Style TargetType="{x:Type GridSplitter}" BasedOn="{StaticResource {x:Type GridSplitter}}">
+                <Setter Property="Background" Value="{DynamicResource GridSplitterBackground}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource GridSplitterBorder}"/>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource GridSplitterHighlight}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            
+            <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource {x:Type ScrollBar}}">
+                <Setter Property="Background" Value="{DynamicResource ScrollBarTrackBackground}"/>
+                <Style.Triggers>
+                    <Trigger Property="Orientation" Value="Vertical">
+                        <Setter Property="Width" Value="12"/>
+                        <Setter Property="MinWidth" Value="12"/>
+                    </Trigger>
+                    <Trigger Property="Orientation" Value="Horizontal">
+                        <Setter Property="Height" Value="12"/>
+                        <Setter Property="MinHeight" Value="12"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            
+            <!-- Custom Style for TextBlocks to ensure they always use theme colors -->
+            <Style TargetType="{x:Type TextBlock}">
+                <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+                <Style.Triggers>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Foreground" Value="{DynamicResource SubtleTextColor}"/>
+                    </Trigger>
+                </Style.Triggers>
             </Style>
         </ResourceDictionary>
     </Application.Resources>

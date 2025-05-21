@@ -504,8 +504,10 @@ namespace ExplorerPro.UI.FileTree
         
         #endregion
 
+        // Updated theme-handling portion of UI/FileTree/ImprovedFileTreeListView.xaml.cs
+
         #region Theme Management
-        
+                
         /// <summary>
         /// Refreshes UI elements based on the current theme
         /// </summary>
@@ -524,7 +526,7 @@ namespace ExplorerPro.UI.FileTree
                 // Update column headers
                 RefreshColumnHeaders();
                 
-                // Update TreeView
+                // Update TreeView itself
                 if (fileTreeView != null)
                 {
                     fileTreeView.Background = GetResource<SolidColorBrush>("TreeViewBackground");
@@ -535,18 +537,28 @@ namespace ExplorerPro.UI.FileTree
                     RefreshTreeViewItems();
                 }
                 
+                // Update header presenter
+                if (headerPresenter != null)
+                {
+                    var parent = VisualTreeHelper.GetParent(headerPresenter) as Border;
+                    if (parent != null)
+                    {
+                        parent.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                        parent.BorderBrush = GetResource<SolidColorBrush>("BorderColor");
+                    }
+                }
+                
                 // Update progress overlay if visible
                 if (ProgressOverlay != null && ProgressOverlay.Visibility == Visibility.Visible)
                 {
-                    ProgressOverlay.Background = GetResource<SolidColorBrush>(isDarkMode ? 
-                        "BackgroundColor" : "BackgroundColor");
+                    ProgressOverlay.Background = GetResource<SolidColorBrush>("BackgroundColor");
                     
                     // Make background semi-transparent
                     if (ProgressOverlay.Background is SolidColorBrush brush)
                     {
                         Color color = brush.Color;
-                        ProgressOverlay.Background = new SolidColorBrush(
-                            Color.FromArgb(200, color.R, color.G, color.B));
+                        color.A = 200; // Make semi-transparent
+                        ProgressOverlay.Background = new SolidColorBrush(color);
                     }
                 }
                 
@@ -561,7 +573,7 @@ namespace ExplorerPro.UI.FileTree
                 // Non-critical error, continue
             }
         }
-        
+
         /// <summary>
         /// Refreshes column headers with theme-appropriate styling
         /// </summary>
@@ -573,12 +585,12 @@ namespace ExplorerPro.UI.FileTree
                 var headerPresenter = FindVisualChild<GridViewHeaderRowPresenter>(this);
                 if (headerPresenter != null)
                 {
-                    // We can't directly set the Background property on GridViewHeaderRowPresenter
-                    // Instead, find parent Border or create a style
+                    // Find parent Border
                     var parent = VisualTreeHelper.GetParent(headerPresenter) as Border;
                     if (parent != null)
                     {
                         parent.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                        parent.BorderBrush = GetResource<SolidColorBrush>("BorderColor");
                     }
                     
                     // Update column headers
@@ -587,6 +599,21 @@ namespace ExplorerPro.UI.FileTree
                         header.Background = GetResource<SolidColorBrush>("BackgroundColor");
                         header.Foreground = GetResource<SolidColorBrush>("TextColor");
                         header.BorderBrush = GetResource<SolidColorBrush>("BorderColor");
+                        
+                        // Update column dividers/splitters
+                        var thumbs = FindVisualChildren<Thumb>(header);
+                        foreach (var thumb in thumbs)
+                        {
+                            if (thumb.Template != null)
+                            {
+                                // Try to find the Rectangle element used for column divider
+                                var divider = FindVisualChild<Rectangle>(thumb);
+                                if (divider != null)
+                                {
+                                    divider.Fill = GetResource<SolidColorBrush>("BorderColor");
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -595,7 +622,7 @@ namespace ExplorerPro.UI.FileTree
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing column headers: {ex.Message}");
             }
         }
-        
+
         /// <summary>
         /// Refreshes TreeViewItems with theme-appropriate styling
         /// </summary>
@@ -603,15 +630,22 @@ namespace ExplorerPro.UI.FileTree
         {
             try
             {
-                // Get theme colors for tree lines
+                // Get theme colors for tree lines and text
                 var treeLine = GetResource<SolidColorBrush>("TreeLineColor");
                 var treeLineHighlight = GetResource<SolidColorBrush>("TreeLineHighlightColor");
+                var textColor = GetResource<SolidColorBrush>("TextColor");
                 
                 // Update all TreeViewItems
                 foreach (var item in FindVisualChildren<TreeViewItem>(fileTreeView))
                 {
                     // Apply theme to the TreeViewItem
-                    item.Foreground = GetResource<SolidColorBrush>("TextColor");
+                    item.Foreground = textColor;
+                    
+                    // Find and update all TextBlocks within the item
+                    foreach (var textBlock in FindVisualChildren<TextBlock>(item))
+                    {
+                        textBlock.Foreground = textColor;
+                    }
                     
                     // Update tree lines in the item
                     foreach (var line in FindVisualChildren<Line>(item))
@@ -634,6 +668,13 @@ namespace ExplorerPro.UI.FileTree
                     {
                         RefreshTreeViewToggleButton(toggle);
                     }
+                    
+                    // Update Images (file/folder icons)
+                    foreach (var image in FindVisualChildren<Image>(item))
+                    {
+                        // Keep the image as is - just ensure it's visible
+                        image.Opacity = 1.0;
+                    }
                 }
             }
             catch (Exception ex)
@@ -641,19 +682,23 @@ namespace ExplorerPro.UI.FileTree
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing tree view items: {ex.Message}");
             }
         }
-        
+
         /// <summary>
         /// Refreshes a TreeView toggle button (expander) with theme-appropriate styling
         /// </summary>
         private void RefreshTreeViewToggleButton(ToggleButton toggle)
         {
-            // We focus on the Path element inside the toggle button that forms the arrow
             try
             {
+                // Set background to transparent to let hover effect work
+                toggle.Background = Brushes.Transparent;
+                    
+                // Find the Path element for the expander arrow
                 var pathElement = FindVisualChild<System.Windows.Shapes.Path>(toggle);
                 if (pathElement != null)
                 {
                     pathElement.Stroke = GetResource<SolidColorBrush>("TextColor");
+                    pathElement.Fill = GetResource<SolidColorBrush>("TextColor");
                     
                     // Set up mouse over handling
                     toggle.MouseEnter -= ToggleButton_MouseEnter;
@@ -668,7 +713,7 @@ namespace ExplorerPro.UI.FileTree
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing toggle button: {ex.Message}");
             }
         }
-        
+
         /// <summary>
         /// Event handler for mouse enter on tree lines
         /// </summary>
@@ -683,7 +728,7 @@ namespace ExplorerPro.UI.FileTree
             }
             catch { /* Ignore errors in UI effects */ }
         }
-        
+
         /// <summary>
         /// Event handler for mouse leave on tree lines
         /// </summary>
@@ -698,7 +743,7 @@ namespace ExplorerPro.UI.FileTree
             }
             catch { /* Ignore errors in UI effects */ }
         }
-        
+
         /// <summary>
         /// Event handler for mouse enter on toggle buttons
         /// </summary>
@@ -712,12 +757,13 @@ namespace ExplorerPro.UI.FileTree
                     if (pathElement != null)
                     {
                         pathElement.Stroke = GetResource<SolidColorBrush>("TreeLineHighlightColor");
+                        pathElement.Fill = GetResource<SolidColorBrush>("TreeLineHighlightColor");
                     }
                 }
             }
             catch { /* Ignore errors in UI effects */ }
         }
-        
+
         /// <summary>
         /// Event handler for mouse leave on toggle buttons
         /// </summary>
@@ -731,12 +777,13 @@ namespace ExplorerPro.UI.FileTree
                     if (pathElement != null)
                     {
                         pathElement.Stroke = GetResource<SolidColorBrush>("TextColor");
+                        pathElement.Fill = GetResource<SolidColorBrush>("TextColor");
                     }
                 }
             }
             catch { /* Ignore errors in UI effects */ }
         }
-        
+
         /// <summary>
         /// Refreshes resources in data templates
         /// </summary>
@@ -744,17 +791,21 @@ namespace ExplorerPro.UI.FileTree
         {
             try
             {
-                // This is more complex as it involves updating resources referenced in data templates
-                // The most effective approach is to force a refresh of the template
+                // Force a refresh of all item containers
+                fileTreeView.UpdateLayout();
                 
-                // Force ItemTemplate refresh by briefly changing a dependency property
-                // This is a bit of a hack but can trigger template regeneration
-                if (fileTreeView.ItemTemplate != null)
+                // Refresh the items panel (if available)
+                var itemsPresenter = FindVisualChild<ItemsPresenter>(fileTreeView);
+                if (itemsPresenter != null)
                 {
-                    var template = fileTreeView.ItemTemplate;
-                    fileTreeView.ItemTemplate = null;
-                    fileTreeView.UpdateLayout();
-                    fileTreeView.ItemTemplate = template;
+                    itemsPresenter.UpdateLayout();
+                }
+                
+                // Explicitly update all visible TextBlocks in the tree
+                var textBlocks = FindVisualChildren<TextBlock>(fileTreeView);
+                foreach (var textBlock in textBlocks)
+                {
+                    textBlock.Foreground = GetResource<SolidColorBrush>("TextColor");
                 }
             }
             catch (Exception ex)
@@ -762,7 +813,7 @@ namespace ExplorerPro.UI.FileTree
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing data templates: {ex.Message}");
             }
         }
-        
+
         /// <summary>
         /// Helper method to get a resource from the current theme
         /// </summary>
@@ -774,6 +825,9 @@ namespace ExplorerPro.UI.FileTree
                 {
                     return resource;
                 }
+                
+                // Try ThemeManager as a fallback for resources
+                return ThemeManager.Instance.GetResource<T>(resourceKey);
             }
             catch (Exception ex)
             {
@@ -781,19 +835,23 @@ namespace ExplorerPro.UI.FileTree
             }
             
             // Default values for common types
+            bool isDarkMode = ThemeManager.Instance.IsDarkMode;
+            
             if (typeof(T) == typeof(SolidColorBrush))
             {
                 if (resourceKey.Contains("Background"))
-                    return new SolidColorBrush(Colors.White) as T;
+                    return new SolidColorBrush(isDarkMode ? Colors.Black : Colors.White) as T;
                 if (resourceKey.Contains("Foreground") || resourceKey.Contains("Text"))
-                    return new SolidColorBrush(Colors.Black) as T;
+                    return new SolidColorBrush(isDarkMode ? Colors.LightGray : Colors.Black) as T;
                 if (resourceKey.Contains("Border"))
-                    return new SolidColorBrush(Colors.Gray) as T;
+                    return new SolidColorBrush(isDarkMode ? Colors.DarkGray : Colors.LightGray) as T;
+                if (resourceKey.Contains("Line"))
+                    return new SolidColorBrush(isDarkMode ? Colors.DarkGray : Colors.LightGray) as T;
             }
             
             return default;
         }
-        
+
         #endregion
 
         #region IFileTree Implementation
