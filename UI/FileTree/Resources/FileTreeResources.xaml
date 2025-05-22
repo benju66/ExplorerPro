@@ -38,10 +38,11 @@
                                             VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                         </Border>
                         
-                        <!-- Children Items -->
+                        <!-- Children Items - FIXED: Changed to span both columns -->
                         <ItemsPresenter x:Name="ItemsHost" 
                                        Grid.Row="1" 
-                                       Grid.Column="1"
+                                       Grid.Column="0"
+                                       Grid.ColumnSpan="2"
                                        Visibility="Collapsed"/>
                     </Grid>
                     
@@ -167,6 +168,20 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+    
+    <!-- GridSplitter Style for Column Resizing -->
+    <Style x:Key="ColumnResizerStyle" TargetType="GridSplitter">
+        <Setter Property="Width" Value="3"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Cursor" Value="SizeWE"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="VerticalAlignment" Value="Stretch"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource TreeLineHighlightColor}"/>
+            </Trigger>
+        </Style.Triggers>
     </Style>
     
 </ResourceDictionary>

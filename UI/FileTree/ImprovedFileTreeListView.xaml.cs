@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs (UPDATED - Column Management Extracted)
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs (UPDATED - Fixed Column Management)
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -24,7 +24,7 @@ using ExplorerPro.Themes;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedFileTreeListView.xaml with extracted column management
+    /// Interaction logic for ImprovedFileTreeListView.xaml with fixed column management
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -53,61 +53,66 @@ namespace ExplorerPro.UI.FileTree
         
         #endregion
         
-        #region Column Width Properties (Facade for Column Service)
+        #region Column Width Properties
+        
+        private double _nameColumnWidth = 250;
+        private double _sizeColumnWidth = 100;
+        private double _typeColumnWidth = 120;
+        private double _dateColumnWidth = 150;
         
         public double NameColumnWidth
         {
-            get 
-            { 
-                var column = _columnService?.GetColumn("Name");
-                return column?.Width ?? 250;
-            }
+            get => _nameColumnWidth;
             set
             {
-                _columnService?.UpdateColumnWidth("Name", value);
-                OnPropertyChanged(nameof(NameColumnWidth));
+                if (_nameColumnWidth != value)
+                {
+                    _nameColumnWidth = Math.Max(100, Math.Min(600, value)); // Enforce min/max
+                    _columnService?.UpdateColumnWidth("Name", _nameColumnWidth);
+                    OnPropertyChanged(nameof(NameColumnWidth));
+                }
             }
         }
         
         public double SizeColumnWidth
         {
-            get 
-            { 
-                var column = _columnService?.GetColumn("Size");
-                return column?.Width ?? 100;
-            }
+            get => _sizeColumnWidth;
             set
             {
-                _columnService?.UpdateColumnWidth("Size", value);
-                OnPropertyChanged(nameof(SizeColumnWidth));
+                if (_sizeColumnWidth != value)
+                {
+                    _sizeColumnWidth = Math.Max(60, Math.Min(150, value)); // Enforce min/max
+                    _columnService?.UpdateColumnWidth("Size", _sizeColumnWidth);
+                    OnPropertyChanged(nameof(SizeColumnWidth));
+                }
             }
         }
         
         public double TypeColumnWidth
         {
-            get 
-            { 
-                var column = _columnService?.GetColumn("Type");
-                return column?.Width ?? 120;
-            }
+            get => _typeColumnWidth;
             set
             {
-                _columnService?.UpdateColumnWidth("Type", value);
-                OnPropertyChanged(nameof(TypeColumnWidth));
+                if (_typeColumnWidth != value)
+                {
+                    _typeColumnWidth = Math.Max(80, Math.Min(200, value)); // Enforce min/max
+                    _columnService?.UpdateColumnWidth("Type", _typeColumnWidth);
+                    OnPropertyChanged(nameof(TypeColumnWidth));
+                }
             }
         }
         
         public double DateColumnWidth
         {
-            get 
-            { 
-                var column = _columnService?.GetColumn("DateModified");
-                return column?.Width ?? 150;
-            }
+            get => _dateColumnWidth;
             set
             {
-                _columnService?.UpdateColumnWidth("DateModified", value);
-                OnPropertyChanged(nameof(DateColumnWidth));
+                if (_dateColumnWidth != value)
+                {
+                    _dateColumnWidth = Math.Max(100, Math.Min(250, value)); // Enforce min/max
+                    _columnService?.UpdateColumnWidth("DateModified", _dateColumnWidth);
+                    OnPropertyChanged(nameof(DateColumnWidth));
+                }
             }
         }
         
@@ -162,7 +167,6 @@ namespace ExplorerPro.UI.FileTree
         private ObservableCollection<FileTreeItem> _rootItems = new ObservableCollection<FileTreeItem>();
         private Point? _dragStartPosition;
         private ContextMenu _treeContextMenu;
-        private GridView _columnHeaderGridView;
         
         #endregion
 
@@ -182,9 +186,6 @@ namespace ExplorerPro.UI.FileTree
                 InitializeManagersAndModel();
                 InitializeServices();
 
-                // Get the GridView from resources
-                _columnHeaderGridView = (GridView)FindResource("columnHeaderGridView");
-
                 // Create context menu
                 _treeContextMenu = new ContextMenu();
                 fileTreeView.ContextMenu = _treeContextMenu;
@@ -198,7 +199,7 @@ namespace ExplorerPro.UI.FileTree
                 // Initialize column service and setup
                 InitializeColumnService();
 
-                // Setup column click events
+                // Setup column monitoring
                 this.Loaded += ImprovedFileTreeListView_Loaded;
 
                 // Set DataContext to self for bindings
@@ -349,14 +350,27 @@ namespace ExplorerPro.UI.FileTree
                 // Subscribe to column width changes
                 _columnService.ColumnWidthChanged += ColumnService_ColumnWidthChanged;
                 
-                // Initialize columns in the GridView
-                if (_columnHeaderGridView != null)
-                {
-                    _columnService.InitializeColumns(_columnHeaderGridView);
-                    
-                    // Load saved column settings
-                    _columnService.LoadColumnSettings();
-                }
+                // Load saved column settings
+                _columnService.LoadColumnSettings();
+                
+                // Apply loaded settings to our properties
+                var nameCol = _columnService.GetColumn("Name");
+                if (nameCol != null) _nameColumnWidth = nameCol.Width;
+                
+                var sizeCol = _columnService.GetColumn("Size");
+                if (sizeCol != null) _sizeColumnWidth = sizeCol.Width;
+                
+                var typeCol = _columnService.GetColumn("Type");
+                if (typeCol != null) _typeColumnWidth = typeCol.Width;
+                
+                var dateCol = _columnService.GetColumn("DateModified");
+                if (dateCol != null) _dateColumnWidth = dateCol.Width;
+                
+                // Notify property changes so UI bindings update
+                OnPropertyChanged(nameof(NameColumnWidth));
+                OnPropertyChanged(nameof(SizeColumnWidth));
+                OnPropertyChanged(nameof(TypeColumnWidth));
+                OnPropertyChanged(nameof(DateColumnWidth));
                 
                 System.Diagnostics.Debug.WriteLine("[DEBUG] Column service initialized successfully");
             }
@@ -369,26 +383,8 @@ namespace ExplorerPro.UI.FileTree
 
         private void ColumnService_ColumnWidthChanged(object sender, ColumnWidthChangedEventArgs e)
         {
-            // Column width changes are now handled by the service
-            // This event can be used for any additional UI updates if needed
-            System.Diagnostics.Debug.WriteLine($"[DEBUG] Column '{e.ColumnName}' width changed to {e.NewWidth}");
-            
-            // Notify property changes for the facade properties so bindings update
-            switch (e.ColumnName)
-            {
-                case "Name":
-                    OnPropertyChanged(nameof(NameColumnWidth));
-                    break;
-                case "Size":
-                    OnPropertyChanged(nameof(SizeColumnWidth));
-                    break;
-                case "Type":
-                    OnPropertyChanged(nameof(TypeColumnWidth));
-                    break;
-                case "DateModified":
-                    OnPropertyChanged(nameof(DateColumnWidth));
-                    break;
-            }
+            // Column width changes are now handled by the property setters
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] Column '{e.ColumnName}' width changed from {e.OldWidth} to {e.NewWidth}");
         }
 
         private void SetupEventHandlers()
@@ -412,14 +408,30 @@ namespace ExplorerPro.UI.FileTree
         {
             _showHiddenFiles = _settingsManager.GetSetting("file_view.show_hidden", false);
             
-            // Column resizing is now handled by the column service
-            _columnService?.MakeColumnsResizable(this);
+            // Monitor GridSplitter changes to save column widths
+            MonitorGridSplitters();
             
             TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
             fileTreeView.ItemContainerGenerator.StatusChanged += ItemContainerGenerator_StatusChanged;
             
             // Apply theme settings on load
             RefreshThemeElements();
+        }
+        
+        private void MonitorGridSplitters()
+        {
+            // Find all GridSplitters in the header
+            var splitters = FindVisualChildren<GridSplitter>(HeaderGrid);
+            foreach (var splitter in splitters)
+            {
+                splitter.DragCompleted += GridSplitter_DragCompleted;
+            }
+        }
+        
+        private void GridSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+        {
+            // Save column settings when splitter drag is completed
+            _columnService?.SaveColumnSettings();
         }
         
         private void ItemContainerGenerator_StatusChanged(object sender, EventArgs e)
@@ -449,8 +461,12 @@ namespace ExplorerPro.UI.FileTree
                     MainGrid.Background = GetResource<SolidColorBrush>("BackgroundColor");
                 }
                 
-                // Update column headers through the service
-                _columnService?.RefreshColumnTheme();
+                // Update header background
+                if (HeaderGrid != null && HeaderGrid.Parent is Border headerBorder)
+                {
+                    headerBorder.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                    headerBorder.BorderBrush = GetResource<SolidColorBrush>("BorderColor");
+                }
                 
                 // Update TreeView itself
                 if (fileTreeView != null)
@@ -461,17 +477,6 @@ namespace ExplorerPro.UI.FileTree
                     
                     // Update TreeViewItems
                     RefreshTreeViewItems();
-                }
-                
-                // Update header presenter
-                if (headerPresenter != null)
-                {
-                    var parent = VisualTreeHelper.GetParent(headerPresenter) as Border;
-                    if (parent != null)
-                    {
-                        parent.Background = GetResource<SolidColorBrush>("BackgroundColor");
-                        parent.BorderBrush = GetResource<SolidColorBrush>("BorderColor");
-                    }
                 }
                 
                 // Update progress overlay if visible
@@ -521,7 +526,11 @@ namespace ExplorerPro.UI.FileTree
                     // Find and update all TextBlocks within the item
                     foreach (var textBlock in FindVisualChildren<TextBlock>(item))
                     {
-                        textBlock.Foreground = textColor;
+                        // Don't override custom colors from metadata
+                        if (textBlock.Foreground == SystemColors.WindowTextBrush)
+                        {
+                            textBlock.Foreground = textColor;
+                        }
                     }
                     
                     // Update tree lines in the item
@@ -682,7 +691,11 @@ namespace ExplorerPro.UI.FileTree
                 var textBlocks = FindVisualChildren<TextBlock>(fileTreeView);
                 foreach (var textBlock in textBlocks)
                 {
-                    textBlock.Foreground = GetResource<SolidColorBrush>("TextColor");
+                    // Don't override custom foreground colors (from metadata)
+                    if (textBlock.Foreground == SystemColors.WindowTextBrush)
+                    {
+                        textBlock.Foreground = GetResource<SolidColorBrush>("TextColor");
+                    }
                 }
             }
             catch (Exception ex)
@@ -1494,6 +1507,13 @@ namespace ExplorerPro.UI.FileTree
                     if (fileTreeView != null)
                     {
                         fileTreeView.ItemContainerGenerator.StatusChanged -= ItemContainerGenerator_StatusChanged;
+                    }
+                    
+                    // Unsubscribe from GridSplitter events
+                    var splitters = FindVisualChildren<GridSplitter>(HeaderGrid);
+                    foreach (var splitter in splitters)
+                    {
+                        splitter.DragCompleted -= GridSplitter_DragCompleted;
                     }
                     
                     _rootItems.Clear();
