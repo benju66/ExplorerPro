@@ -15,7 +15,7 @@
             
             <!-- Define GridView here to use as a resource (accessed in code-behind) -->
             <GridView x:Key="columnHeaderGridView" x:Name="columnHeaderGridView">
-                <!-- Columns will be added programmatically with bindings to the width properties -->
+                <!-- Columns will be added programmatically by the column service -->
             </GridView>
             
             <!-- Converter for level to margin -->
@@ -50,9 +50,10 @@
             
             <TreeView.ItemTemplate>
                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                    <!-- Grid with base compensation margin and connecting lines -->
-                    <Grid Margin="19,0,0,0">
+                    <!-- Grid to align with column headers -->
+                    <Grid>
                         <Grid.ColumnDefinitions>
+                            <!-- Dynamic column definitions that match the header columns -->
                             <ColumnDefinition Width="{Binding NameColumnWidth, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
                             <ColumnDefinition Width="{Binding SizeColumnWidth, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
                             <ColumnDefinition Width="{Binding TypeColumnWidth, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>

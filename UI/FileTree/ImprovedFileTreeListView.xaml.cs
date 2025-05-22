@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs (UPDATED - Silent Outlook handling + Theme Support)
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs (UPDATED - Column Management Extracted)
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -13,17 +13,18 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using System.Windows.Shapes; // Added for Path and Line
+using System.Windows.Shapes;
 using ExplorerPro.Models;
 using ExplorerPro.FileOperations;
 using ExplorerPro.Utilities;
 using ExplorerPro.UI.FileTree.Services;
+using ExplorerPro.UI.FileTree.Models;
 using ExplorerPro.Themes;
 
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedFileTreeListView.xaml with silent Outlook attachment support
+    /// Interaction logic for ImprovedFileTreeListView.xaml with extracted column management
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -32,6 +33,7 @@ namespace ExplorerPro.UI.FileTree
         private IFileTreeService _fileTreeService;
         private IFileTreeCache _fileTreeCache;
         private IFileTreeDragDropService _dragDropService;
+        private IFileTreeColumnService _columnService;
         private MetadataManager _metadataManager;
         private CustomFileSystemModel _fileSystemModel;
         private UndoManager _undoManager;
@@ -51,61 +53,61 @@ namespace ExplorerPro.UI.FileTree
         
         #endregion
         
-        #region Column Width Properties
+        #region Column Width Properties (Facade for Column Service)
         
-        private double _nameColumnWidth = 250;
         public double NameColumnWidth
         {
-            get { return _nameColumnWidth; }
+            get 
+            { 
+                var column = _columnService?.GetColumn("Name");
+                return column?.Width ?? 250;
+            }
             set
             {
-                if (_nameColumnWidth != value)
-                {
-                    _nameColumnWidth = value;
-                    OnPropertyChanged(nameof(NameColumnWidth));
-                }
+                _columnService?.UpdateColumnWidth("Name", value);
+                OnPropertyChanged(nameof(NameColumnWidth));
             }
         }
         
-        private double _sizeColumnWidth = 100;
         public double SizeColumnWidth
         {
-            get { return _sizeColumnWidth; }
+            get 
+            { 
+                var column = _columnService?.GetColumn("Size");
+                return column?.Width ?? 100;
+            }
             set
             {
-                if (_sizeColumnWidth != value)
-                {
-                    _sizeColumnWidth = value;
-                    OnPropertyChanged(nameof(SizeColumnWidth));
-                }
+                _columnService?.UpdateColumnWidth("Size", value);
+                OnPropertyChanged(nameof(SizeColumnWidth));
             }
         }
         
-        private double _typeColumnWidth = 120;
         public double TypeColumnWidth
         {
-            get { return _typeColumnWidth; }
+            get 
+            { 
+                var column = _columnService?.GetColumn("Type");
+                return column?.Width ?? 120;
+            }
             set
             {
-                if (_typeColumnWidth != value)
-                {
-                    _typeColumnWidth = value;
-                    OnPropertyChanged(nameof(TypeColumnWidth));
-                }
+                _columnService?.UpdateColumnWidth("Type", value);
+                OnPropertyChanged(nameof(TypeColumnWidth));
             }
         }
         
-        private double _dateColumnWidth = 150;
         public double DateColumnWidth
         {
-            get { return _dateColumnWidth; }
+            get 
+            { 
+                var column = _columnService?.GetColumn("DateModified");
+                return column?.Width ?? 150;
+            }
             set
             {
-                if (_dateColumnWidth != value)
-                {
-                    _dateColumnWidth = value;
-                    OnPropertyChanged(nameof(DateColumnWidth));
-                }
+                _columnService?.UpdateColumnWidth("DateModified", value);
+                OnPropertyChanged(nameof(DateColumnWidth));
             }
         }
         
@@ -159,17 +161,8 @@ namespace ExplorerPro.UI.FileTree
         private bool _showHiddenFiles = false;
         private ObservableCollection<FileTreeItem> _rootItems = new ObservableCollection<FileTreeItem>();
         private Point? _dragStartPosition;
-        private List<GridViewColumnHeader> _columnHeaders = new List<GridViewColumnHeader>();
         private ContextMenu _treeContextMenu;
         private GridView _columnHeaderGridView;
-        
-        private GridViewColumn NameColumn { get; set; }
-        private GridViewColumn SizeColumn { get; set; }
-        private GridViewColumn TypeColumn { get; set; }
-        private GridViewColumn DateColumn { get; set; }
-        
-        private GridViewColumnHeader _draggedColumn;
-        private double _originalWidth;
         
         #endregion
 
@@ -202,8 +195,8 @@ namespace ExplorerPro.UI.FileTree
                 // Set up event handlers
                 SetupEventHandlers();
 
-                // Setup column headers
-                SetupColumnHeaders();
+                // Initialize column service and setup
+                InitializeColumnService();
 
                 // Setup column click events
                 this.Loaded += ImprovedFileTreeListView_Loaded;
@@ -346,6 +339,58 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
+        private void InitializeColumnService()
+        {
+            try
+            {
+                // Create column service with settings manager
+                _columnService = new FileTreeColumnService(_settingsManager);
+                
+                // Subscribe to column width changes
+                _columnService.ColumnWidthChanged += ColumnService_ColumnWidthChanged;
+                
+                // Initialize columns in the GridView
+                if (_columnHeaderGridView != null)
+                {
+                    _columnService.InitializeColumns(_columnHeaderGridView);
+                    
+                    // Load saved column settings
+                    _columnService.LoadColumnSettings();
+                }
+                
+                System.Diagnostics.Debug.WriteLine("[DEBUG] Column service initialized successfully");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to initialize column service: {ex.Message}");
+                // Continue without column service - use defaults
+            }
+        }
+
+        private void ColumnService_ColumnWidthChanged(object sender, ColumnWidthChangedEventArgs e)
+        {
+            // Column width changes are now handled by the service
+            // This event can be used for any additional UI updates if needed
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] Column '{e.ColumnName}' width changed to {e.NewWidth}");
+            
+            // Notify property changes for the facade properties so bindings update
+            switch (e.ColumnName)
+            {
+                case "Name":
+                    OnPropertyChanged(nameof(NameColumnWidth));
+                    break;
+                case "Size":
+                    OnPropertyChanged(nameof(SizeColumnWidth));
+                    break;
+                case "Type":
+                    OnPropertyChanged(nameof(TypeColumnWidth));
+                    break;
+                case "DateModified":
+                    OnPropertyChanged(nameof(DateColumnWidth));
+                    break;
+            }
+        }
+
         private void SetupEventHandlers()
         {
             fileTreeView.SelectedItemChanged += FileTreeView_SelectedItemChanged;
@@ -366,7 +411,10 @@ namespace ExplorerPro.UI.FileTree
         private void ImprovedFileTreeListView_Loaded(object sender, RoutedEventArgs e)
         {
             _showHiddenFiles = _settingsManager.GetSetting("file_view.show_hidden", false);
-            MakeColumnsResizable();
+            
+            // Column resizing is now handled by the column service
+            _columnService?.MakeColumnsResizable(this);
+            
             TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
             fileTreeView.ItemContainerGenerator.StatusChanged += ItemContainerGenerator_StatusChanged;
             
@@ -383,128 +431,6 @@ namespace ExplorerPro.UI.FileTree
         }
         
         #endregion
-
-        #region Column Management
-
-        private void SetupColumnHeaders()
-        {
-            try
-            {
-                NameColumn = new GridViewColumn { 
-                    Header = "Name", 
-                    Width = NameColumnWidth 
-                };
-                
-                SizeColumn = new GridViewColumn { 
-                    Header = "Size", 
-                    Width = SizeColumnWidth 
-                };
-                
-                TypeColumn = new GridViewColumn { 
-                    Header = "Type", 
-                    Width = TypeColumnWidth 
-                };
-                
-                DateColumn = new GridViewColumn { 
-                    Header = "Date Modified", 
-                    Width = DateColumnWidth 
-                };
-                
-                BindingOperations.SetBinding(NameColumn, GridViewColumn.WidthProperty, 
-                    new Binding(nameof(NameColumnWidth)) { Source = this, Mode = BindingMode.TwoWay });
-                
-                BindingOperations.SetBinding(SizeColumn, GridViewColumn.WidthProperty, 
-                    new Binding(nameof(SizeColumnWidth)) { Source = this, Mode = BindingMode.TwoWay });
-                
-                BindingOperations.SetBinding(TypeColumn, GridViewColumn.WidthProperty, 
-                    new Binding(nameof(TypeColumnWidth)) { Source = this, Mode = BindingMode.TwoWay });
-                
-                BindingOperations.SetBinding(DateColumn, GridViewColumn.WidthProperty, 
-                    new Binding(nameof(DateColumnWidth)) { Source = this, Mode = BindingMode.TwoWay });
-                
-                if (_columnHeaderGridView != null)
-                {
-                    _columnHeaderGridView.Columns.Clear();
-                    _columnHeaderGridView.Columns.Add(NameColumn);
-                    _columnHeaderGridView.Columns.Add(SizeColumn);
-                    _columnHeaderGridView.Columns.Add(TypeColumn);
-                    _columnHeaderGridView.Columns.Add(DateColumn);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to setup column headers: {ex.Message}");
-            }
-        }
-        
-        private void MakeColumnsResizable()
-        {
-            try
-            {
-                _columnHeaders.Clear();
-                
-                var headerPresenter = FindVisualChild<GridViewHeaderRowPresenter>(this);
-                if (headerPresenter == null)
-                {
-                    System.Diagnostics.Debug.WriteLine("[WARNING] GridViewHeaderRowPresenter not found");
-                    return;
-                }
-                
-                foreach (var header in FindVisualChildren<GridViewColumnHeader>(headerPresenter))
-                {
-                    _columnHeaders.Add(header);
-                    
-                    if (FindVisualChild<Thumb>(header) is Thumb thumb)
-                    {
-                        thumb.DragStarted += ColumnHeader_DragStarted;
-                        thumb.DragDelta += ColumnHeader_DragDelta;
-                        thumb.DragCompleted += ColumnHeader_DragCompleted;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to make columns resizable: {ex.Message}");
-            }
-        }
-        
-        private void ColumnHeader_DragStarted(object sender, DragStartedEventArgs e)
-        {
-            if (sender is Thumb thumb)
-            {
-                _draggedColumn = FindAncestor<GridViewColumnHeader>(thumb);
-                if (_draggedColumn != null)
-                {
-                    _originalWidth = _draggedColumn.ActualWidth;
-                }
-            }
-        }
-        
-        private void ColumnHeader_DragDelta(object sender, DragDeltaEventArgs e)
-        {
-            if (_draggedColumn != null)
-            {
-                double newWidth = Math.Max(20, _originalWidth + e.HorizontalChange);
-                int index = _columnHeaders.IndexOf(_draggedColumn);
-                
-                switch (index)
-                {
-                    case 0: NameColumnWidth = newWidth; break;
-                    case 1: SizeColumnWidth = newWidth; break;
-                    case 2: TypeColumnWidth = newWidth; break;
-                    case 3: DateColumnWidth = newWidth; break;
-                }
-            }
-        }
-        
-        private void ColumnHeader_DragCompleted(object sender, DragCompletedEventArgs e)
-        {
-            _draggedColumn = null;
-        }
-        
-        #endregion
-
-        // Updated theme-handling portion of UI/FileTree/ImprovedFileTreeListView.xaml.cs
 
         #region Theme Management
                 
@@ -523,8 +449,8 @@ namespace ExplorerPro.UI.FileTree
                     MainGrid.Background = GetResource<SolidColorBrush>("BackgroundColor");
                 }
                 
-                // Update column headers
-                RefreshColumnHeaders();
+                // Update column headers through the service
+                _columnService?.RefreshColumnTheme();
                 
                 // Update TreeView itself
                 if (fileTreeView != null)
@@ -571,55 +497,6 @@ namespace ExplorerPro.UI.FileTree
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing file tree theme: {ex.Message}");
                 // Non-critical error, continue
-            }
-        }
-
-        /// <summary>
-        /// Refreshes column headers with theme-appropriate styling
-        /// </summary>
-        private void RefreshColumnHeaders()
-        {
-            try
-            {
-                // Update the header presenter background
-                var headerPresenter = FindVisualChild<GridViewHeaderRowPresenter>(this);
-                if (headerPresenter != null)
-                {
-                    // Find parent Border
-                    var parent = VisualTreeHelper.GetParent(headerPresenter) as Border;
-                    if (parent != null)
-                    {
-                        parent.Background = GetResource<SolidColorBrush>("BackgroundColor");
-                        parent.BorderBrush = GetResource<SolidColorBrush>("BorderColor");
-                    }
-                    
-                    // Update column headers
-                    foreach (var header in FindVisualChildren<GridViewColumnHeader>(headerPresenter))
-                    {
-                        header.Background = GetResource<SolidColorBrush>("BackgroundColor");
-                        header.Foreground = GetResource<SolidColorBrush>("TextColor");
-                        header.BorderBrush = GetResource<SolidColorBrush>("BorderColor");
-                        
-                        // Update column dividers/splitters
-                        var thumbs = FindVisualChildren<Thumb>(header);
-                        foreach (var thumb in thumbs)
-                        {
-                            if (thumb.Template != null)
-                            {
-                                // Try to find the Rectangle element used for column divider
-                                var divider = FindVisualChild<Rectangle>(thumb);
-                                if (divider != null)
-                                {
-                                    divider.Fill = GetResource<SolidColorBrush>("BorderColor");
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing column headers: {ex.Message}");
             }
         }
 
@@ -1507,7 +1384,7 @@ namespace ExplorerPro.UI.FileTree
 
         #region Helper Methods
 
-        private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
+        internal static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
         {
             if (parent == null) yield break;
             
@@ -1528,7 +1405,7 @@ namespace ExplorerPro.UI.FileTree
             }
         }
         
-        private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        internal static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
         {
             if (parent == null) return null;
             
@@ -1552,7 +1429,7 @@ namespace ExplorerPro.UI.FileTree
             return null;
         }
         
-        private static T FindAncestor<T>(DependencyObject current) where T : DependencyObject
+        internal static T FindAncestor<T>(DependencyObject current) where T : DependencyObject
         {
             while (current != null && !(current is T))
             {
@@ -1602,6 +1479,15 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (disposing)
                 {
+                    // Save column settings before disposal
+                    _columnService?.SaveColumnSettings();
+                    
+                    // Unsubscribe from column service events
+                    if (_columnService != null)
+                    {
+                        _columnService.ColumnWidthChanged -= ColumnService_ColumnWidthChanged;
+                    }
+                    
                     // Cancel any ongoing operations
                     _dragDropService?.CancelOutlookExtraction();
                     
@@ -1613,6 +1499,7 @@ namespace ExplorerPro.UI.FileTree
                     _rootItems.Clear();
                     _fileTreeCache?.Clear();
                     (_fileTreeCache as IDisposable)?.Dispose();
+                    (_columnService as IDisposable)?.Dispose();
                 }
                 
                 _disposed = true;
