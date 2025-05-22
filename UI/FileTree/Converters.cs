@@ -6,6 +6,9 @@ using System.Windows.Data;
 
 namespace ExplorerPro.UI.FileTree
 {
+    /// <summary>
+    /// Converts boolean values to visibility
+    /// </summary>
     [ValueConversion(typeof(bool), typeof(Visibility))]
     public class BooleanToVisibilityConverter : IValueConverter
     {
@@ -30,6 +33,9 @@ namespace ExplorerPro.UI.FileTree
         }
     }
 
+    /// <summary>
+    /// Converts boolean values to visibility (inverted)
+    /// </summary>
     [ValueConversion(typeof(bool), typeof(Visibility))]
     public class InverseBooleanToVisibilityConverter : IValueConverter
     {
@@ -54,6 +60,9 @@ namespace ExplorerPro.UI.FileTree
         }
     }
 
+    /// <summary>
+    /// Converts expanded state to arrow text
+    /// </summary>
     [ValueConversion(typeof(bool), typeof(string))]
     public class ExpanderTextConverter : IValueConverter
     {
@@ -73,6 +82,9 @@ namespace ExplorerPro.UI.FileTree
         }
     }
 
+    /// <summary>
+    /// Converts tree level to left margin for indentation
+    /// </summary>
     [ValueConversion(typeof(int), typeof(Thickness))]
     public class LevelToIndentConverter : IValueConverter
     {
@@ -95,6 +107,9 @@ namespace ExplorerPro.UI.FileTree
         }
     }
 
+    /// <summary>
+    /// Converts tree level to expander position (to the right of connecting lines)
+    /// </summary>
     [ValueConversion(typeof(int), typeof(Thickness))]
     public class ExpanderRightIndentConverter : IValueConverter
     {

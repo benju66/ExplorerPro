@@ -13,14 +13,6 @@
                 <ResourceDictionary Source="Resources/FileTreeResources.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             
-            <!-- Define GridView here to use as a resource (accessed in code-behind) -->
-            <GridView x:Key="columnHeaderGridView" x:Name="columnHeaderGridView">
-                <GridViewColumn Header="Name" Width="{Binding NameColumnWidth, Mode=TwoWay, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
-                <GridViewColumn Header="Size" Width="{Binding SizeColumnWidth, Mode=TwoWay, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
-                <GridViewColumn Header="Type" Width="{Binding TypeColumnWidth, Mode=TwoWay, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
-                <GridViewColumn Header="Date Modified" Width="{Binding DateColumnWidth, Mode=TwoWay, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
-            </GridView>
-            
             <!-- Converter for level to margin -->
             <local:LevelToIndentConverter x:Key="LevelToIndentConverter"/>
             
@@ -32,7 +24,7 @@
         </ResourceDictionary>
     </UserControl.Resources>
     
-    <Grid x:Name="MainGrid">
+    <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}">
         <!-- Column Headers Row -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -41,141 +33,147 @@
         
         <!-- Column Headers with Border for background -->
         <Border Grid.Row="0" Background="{DynamicResource BackgroundColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
-            <Grid>
-                <!-- Use a custom header that allows resizing -->
-                <Grid x:Name="HeaderGrid" Height="25">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition x:Name="NameHeaderColumn" Width="{Binding NameColumnWidth, Mode=TwoWay, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
-                        <ColumnDefinition Width="5"/>
-                        <ColumnDefinition x:Name="SizeHeaderColumn" Width="{Binding SizeColumnWidth, Mode=TwoWay, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
-                        <ColumnDefinition Width="5"/>
-                        <ColumnDefinition x:Name="TypeHeaderColumn" Width="{Binding TypeColumnWidth, Mode=TwoWay, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
-                        <ColumnDefinition Width="5"/>
-                        <ColumnDefinition x:Name="DateHeaderColumn" Width="{Binding DateColumnWidth, Mode=TwoWay, RelativeSource={RelativeSource AncestorType={x:Type local:ImprovedFileTreeListView}}}"/>
-                    </Grid.ColumnDefinitions>
-                    
-                    <!-- Column Headers -->
-                    <Border Grid.Column="0" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
-                        <TextBlock Text="Name" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
-                    </Border>
-                    
-                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"/>
-                    
-                    <Border Grid.Column="2" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
-                        <TextBlock Text="Size" Padding="6,3" VerticalAlignment="Center" TextAlignment="Right" Foreground="{DynamicResource TextColor}"/>
-                    </Border>
-                    
-                    <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"/>
-                    
-                    <Border Grid.Column="4" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
-                        <TextBlock Text="Type" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
-                    </Border>
-                    
-                    <GridSplitter Grid.Column="5" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"/>
-                    
-                    <Border Grid.Column="6" Background="Transparent">
-                        <TextBlock Text="Date Modified" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
-                    </Border>
-                </Grid>
+            <Grid x:Name="HeaderGrid" Height="25">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="NameHeaderColumn" Width="250*" MinWidth="100" MaxWidth="600"/>
+                    <ColumnDefinition Width="5"/>
+                    <ColumnDefinition x:Name="SizeHeaderColumn" Width="100" MinWidth="60" MaxWidth="150"/>
+                    <ColumnDefinition Width="5"/>
+                    <ColumnDefinition x:Name="TypeHeaderColumn" Width="120" MinWidth="80" MaxWidth="200"/>
+                    <ColumnDefinition Width="5"/>
+                    <ColumnDefinition x:Name="DateHeaderColumn" Width="150" MinWidth="100" MaxWidth="250"/>
+                </Grid.ColumnDefinitions>
                 
-                <!-- Keep the original GridViewHeaderRowPresenter hidden for compatibility -->
-                <GridViewHeaderRowPresenter x:Name="headerPresenter" 
-                                           Columns="{Binding Source={StaticResource columnHeaderGridView}, Path=Columns}"
-                                           Visibility="Collapsed"/>
+                <!-- Column Headers -->
+                <Border Grid.Column="0" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
+                    <TextBlock Text="Name" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                </Border>
+                
+                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"
+                             DragCompleted="NameColumnSplitter_DragCompleted"/>
+                
+                <Border Grid.Column="2" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
+                    <TextBlock Text="Size" Padding="6,3" VerticalAlignment="Center" TextAlignment="Right" Foreground="{DynamicResource TextColor}"/>
+                </Border>
+                
+                <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"
+                             DragCompleted="SizeColumnSplitter_DragCompleted"/>
+                
+                <Border Grid.Column="4" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
+                    <TextBlock Text="Type" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                </Border>
+                
+                <GridSplitter Grid.Column="5" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"
+                             DragCompleted="TypeColumnSplitter_DragCompleted"/>
+                
+                <Border Grid.Column="6" Background="Transparent">
+                    <TextBlock Text="Date Modified" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                </Border>
             </Grid>
         </Border>
         
         <!-- File TreeView with proper column alignment -->
         <TreeView x:Name="fileTreeView" Grid.Row="1" BorderThickness="0"
+                 Background="{DynamicResource TreeViewBackground}"
                  VirtualizingStackPanel.IsVirtualizing="True"
                  VirtualizingStackPanel.VirtualizationMode="Recycling"
-                 ItemContainerStyle="{StaticResource TreeViewItemWithLines}">
+                 ItemContainerStyle="{StaticResource TreeViewItemWithLines}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto">
             
             <TreeView.ItemTemplate>
                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                    <!-- Grid to align with column headers -->
+                    <!-- Use a shared size scope to align columns -->
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <!-- Dynamic column definitions that match the header columns -->
-                            <ColumnDefinition Width="{Binding ActualWidth, ElementName=NameHeaderColumn}"/>
+                            <!-- Fixed column definitions that match header proportions -->
+                            <ColumnDefinition Width="250*" MinWidth="100" MaxWidth="600" SharedSizeGroup="NameColumn"/>
                             <ColumnDefinition Width="5"/>
-                            <ColumnDefinition Width="{Binding ActualWidth, ElementName=SizeHeaderColumn}"/>
+                            <ColumnDefinition Width="100" MinWidth="60" MaxWidth="150" SharedSizeGroup="SizeColumn"/>
                             <ColumnDefinition Width="5"/>
-                            <ColumnDefinition Width="{Binding ActualWidth, ElementName=TypeHeaderColumn}"/>
+                            <ColumnDefinition Width="120" MinWidth="80" MaxWidth="200" SharedSizeGroup="TypeColumn"/>
                             <ColumnDefinition Width="5"/>
-                            <ColumnDefinition Width="{Binding ActualWidth, ElementName=DateHeaderColumn}"/>
+                            <ColumnDefinition Width="150" MinWidth="100" MaxWidth="250" SharedSizeGroup="DateColumn"/>
                         </Grid.ColumnDefinitions>
                         
                         <!-- Name Column with tree structure -->
                         <Grid Grid.Column="0">
-                            <!-- Background canvas for drawing connecting lines -->
-                            <Canvas Background="Transparent"
-                                   Margin="{Binding Level, Converter={StaticResource LevelToIndentConverter}}"
-                                   Height="20" HorizontalAlignment="Left" Width="1000">
-                                
-                                <!-- Horizontal line to expander (extended to reach expander position) -->
-                                <Line x:Name="HorizontalLine"
-                                      X1="0" Y1="10" X2="25" Y2="10"
-                                      Stroke="{DynamicResource TreeLineColor}"
-                                      StrokeThickness="1">
-                                    <Line.Style>
-                                        <Style TargetType="Line">
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Level}" Value="0">
-                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Line.Style>
-                                </Line>
-                                
-                                <!-- Vertical line from parent -->
-                                <Line x:Name="VerticalLine"
-                                      X1="0" Y1="0" X2="0" Y2="10"
-                                      Stroke="{DynamicResource TreeLineColor}"
-                                      StrokeThickness="1">
-                                    <Line.Style>
-                                        <Style TargetType="Line">
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Level}" Value="0">
-                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Line.Style>
-                                </Line>
-                            </Canvas>
+                            <!-- Background for selection -->
+                            <Rectangle x:Name="SelectionBackground" Fill="Transparent" RadiusX="2" RadiusY="2"/>
                             
-                            <!-- Name content with indentation and expander -->
-                            <StackPanel Orientation="Horizontal"
-                                       Margin="{Binding Level, Converter={StaticResource ExpanderRightIndentConverter}}">
+                            <!-- Tree structure content -->
+                            <Grid>
+                                <!-- Background canvas for drawing connecting lines -->
+                                <Canvas Background="Transparent"
+                                       Margin="{Binding Level, Converter={StaticResource LevelToIndentConverter}}"
+                                       Height="20" HorizontalAlignment="Left" Width="40">
+                                    
+                                    <!-- Horizontal line to expander -->
+                                    <Line x:Name="HorizontalLine"
+                                          X1="0" Y1="10" X2="25" Y2="10"
+                                          Stroke="{DynamicResource TreeLineColor}"
+                                          StrokeThickness="1">
+                                        <Line.Style>
+                                            <Style TargetType="Line">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Level}" Value="0">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Line.Style>
+                                    </Line>
+                                    
+                                    <!-- Vertical line from parent -->
+                                    <Line x:Name="VerticalLine"
+                                          X1="0" Y1="0" X2="0" Y2="10"
+                                          Stroke="{DynamicResource TreeLineColor}"
+                                          StrokeThickness="1">
+                                        <Line.Style>
+                                            <Style TargetType="Line">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Level}" Value="0">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Line.Style>
+                                    </Line>
+                                </Canvas>
                                 
-                                <!-- Expander Toggle Button -->
-                                <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay}">
-                                    <ToggleButton.Style>
-                                        <Style TargetType="ToggleButton" BasedOn="{StaticResource Windows11ExpanderStyle}">
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsDirectory}" Value="False">
-                                                    <Setter Property="Visibility" Value="Hidden" />
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding HasChildren}" Value="False">
-                                                    <Setter Property="Visibility" Value="Hidden" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </ToggleButton.Style>
-                                </ToggleButton>
-                                
-                                <!-- File/Folder Icon -->
-                                <Image Source="{Binding Icon}" Width="16" Height="16" 
-                                       Margin="2,0,5,0" VerticalAlignment="Center"/>
-                                
-                                <!-- File/Folder Name -->
-                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis"
-                                           Foreground="{Binding Foreground}"
-                                           FontWeight="{Binding FontWeight}"/>
-                            </StackPanel>
+                                <!-- Name content with indentation and expander -->
+                                <StackPanel Orientation="Horizontal"
+                                           Margin="{Binding Level, Converter={StaticResource ExpanderRightIndentConverter}}">
+                                    
+                                    <!-- Expander Toggle Button -->
+                                    <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay}"
+                                                 VerticalAlignment="Center">
+                                        <ToggleButton.Style>
+                                            <Style TargetType="ToggleButton" BasedOn="{StaticResource Windows11ExpanderStyle}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsDirectory}" Value="False">
+                                                        <Setter Property="Visibility" Value="Hidden" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding HasChildren}" Value="False">
+                                                        <Setter Property="Visibility" Value="Hidden" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ToggleButton.Style>
+                                    </ToggleButton>
+                                    
+                                    <!-- File/Folder Icon -->
+                                    <Image Source="{Binding Icon}" Width="16" Height="16" 
+                                           Margin="2,0,5,0" VerticalAlignment="Center"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                    
+                                    <!-- File/Folder Name -->
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{Binding Foreground}"
+                                               FontWeight="{Binding FontWeight}"
+                                               ToolTip="{Binding Path}"/>
+                                </StackPanel>
+                            </Grid>
                         </Grid>
                         
                         <!-- Size Column -->

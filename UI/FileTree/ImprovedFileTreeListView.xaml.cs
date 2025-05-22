@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs (UPDATED - Fixed Column Management)
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs (FIXED - Column Management and Initialization)
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -68,7 +68,6 @@ namespace ExplorerPro.UI.FileTree
                 if (_nameColumnWidth != value)
                 {
                     _nameColumnWidth = Math.Max(100, Math.Min(600, value)); // Enforce min/max
-                    _columnService?.UpdateColumnWidth("Name", _nameColumnWidth);
                     OnPropertyChanged(nameof(NameColumnWidth));
                 }
             }
@@ -82,7 +81,6 @@ namespace ExplorerPro.UI.FileTree
                 if (_sizeColumnWidth != value)
                 {
                     _sizeColumnWidth = Math.Max(60, Math.Min(150, value)); // Enforce min/max
-                    _columnService?.UpdateColumnWidth("Size", _sizeColumnWidth);
                     OnPropertyChanged(nameof(SizeColumnWidth));
                 }
             }
@@ -96,7 +94,6 @@ namespace ExplorerPro.UI.FileTree
                 if (_typeColumnWidth != value)
                 {
                     _typeColumnWidth = Math.Max(80, Math.Min(200, value)); // Enforce min/max
-                    _columnService?.UpdateColumnWidth("Type", _typeColumnWidth);
                     OnPropertyChanged(nameof(TypeColumnWidth));
                 }
             }
@@ -110,7 +107,6 @@ namespace ExplorerPro.UI.FileTree
                 if (_dateColumnWidth != value)
                 {
                     _dateColumnWidth = Math.Max(100, Math.Min(250, value)); // Enforce min/max
-                    _columnService?.UpdateColumnWidth("DateModified", _dateColumnWidth);
                     OnPropertyChanged(nameof(DateColumnWidth));
                 }
             }
@@ -167,6 +163,7 @@ namespace ExplorerPro.UI.FileTree
         private ObservableCollection<FileTreeItem> _rootItems = new ObservableCollection<FileTreeItem>();
         private Point? _dragStartPosition;
         private ContextMenu _treeContextMenu;
+        private bool _isInitialized = false;
         
         #endregion
 
@@ -199,9 +196,6 @@ namespace ExplorerPro.UI.FileTree
                 // Initialize column service and setup
                 InitializeColumnService();
 
-                // Setup column monitoring
-                this.Loaded += ImprovedFileTreeListView_Loaded;
-
                 // Set DataContext to self for bindings
                 DataContext = this;
 
@@ -210,6 +204,9 @@ namespace ExplorerPro.UI.FileTree
                 {
                     ProgressOverlay.Visibility = Visibility.Collapsed;
                 }
+
+                // Setup loaded event handler for final initialization
+                this.Loaded += ImprovedFileTreeListView_Loaded;
 
                 System.Diagnostics.Debug.WriteLine("[INIT] ImprovedFileTreeListView initialized with services");
             }
@@ -406,31 +403,67 @@ namespace ExplorerPro.UI.FileTree
 
         private void ImprovedFileTreeListView_Loaded(object sender, RoutedEventArgs e)
         {
-            _showHiddenFiles = _settingsManager.GetSetting("file_view.show_hidden", false);
-            
-            // Monitor GridSplitter changes to save column widths
-            MonitorGridSplitters();
-            
-            TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
-            fileTreeView.ItemContainerGenerator.StatusChanged += ItemContainerGenerator_StatusChanged;
-            
-            // Apply theme settings on load
-            RefreshThemeElements();
-        }
-        
-        private void MonitorGridSplitters()
-        {
-            // Find all GridSplitters in the header
-            var splitters = FindVisualChildren<GridSplitter>(HeaderGrid);
-            foreach (var splitter in splitters)
+            if (!_isInitialized)
             {
-                splitter.DragCompleted += GridSplitter_DragCompleted;
+                _isInitialized = true;
+                
+                _showHiddenFiles = _settingsManager.GetSetting("file_view.show_hidden", false);
+                
+                TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
+                fileTreeView.ItemContainerGenerator.StatusChanged += ItemContainerGenerator_StatusChanged;
+                
+                // Apply theme settings on load
+                RefreshThemeElements();
+                
+                // Update column header widths after layout is complete
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                {
+                    UpdateHeaderColumnWidths();
+                }));
+                
+                System.Diagnostics.Debug.WriteLine("[DEBUG] FileTreeListView loaded and initialized");
             }
         }
         
-        private void GridSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+        private void UpdateHeaderColumnWidths()
         {
-            // Save column settings when splitter drag is completed
+            try
+            {
+                if (HeaderGrid != null)
+                {
+                    NameHeaderColumn.Width = new GridLength(NameColumnWidth, GridUnitType.Star);
+                    SizeHeaderColumn.Width = new GridLength(SizeColumnWidth);
+                    TypeHeaderColumn.Width = new GridLength(TypeColumnWidth);
+                    DateHeaderColumn.Width = new GridLength(DateColumnWidth);
+                    
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Updated header column widths - Name: {NameColumnWidth}, Size: {SizeColumnWidth}, Type: {TypeColumnWidth}, Date: {DateColumnWidth}");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to update header column widths: {ex.Message}");
+            }
+        }
+        
+        // Column splitter event handlers
+        private void NameColumnSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+        {
+            NameColumnWidth = NameHeaderColumn.ActualWidth;
+            _columnService?.UpdateColumnWidth("Name", NameColumnWidth);
+            _columnService?.SaveColumnSettings();
+        }
+        
+        private void SizeColumnSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+        {
+            SizeColumnWidth = SizeHeaderColumn.ActualWidth;
+            _columnService?.UpdateColumnWidth("Size", SizeColumnWidth);
+            _columnService?.SaveColumnSettings();
+        }
+        
+        private void TypeColumnSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+        {
+            TypeColumnWidth = TypeHeaderColumn.ActualWidth;
+            _columnService?.UpdateColumnWidth("Type", TypeColumnWidth);
             _columnService?.SaveColumnSettings();
         }
         
@@ -845,9 +878,19 @@ namespace ExplorerPro.UI.FileTree
         {
             try 
             {
-                if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+                if (string.IsNullOrEmpty(directory))
                 {
-                    System.Diagnostics.Debug.WriteLine($"[ERROR] Invalid directory path: {directory}");
+                    System.Diagnostics.Debug.WriteLine($"[ERROR] SetRootDirectory called with empty directory");
+                    return;
+                }
+                
+                // Normalize the path
+                directory = Path.GetFullPath(directory);
+                
+                if (!Directory.Exists(directory))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ERROR] Directory does not exist: {directory}");
+                    MessageBox.Show($"Directory does not exist: {directory}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
@@ -861,6 +904,9 @@ namespace ExplorerPro.UI.FileTree
                 {
                     _rootItems.Add(rootItem);
                     _fileTreeCache.SetItem(directory, rootItem);
+                    
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Root item created: {rootItem.Name}, HasChildren: {rootItem.HasChildren}");
+                    
                     await LoadDirectoryContentsAsync(rootItem);
                     rootItem.IsExpanded = true;
                     _currentFolderPath = directory;
@@ -870,12 +916,18 @@ namespace ExplorerPro.UI.FileTree
                     
                     Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
                         TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
+                        fileTreeView.UpdateLayout();
                     }));
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to create root item for: {directory}");
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to set root directory: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Stack trace: {ex.StackTrace}");
                 MessageBox.Show($"Error setting root directory: {ex.Message}", 
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -917,6 +969,7 @@ namespace ExplorerPro.UI.FileTree
         {
             if (parentItem == null || !parentItem.IsDirectory)
             {
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] LoadDirectoryContentsAsync: Invalid parent item");
                 return;
             }
                 
@@ -925,8 +978,11 @@ namespace ExplorerPro.UI.FileTree
 
             try
             {
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Loading directory contents for: {path}");
+                
                 if (parentItem.Children.Count > 0 && !parentItem.HasDummyChild())
                 {
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Directory already loaded: {path}");
                     return;
                 }
                 
@@ -1507,13 +1563,6 @@ namespace ExplorerPro.UI.FileTree
                     if (fileTreeView != null)
                     {
                         fileTreeView.ItemContainerGenerator.StatusChanged -= ItemContainerGenerator_StatusChanged;
-                    }
-                    
-                    // Unsubscribe from GridSplitter events
-                    var splitters = FindVisualChildren<GridSplitter>(HeaderGrid);
-                    foreach (var splitter in splitters)
-                    {
-                        splitter.DragCompleted -= GridSplitter_DragCompleted;
                     }
                     
                     _rootItems.Clear();
