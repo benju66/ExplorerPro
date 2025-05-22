@@ -20,6 +20,8 @@ using ExplorerPro.Utilities;
 using ExplorerPro.UI.FileTree.Services;
 using ExplorerPro.UI.FileTree.Models;
 using ExplorerPro.Themes;
+// Add alias to avoid ambiguity
+using Path = System.IO.Path;
 
 namespace ExplorerPro.UI.FileTree
 {
@@ -55,58 +57,58 @@ namespace ExplorerPro.UI.FileTree
         
         #region Column Width Properties
         
-        private double _nameColumnWidth = 250;
-        private double _sizeColumnWidth = 100;
-        private double _typeColumnWidth = 120;
-        private double _dateColumnWidth = 150;
+        private GridLength _nameColumnWidth = new GridLength(250);
+        private GridLength _sizeColumnWidth = new GridLength(100);
+        private GridLength _typeColumnWidth = new GridLength(120);
+        private GridLength _dateColumnWidth = new GridLength(150);
         
-        public double NameColumnWidth
+        public GridLength NameColumnWidth
         {
             get => _nameColumnWidth;
             set
             {
                 if (_nameColumnWidth != value)
                 {
-                    _nameColumnWidth = Math.Max(100, Math.Min(600, value)); // Enforce min/max
+                    _nameColumnWidth = value;
                     OnPropertyChanged(nameof(NameColumnWidth));
                 }
             }
         }
         
-        public double SizeColumnWidth
+        public GridLength SizeColumnWidth
         {
             get => _sizeColumnWidth;
             set
             {
                 if (_sizeColumnWidth != value)
                 {
-                    _sizeColumnWidth = Math.Max(60, Math.Min(150, value)); // Enforce min/max
+                    _sizeColumnWidth = value;
                     OnPropertyChanged(nameof(SizeColumnWidth));
                 }
             }
         }
         
-        public double TypeColumnWidth
+        public GridLength TypeColumnWidth
         {
             get => _typeColumnWidth;
             set
             {
                 if (_typeColumnWidth != value)
                 {
-                    _typeColumnWidth = Math.Max(80, Math.Min(200, value)); // Enforce min/max
+                    _typeColumnWidth = value;
                     OnPropertyChanged(nameof(TypeColumnWidth));
                 }
             }
         }
         
-        public double DateColumnWidth
+        public GridLength DateColumnWidth
         {
             get => _dateColumnWidth;
             set
             {
                 if (_dateColumnWidth != value)
                 {
-                    _dateColumnWidth = Math.Max(100, Math.Min(250, value)); // Enforce min/max
+                    _dateColumnWidth = value;
                     OnPropertyChanged(nameof(DateColumnWidth));
                 }
             }
@@ -275,7 +277,7 @@ namespace ExplorerPro.UI.FileTree
                     if (e.IsInternalMove)
                     {
                         var sourceDirectories = e.SourceFiles
-                            .Select(f => System.IO.Path.GetDirectoryName(f))
+                            .Select(f => Path.GetDirectoryName(f))
                             .Where(d => !string.IsNullOrEmpty(d))
                             .Distinct()
                             .ToArray();
@@ -352,16 +354,16 @@ namespace ExplorerPro.UI.FileTree
                 
                 // Apply loaded settings to our properties
                 var nameCol = _columnService.GetColumn("Name");
-                if (nameCol != null) _nameColumnWidth = nameCol.Width;
+                if (nameCol != null) _nameColumnWidth = new GridLength(nameCol.Width);
                 
                 var sizeCol = _columnService.GetColumn("Size");
-                if (sizeCol != null) _sizeColumnWidth = sizeCol.Width;
+                if (sizeCol != null) _sizeColumnWidth = new GridLength(sizeCol.Width);
                 
                 var typeCol = _columnService.GetColumn("Type");
-                if (typeCol != null) _typeColumnWidth = typeCol.Width;
+                if (typeCol != null) _typeColumnWidth = new GridLength(typeCol.Width);
                 
                 var dateCol = _columnService.GetColumn("DateModified");
-                if (dateCol != null) _dateColumnWidth = dateCol.Width;
+                if (dateCol != null) _dateColumnWidth = new GridLength(dateCol.Width);
                 
                 // Notify property changes so UI bindings update
                 OnPropertyChanged(nameof(NameColumnWidth));
@@ -399,6 +401,8 @@ namespace ExplorerPro.UI.FileTree
             fileTreeView.DragOver += FileTreeView_DragOver;
             fileTreeView.Drop += FileTreeView_Drop;
             fileTreeView.DragLeave += FileTreeView_DragLeave;
+            
+
         }
 
         private void ImprovedFileTreeListView_Loaded(object sender, RoutedEventArgs e)
@@ -415,56 +419,42 @@ namespace ExplorerPro.UI.FileTree
                 // Apply theme settings on load
                 RefreshThemeElements();
                 
-                // Update column header widths after layout is complete
-                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
-                {
-                    UpdateHeaderColumnWidths();
-                }));
-                
                 System.Diagnostics.Debug.WriteLine("[DEBUG] FileTreeListView loaded and initialized");
-            }
-        }
-        
-        private void UpdateHeaderColumnWidths()
-        {
-            try
-            {
-                if (HeaderGrid != null)
-                {
-                    NameHeaderColumn.Width = new GridLength(NameColumnWidth, GridUnitType.Star);
-                    SizeHeaderColumn.Width = new GridLength(SizeColumnWidth);
-                    TypeHeaderColumn.Width = new GridLength(TypeColumnWidth);
-                    DateHeaderColumn.Width = new GridLength(DateColumnWidth);
-                    
-                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Updated header column widths - Name: {NameColumnWidth}, Size: {SizeColumnWidth}, Type: {TypeColumnWidth}, Date: {DateColumnWidth}");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to update header column widths: {ex.Message}");
             }
         }
         
         // Column splitter event handlers
         private void NameColumnSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
         {
-            NameColumnWidth = NameHeaderColumn.ActualWidth;
-            _columnService?.UpdateColumnWidth("Name", NameColumnWidth);
-            _columnService?.SaveColumnSettings();
+            if (HeaderGrid.ColumnDefinitions.Count > 0)
+            {
+                double newWidth = HeaderGrid.ColumnDefinitions[0].ActualWidth;
+                NameColumnWidth = new GridLength(Math.Max(100, Math.Min(600, newWidth)));
+                _columnService?.UpdateColumnWidth("Name", NameColumnWidth.Value);
+                _columnService?.SaveColumnSettings();
+            }
         }
         
         private void SizeColumnSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
         {
-            SizeColumnWidth = SizeHeaderColumn.ActualWidth;
-            _columnService?.UpdateColumnWidth("Size", SizeColumnWidth);
-            _columnService?.SaveColumnSettings();
+            if (HeaderGrid.ColumnDefinitions.Count > 2)
+            {
+                double newWidth = HeaderGrid.ColumnDefinitions[2].ActualWidth;
+                SizeColumnWidth = new GridLength(Math.Max(60, Math.Min(150, newWidth)));
+                _columnService?.UpdateColumnWidth("Size", SizeColumnWidth.Value);
+                _columnService?.SaveColumnSettings();
+            }
         }
         
         private void TypeColumnSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
         {
-            TypeColumnWidth = TypeHeaderColumn.ActualWidth;
-            _columnService?.UpdateColumnWidth("Type", TypeColumnWidth);
-            _columnService?.SaveColumnSettings();
+            if (HeaderGrid.ColumnDefinitions.Count > 4)
+            {
+                double newWidth = HeaderGrid.ColumnDefinitions[4].ActualWidth;
+                TypeColumnWidth = new GridLength(Math.Max(80, Math.Min(200, newWidth)));
+                _columnService?.UpdateColumnWidth("Type", TypeColumnWidth.Value);
+                _columnService?.SaveColumnSettings();
+            }
         }
         
         private void ItemContainerGenerator_StatusChanged(object sender, EventArgs e)
@@ -802,7 +792,7 @@ namespace ExplorerPro.UI.FileTree
             if (Directory.Exists(selected))
                 return selected;
                 
-            return System.IO.Path.GetDirectoryName(selected) ?? _currentFolderPath;
+                            return Path.GetDirectoryName(selected) ?? _currentFolderPath;
         }
 
         public void RefreshView()
@@ -902,12 +892,18 @@ namespace ExplorerPro.UI.FileTree
                 var rootItem = _fileTreeService.CreateFileTreeItem(directory, 0);
                 if (rootItem != null)
                 {
+                    // Attach the LoadChildren event handler BEFORE adding to collection
+                    rootItem.LoadChildren += async (s, e) => await LoadDirectoryContentsAsync(rootItem);
+                    
                     _rootItems.Add(rootItem);
                     _fileTreeCache.SetItem(directory, rootItem);
                     
                     System.Diagnostics.Debug.WriteLine($"[DEBUG] Root item created: {rootItem.Name}, HasChildren: {rootItem.HasChildren}");
                     
+                    // Load children first
                     await LoadDirectoryContentsAsync(rootItem);
+                    
+                    // Then expand
                     rootItem.IsExpanded = true;
                     _currentFolderPath = directory;
                     LocationChanged?.Invoke(this, directory);
@@ -942,7 +938,7 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (File.Exists(path))
                 {
-                    string dirPath = System.IO.Path.GetDirectoryName(path);
+                    string dirPath = Path.GetDirectoryName(path);
                     if (!string.IsNullOrEmpty(dirPath))
                     {
                         SetRootDirectory(dirPath);
@@ -1164,7 +1160,7 @@ namespace ExplorerPro.UI.FileTree
             }
             else
             {
-                _currentFolderPath = System.IO.Path.GetDirectoryName(path) ?? string.Empty;
+                _currentFolderPath = Path.GetDirectoryName(path) ?? string.Empty;
             }
 
             LocationChanged?.Invoke(this, path);
@@ -1353,7 +1349,7 @@ namespace ExplorerPro.UI.FileTree
             if (string.IsNullOrEmpty(path))
                 return;
                 
-            string parentDir = System.IO.Path.GetDirectoryName(path);
+            string parentDir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(parentDir))
             {
                 RefreshDirectory(parentDir);

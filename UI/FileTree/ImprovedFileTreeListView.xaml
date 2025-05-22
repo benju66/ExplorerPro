@@ -24,7 +24,8 @@
         </ResourceDictionary>
     </UserControl.Resources>
     
-    <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}">
+    <!-- Main grid with shared size scope enabled for column alignment -->
+    <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}" Grid.IsSharedSizeScope="True">
         <!-- Column Headers Row -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -35,13 +36,13 @@
         <Border Grid.Row="0" Background="{DynamicResource BackgroundColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
             <Grid x:Name="HeaderGrid" Height="25">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="NameHeaderColumn" Width="250*" MinWidth="100" MaxWidth="600"/>
+                    <ColumnDefinition Width="{Binding NameColumnWidth, Mode=TwoWay}" MinWidth="100" MaxWidth="600" SharedSizeGroup="NameColumn"/>
                     <ColumnDefinition Width="5"/>
-                    <ColumnDefinition x:Name="SizeHeaderColumn" Width="100" MinWidth="60" MaxWidth="150"/>
+                    <ColumnDefinition Width="{Binding SizeColumnWidth, Mode=TwoWay}" MinWidth="60" MaxWidth="150" SharedSizeGroup="SizeColumn"/>
                     <ColumnDefinition Width="5"/>
-                    <ColumnDefinition x:Name="TypeHeaderColumn" Width="120" MinWidth="80" MaxWidth="200"/>
+                    <ColumnDefinition Width="{Binding TypeColumnWidth, Mode=TwoWay}" MinWidth="80" MaxWidth="200" SharedSizeGroup="TypeColumn"/>
                     <ColumnDefinition Width="5"/>
-                    <ColumnDefinition x:Name="DateHeaderColumn" Width="150" MinWidth="100" MaxWidth="250"/>
+                    <ColumnDefinition Width="{Binding DateColumnWidth, Mode=TwoWay}" MinWidth="100" MaxWidth="250" SharedSizeGroup="DateColumn"/>
                 </Grid.ColumnDefinitions>
                 
                 <!-- Column Headers -->
@@ -72,140 +73,147 @@
             </Grid>
         </Border>
         
-        <!-- File TreeView with proper column alignment -->
-        <TreeView x:Name="fileTreeView" Grid.Row="1" BorderThickness="0"
-                 Background="{DynamicResource TreeViewBackground}"
-                 VirtualizingStackPanel.IsVirtualizing="True"
-                 VirtualizingStackPanel.VirtualizationMode="Recycling"
-                 ItemContainerStyle="{StaticResource TreeViewItemWithLines}"
-                 ScrollViewer.HorizontalScrollBarVisibility="Auto">
-            
-            <TreeView.ItemTemplate>
-                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                    <!-- Use a shared size scope to align columns -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <!-- Fixed column definitions that match header proportions -->
-                            <ColumnDefinition Width="250*" MinWidth="100" MaxWidth="600" SharedSizeGroup="NameColumn"/>
-                            <ColumnDefinition Width="5"/>
-                            <ColumnDefinition Width="100" MinWidth="60" MaxWidth="150" SharedSizeGroup="SizeColumn"/>
-                            <ColumnDefinition Width="5"/>
-                            <ColumnDefinition Width="120" MinWidth="80" MaxWidth="200" SharedSizeGroup="TypeColumn"/>
-                            <ColumnDefinition Width="5"/>
-                            <ColumnDefinition Width="150" MinWidth="100" MaxWidth="250" SharedSizeGroup="DateColumn"/>
-                        </Grid.ColumnDefinitions>
-                        
-                        <!-- Name Column with tree structure -->
-                        <Grid Grid.Column="0">
-                            <!-- Background for selection -->
-                            <Rectangle x:Name="SelectionBackground" Fill="Transparent" RadiusX="2" RadiusY="2"/>
+        <!-- ScrollViewer to sync horizontal scrolling between header and content -->
+        <ScrollViewer Grid.Row="1" x:Name="TreeScrollViewer" 
+                      HorizontalScrollBarVisibility="Auto" 
+                      VerticalScrollBarVisibility="Auto">
+            <!-- File TreeView with proper column alignment -->
+            <TreeView x:Name="fileTreeView" BorderThickness="0"
+                     Background="{DynamicResource TreeViewBackground}"
+                     VirtualizingStackPanel.IsVirtualizing="True"
+                     VirtualizingStackPanel.VirtualizationMode="Recycling"
+                     ItemContainerStyle="{StaticResource TreeViewItemWithLines}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                
+                <TreeView.ItemTemplate>
+                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                        <!-- Grid with shared size groups for column alignment -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <!-- Match the header column definitions exactly -->
+                                <ColumnDefinition SharedSizeGroup="NameColumn"/>
+                                <ColumnDefinition Width="5"/>
+                                <ColumnDefinition SharedSizeGroup="SizeColumn"/>
+                                <ColumnDefinition Width="5"/>
+                                <ColumnDefinition SharedSizeGroup="TypeColumn"/>
+                                <ColumnDefinition Width="5"/>
+                                <ColumnDefinition SharedSizeGroup="DateColumn"/>
+                            </Grid.ColumnDefinitions>
                             
-                            <!-- Tree structure content -->
-                            <Grid>
-                                <!-- Background canvas for drawing connecting lines -->
-                                <Canvas Background="Transparent"
-                                       Margin="{Binding Level, Converter={StaticResource LevelToIndentConverter}}"
-                                       Height="20" HorizontalAlignment="Left" Width="40">
-                                    
-                                    <!-- Horizontal line to expander -->
-                                    <Line x:Name="HorizontalLine"
-                                          X1="0" Y1="10" X2="25" Y2="10"
-                                          Stroke="{DynamicResource TreeLineColor}"
-                                          StrokeThickness="1">
-                                        <Line.Style>
-                                            <Style TargetType="Line">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Level}" Value="0">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Line.Style>
-                                    </Line>
-                                    
-                                    <!-- Vertical line from parent -->
-                                    <Line x:Name="VerticalLine"
-                                          X1="0" Y1="0" X2="0" Y2="10"
-                                          Stroke="{DynamicResource TreeLineColor}"
-                                          StrokeThickness="1">
-                                        <Line.Style>
-                                            <Style TargetType="Line">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Level}" Value="0">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Line.Style>
-                                    </Line>
-                                </Canvas>
+                            <!-- Name Column with tree structure -->
+                            <Grid Grid.Column="0" ClipToBounds="True">
+                                <!-- Background for selection -->
+                                <Rectangle x:Name="SelectionBackground" Fill="Transparent" RadiusX="2" RadiusY="2"/>
                                 
-                                <!-- Name content with indentation and expander -->
-                                <StackPanel Orientation="Horizontal"
-                                           Margin="{Binding Level, Converter={StaticResource ExpanderRightIndentConverter}}">
+                                <!-- Tree structure content -->
+                                <Grid>
+                                    <!-- Background canvas for drawing connecting lines -->
+                                    <Canvas Background="Transparent"
+                                           Margin="{Binding Level, Converter={StaticResource LevelToIndentConverter}}"
+                                           Height="20" HorizontalAlignment="Left" Width="40"
+                                           ClipToBounds="False">
+                                        
+                                        <!-- Horizontal line to expander -->
+                                        <Line x:Name="HorizontalLine"
+                                              X1="0" Y1="10" X2="25" Y2="10"
+                                              Stroke="{DynamicResource TreeLineColor}"
+                                              StrokeThickness="1">
+                                            <Line.Style>
+                                                <Style TargetType="Line">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Level}" Value="0">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Line.Style>
+                                        </Line>
+                                        
+                                        <!-- Vertical line from parent -->
+                                        <Line x:Name="VerticalLine"
+                                              X1="0" Y1="0" X2="0" Y2="10"
+                                              Stroke="{DynamicResource TreeLineColor}"
+                                              StrokeThickness="1">
+                                            <Line.Style>
+                                                <Style TargetType="Line">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Level}" Value="0">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Line.Style>
+                                        </Line>
+                                    </Canvas>
                                     
-                                    <!-- Expander Toggle Button -->
-                                    <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay}"
-                                                 VerticalAlignment="Center">
-                                        <ToggleButton.Style>
-                                            <Style TargetType="ToggleButton" BasedOn="{StaticResource Windows11ExpanderStyle}">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsDirectory}" Value="False">
-                                                        <Setter Property="Visibility" Value="Hidden" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding HasChildren}" Value="False">
-                                                        <Setter Property="Visibility" Value="Hidden" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </ToggleButton.Style>
-                                    </ToggleButton>
-                                    
-                                    <!-- File/Folder Icon -->
-                                    <Image Source="{Binding Icon}" Width="16" Height="16" 
-                                           Margin="2,0,5,0" VerticalAlignment="Center"
-                                           RenderOptions.BitmapScalingMode="HighQuality"/>
-                                    
-                                    <!-- File/Folder Name -->
-                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"
-                                               Foreground="{Binding Foreground}"
-                                               FontWeight="{Binding FontWeight}"
-                                               ToolTip="{Binding Path}"/>
-                                </StackPanel>
+                                    <!-- Name content with indentation and expander -->
+                                    <StackPanel Orientation="Horizontal"
+                                               Margin="{Binding Level, Converter={StaticResource ExpanderRightIndentConverter}}">
+                                        
+                                        <!-- Expander Toggle Button -->
+                                        <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay}"
+                                                     VerticalAlignment="Center">
+                                            <ToggleButton.Style>
+                                                <Style TargetType="ToggleButton" BasedOn="{StaticResource Windows11ExpanderStyle}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsDirectory}" Value="False">
+                                                            <Setter Property="Visibility" Value="Hidden" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding HasChildren}" Value="False">
+                                                            <Setter Property="Visibility" Value="Hidden" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ToggleButton.Style>
+                                        </ToggleButton>
+                                        
+                                        <!-- File/Folder Icon -->
+                                        <Image Source="{Binding Icon}" Width="16" Height="16" 
+                                               Margin="2,0,5,0" VerticalAlignment="Center"
+                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                        
+                                        <!-- File/Folder Name -->
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{Binding Foreground}"
+                                                   FontWeight="{Binding FontWeight}"
+                                                   ToolTip="{Binding Path}"/>
+                                    </StackPanel>
+                                </Grid>
                             </Grid>
+                            
+                            <!-- Size Column -->
+                            <TextBlock Grid.Column="2" Text="{Binding Size}" 
+                                      VerticalAlignment="Center" 
+                                      TextAlignment="Right"
+                                      Margin="5,0"
+                                      TextTrimming="CharacterEllipsis"
+                                      Foreground="{Binding Foreground}"
+                                      FontWeight="{Binding FontWeight}"/>
+                            
+                            <!-- Type Column -->
+                            <TextBlock Grid.Column="4" Text="{Binding Type}" 
+                                      VerticalAlignment="Center" 
+                                      TextAlignment="Left"
+                                      Margin="5,0"
+                                      TextTrimming="CharacterEllipsis"
+                                      Foreground="{Binding Foreground}"
+                                      FontWeight="{Binding FontWeight}"/>
+                            
+                            <!-- Date Modified Column -->
+                            <TextBlock Grid.Column="6" Text="{Binding LastModifiedStr}" 
+                                      VerticalAlignment="Center" 
+                                      TextAlignment="Left"
+                                      Margin="5,0"
+                                      TextTrimming="CharacterEllipsis"
+                                      Foreground="{Binding Foreground}"
+                                      FontWeight="{Binding FontWeight}"/>
                         </Grid>
-                        
-                        <!-- Size Column -->
-                        <TextBlock Grid.Column="2" Text="{Binding Size}" 
-                                  VerticalAlignment="Center" 
-                                  TextAlignment="Right"
-                                  Margin="5,0"
-                                  TextTrimming="CharacterEllipsis"
-                                  Foreground="{Binding Foreground}"
-                                  FontWeight="{Binding FontWeight}"/>
-                        
-                        <!-- Type Column -->
-                        <TextBlock Grid.Column="4" Text="{Binding Type}" 
-                                  VerticalAlignment="Center" 
-                                  TextAlignment="Left"
-                                  Margin="5,0"
-                                  TextTrimming="CharacterEllipsis"
-                                  Foreground="{Binding Foreground}"
-                                  FontWeight="{Binding FontWeight}"/>
-                        
-                        <!-- Date Modified Column -->
-                        <TextBlock Grid.Column="6" Text="{Binding LastModifiedStr}" 
-                                  VerticalAlignment="Center" 
-                                  TextAlignment="Left"
-                                  Margin="5,0"
-                                  TextTrimming="CharacterEllipsis"
-                                  Foreground="{Binding Foreground}"
-                                  FontWeight="{Binding FontWeight}"/>
-                    </Grid>
-                </HierarchicalDataTemplate>
-            </TreeView.ItemTemplate>
-        </TreeView>
+                    </HierarchicalDataTemplate>
+                </TreeView.ItemTemplate>
+            </TreeView>
+        </ScrollViewer>
         
         <!-- Progress overlay (hidden and no longer used for Outlook extraction) -->
         <Border x:Name="ProgressOverlay" 
