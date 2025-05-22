@@ -903,16 +903,27 @@ namespace ExplorerPro.UI.FileTree
                     // Load children first
                     await LoadDirectoryContentsAsync(rootItem);
                     
-                    // Then expand
-                    rootItem.IsExpanded = true;
+                    // Update current folder path
                     _currentFolderPath = directory;
                     LocationChanged?.Invoke(this, directory);
                     
                     System.Diagnostics.Debug.WriteLine($"[DEBUG] Root directory set to: {directory}, Children count: {rootItem.Children.Count}");
                     
-                    Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
+                    // Defer expansion until the visual tree is generated
+                    Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => {
+                        // Now expand the root item after the visual tree is ready
+                        rootItem.IsExpanded = true;
+                        
+                        // Initialize tree view item levels
                         TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
                         fileTreeView.UpdateLayout();
+                        
+                        // Ensure the root item is visible
+                        if (_rootItems.Count > 0)
+                        {
+                            var container = fileTreeView.ItemContainerGenerator.ContainerFromItem(rootItem) as TreeViewItem;
+                            container?.BringIntoView();
+                        }
                     }));
                 }
                 else
@@ -928,7 +939,6 @@ namespace ExplorerPro.UI.FileTree
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-        
         public void NavigateAndHighlight(string path)
         {
             if (string.IsNullOrEmpty(path))
