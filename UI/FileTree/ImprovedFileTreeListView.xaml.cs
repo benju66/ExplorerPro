@@ -1225,20 +1225,20 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            _dragStartPosition = e.GetPosition(fileTreeView);
+            _dragStartPoint = e.GetPosition(fileTreeView);
         }
 
         private void FileTreeView_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            _dragStartPosition = null;
+            _dragStartPoint = null;
         }
 
         private void FileTreeView_MouseMove(object sender, MouseEventArgs e)
         {
-            if (e.LeftButton == MouseButtonState.Pressed && _dragStartPosition.HasValue)
+            if (e.LeftButton == MouseButtonState.Pressed && _dragStartPoint.HasValue)
             {
                 Point currentPosition = e.GetPosition(fileTreeView);
-                Vector dragVector = currentPosition - _dragStartPosition.Value;
+                Vector dragVector = currentPosition - _dragStartPoint.Value;
                 double dragDistance = Math.Sqrt(Math.Pow(dragVector.X, 2) + Math.Pow(dragVector.Y, 2));
 
                 if (dragDistance > 10.0)
@@ -1476,7 +1476,7 @@ namespace ExplorerPro.UI.FileTree
             {
                 var selectedPaths = new List<string> { selectedItem.Path };
                 _dragDropService.StartDrag(fileTreeView, selectedPaths);
-                _dragStartPosition = null;
+                _dragStartPoint = null;
             }
         }
         
