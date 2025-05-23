@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs (FIXED - Column Management and Initialization)
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs (FIXED - Double-click behavior)
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -26,7 +26,7 @@ using Path = System.IO.Path;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedFileTreeListView.xaml with fixed column management
+    /// Interaction logic for ImprovedFileTreeListView.xaml with fixed column management and double-click behavior
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -1039,10 +1039,14 @@ namespace ExplorerPro.UI.FileTree
             if (_isHandlingDoubleClick)
                 return;
                 
-            if (e.NewValue is FileTreeItem item)
+            // Add a small delay to distinguish between single and double clicks
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
             {
-                OnTreeItemClicked(item.Path);
-            }
+                if (!_isHandlingDoubleClick && e.NewValue is FileTreeItem item)
+                {
+                    OnTreeItemClicked(item.Path);
+                }
+            }));
         }
 
         private async void TreeViewItem_Expanded(object sender, RoutedEventArgs e)
@@ -1069,7 +1073,11 @@ namespace ExplorerPro.UI.FileTree
             
             try
             {
-                if (fileTreeView.SelectedItem is FileTreeItem item)
+                // Get the item that was actually clicked on
+                var originalSource = e.OriginalSource as DependencyObject;
+                var treeViewItem = FindAncestor<TreeViewItem>(originalSource);
+                
+                if (treeViewItem?.DataContext is FileTreeItem item)
                 {
                     HandleDoubleClick(item.Path);
                     
@@ -1172,17 +1180,32 @@ namespace ExplorerPro.UI.FileTree
             }
             else if (Directory.Exists(path))
             {
-                // Toggle folder expansion
+                // Find the TreeViewItem and toggle its expansion directly
                 var item = _fileTreeService.FindItemByPath(_rootItems, path);
                 if (item != null)
                 {
+                    // Toggle the expansion state
                     item.IsExpanded = !item.IsExpanded;
+                    
+                    // Also find and update the TreeViewItem to ensure UI is in sync
+                    Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                    {
+                        var treeViewItem = FindTreeViewItemForData(fileTreeView, item);
+                        if (treeViewItem != null)
+                        {
+                            treeViewItem.IsExpanded = item.IsExpanded;
+                        }
+                    }));
                 }
             }
         }
 
         private void OnTreeItemClicked(string path)
         {
+            // Don't process if we're handling a double-click
+            if (_isHandlingDoubleClick)
+                return;
+                
             if (string.IsNullOrEmpty(path) || (!File.Exists(path) && !Directory.Exists(path)))
             {
                 return;
