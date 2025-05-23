@@ -166,6 +166,7 @@ namespace ExplorerPro.UI.FileTree
         private Point? _dragStartPosition;
         private ContextMenu _treeContextMenu;
         private bool _isInitialized = false;
+        private bool _isHandlingDoubleClick = false;
         
         #endregion
 
@@ -1034,6 +1035,10 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
+            // Don't process selection changes during double-click
+            if (_isHandlingDoubleClick)
+                return;
+                
             if (e.NewValue is FileTreeItem item)
             {
                 OnTreeItemClicked(item.Path);
@@ -1059,9 +1064,26 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            if (fileTreeView.SelectedItem is FileTreeItem item)
+            // Set flag to prevent selection changed from creating new tabs
+            _isHandlingDoubleClick = true;
+            
+            try
             {
-                HandleDoubleClick(item.Path);
+                if (fileTreeView.SelectedItem is FileTreeItem item)
+                {
+                    HandleDoubleClick(item.Path);
+                    
+                    // Mark the event as handled to prevent it from bubbling up
+                    e.Handled = true;
+                }
+            }
+            finally
+            {
+                // Reset flag after a short delay to ensure selection changed has fired
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                {
+                    _isHandlingDoubleClick = false;
+                }));
             }
         }
 
@@ -1135,6 +1157,7 @@ namespace ExplorerPro.UI.FileTree
             {
                 try
                 {
+                    // Open file in default application
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                     {
                         FileName = path,
@@ -1149,6 +1172,7 @@ namespace ExplorerPro.UI.FileTree
             }
             else if (Directory.Exists(path))
             {
+                // Toggle folder expansion
                 var item = _fileTreeService.FindItemByPath(_rootItems, path);
                 if (item != null)
                 {
