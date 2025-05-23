@@ -318,19 +318,47 @@ namespace ExplorerPro.UI.TabManagement
         }
 
         /// <summary>
-        /// Handler for double-click on tab header to add a new tab
+        /// Handler for double-click on tab header to add a new tab - FIXED VERSION
         /// </summary>
         private void TabControl_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            // Check if double click happened on empty area of the tab header
-            var tabItem = FindAncestorOfType<TabItem>(e.OriginalSource as DependencyObject);
+            // Get the original source of the click
+            var originalSource = e.OriginalSource as DependencyObject;
             
-            if (tabItem == null)
+            // Check if the click originated from within a file tree (most specific check first)
+            var fileTree = FindAncestorOfType<ImprovedFileTreeListView>(originalSource);
+            if (fileTree != null)
             {
-                // Double-clicked on empty area, add a new tab
-                AddNewNestedTab();
-                e.Handled = true;
+                // Double-click came from file tree - ignore it
+                return;
             }
+            
+            // Check if we're clicking within a Grid (tab content container)
+            var grid = FindAncestorOfType<Grid>(originalSource);
+            if (grid != null)
+            {
+                // Check if this grid is a tab's content (has a file tree as child)
+                foreach (UIElement child in grid.Children)
+                {
+                    if (child is ImprovedFileTreeListView)
+                    {
+                        // This is a tab content grid - ignore the double-click
+                        return;
+                    }
+                }
+            }
+            
+            // Check if the click originated from within any tab item
+            var tabItem = FindAncestorOfType<TabItem>(originalSource);
+            if (tabItem != null)
+            {
+                // Click was on a tab header or inside a tab - ignore it
+                return;
+            }
+            
+            // If we get here, the click was on empty space in the tab control header area
+            AddNewNestedTab();
+            e.Handled = true;
         }
 
         /// <summary>

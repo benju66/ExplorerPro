@@ -1074,19 +1074,25 @@ namespace ExplorerPro.UI.FileTree
             
             if (treeViewItem?.DataContext is FileTreeItem item)
             {
-                // Set flag to prevent selection changed from creating new tabs
-                _isHandlingDoubleClick = true;
-                
-                HandleDoubleClick(item.Path);
-                
-                // Mark the event as handled to prevent it from bubbling up
-                e.Handled = true;
-                
-                // Reset flag after a longer delay with lower priority to ensure selection changed has completed
-                Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+                // Only handle double-click for files, let TreeView handle folders naturally
+                if (!item.IsDirectory)
                 {
-                    _isHandlingDoubleClick = false;
-                }));
+                    // Set flag to prevent selection changed from creating new tabs
+                    _isHandlingDoubleClick = true;
+                    
+                    // Open the file
+                    HandleDoubleClick(item.Path);
+                    
+                    // Mark as handled to prevent bubbling
+                    e.Handled = true;
+                    
+                    // Reset flag after a delay
+                    Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+                    {
+                        _isHandlingDoubleClick = false;
+                    }));
+                }
+                // For directories, don't handle the event - let TreeView do its default behavior
             }
         }
 
@@ -1171,26 +1177,6 @@ namespace ExplorerPro.UI.FileTree
                 {
                     MessageBox.Show($"Failed to open file:\n{path}\n\n{ex.Message}", 
                         "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
-            else if (Directory.Exists(path))
-            {
-                // Find the TreeViewItem and toggle its expansion directly
-                var item = _fileTreeService.FindItemByPath(_rootItems, path);
-                if (item != null)
-                {
-                    // Toggle the expansion state
-                    item.IsExpanded = !item.IsExpanded;
-                    
-                    // Also find and update the TreeViewItem to ensure UI is in sync
-                    Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
-                    {
-                        var treeViewItem = FindTreeViewItemForData(fileTreeView, item);
-                        if (treeViewItem != null)
-                        {
-                            treeViewItem.IsExpanded = item.IsExpanded;
-                        }
-                    }));
                 }
             }
         }
