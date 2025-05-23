@@ -110,6 +110,12 @@ namespace ExplorerPro.UI.TabManagement
         {
             try
             {
+                // Log who's calling this method
+                var stackTrace = new System.Diagnostics.StackTrace();
+                var callingMethod = stackTrace.GetFrame(1)?.GetMethod()?.Name ?? "Unknown";
+                System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] AddNewFileTreeTab called by: {callingMethod}");
+                System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] Creating tab '{title}' for path: {rootPath}");
+                
                 // Validate input
                 if (string.IsNullOrEmpty(rootPath))
                 {
@@ -700,6 +706,8 @@ namespace ExplorerPro.UI.TabManagement
             if (clickedTree == null)
                 return;
 
+            System.Diagnostics.Debug.WriteLine("[TAB-MANAGER] FileTree clicked - activating tab");
+
             for (int i = 0; i < TabControl.Items.Count; i++)
             {
                 if (TabControl.Items[i] is TabItem tabItem && tabItem.Content is FrameworkElement tabContent)
@@ -724,9 +732,97 @@ namespace ExplorerPro.UI.TabManagement
             string action = e.Item1;
             string filePath = e.Item2;
 
-            if (action == "pin")
+            System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] Context menu action: '{action}' for '{filePath}'");
+
+            switch (action)
             {
-                PinItemRequested?.Invoke(this, filePath);
+                case "pin":
+                    PinItemRequested?.Invoke(this, filePath);
+                    break;
+                    
+                case "open":
+                    // CRITICAL: "open" should navigate in current view, NOT create new tab
+                    if (sender is ImprovedFileTreeListView fileTree)
+                    {
+                        if (Directory.Exists(filePath))
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] Navigating to directory: {filePath}");
+                            fileTree.SetRootDirectory(filePath);
+                            CurrentPathChanged?.Invoke(this, filePath);
+                        }
+                        else if (File.Exists(filePath))
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] Opening file: {filePath}");
+                            try
+                            {
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = filePath,
+                                    UseShellExecute = true
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                MessageBox.Show($"Failed to open file: {ex.Message}", 
+                                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                            }
+                        }
+                    }
+                    break;
+                    
+                case "open_in_new_tab":
+                    // ONLY this action should create a new tab
+                    if (Directory.Exists(filePath))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] Opening in new tab: {filePath}");
+                        string tabName = Path.GetFileName(filePath);
+                        if (string.IsNullOrEmpty(tabName))
+                        {
+                            tabName = filePath; // For root paths
+                        }
+                        AddNewFileTreeTab(tabName, filePath);
+                    }
+                    break;
+                    
+                case "open_in_new_window":
+                    System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] Open in new window not implemented");
+                    // TODO: Implement if needed
+                    break;
+                    
+                case "show_in_explorer":
+                    if (File.Exists(filePath) || Directory.Exists(filePath))
+                    {
+                        System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{filePath}\"");
+                    }
+                    break;
+                    
+                case "toggle_split_view":
+                    ToggleSplitView();
+                    break;
+                    
+                case "rename":
+                case "delete":
+                case "copy":
+                case "paste":
+                case "duplicate":
+                case "new_file":
+                case "new_folder":
+                case "show_metadata":
+                case "add_tag":
+                case "remove_tag":
+                case "collapse_all":
+                case "expand_all":
+                case "change_text_color":
+                case "preview_pdf":
+                case "preview_image":
+                    // These actions should be handled by the file tree itself
+                    // or passed to a higher-level handler
+                    System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] Action '{action}' not handled at tab level");
+                    break;
+                    
+                default:
+                    System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] Unknown action: {action}");
+                    break;
             }
         }
 
