@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs (FIXED - Double-click behavior)
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Fixed Column Management
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -26,7 +26,7 @@ using Path = System.IO.Path;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedFileTreeListView.xaml with fixed column management and double-click behavior
+    /// Interaction logic for ImprovedFileTreeListView.xaml with fixed column management
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -55,64 +55,19 @@ namespace ExplorerPro.UI.FileTree
         
         #endregion
         
-        #region Column Width Properties
+        #region Column Management
         
-        private GridLength _nameColumnWidth = new GridLength(250);
-        private GridLength _sizeColumnWidth = new GridLength(100);
-        private GridLength _typeColumnWidth = new GridLength(120);
-        private GridLength _dateColumnWidth = new GridLength(150);
-        
-        public GridLength NameColumnWidth
+        private readonly Dictionary<string, string> _columnSharedSizeGroups = new Dictionary<string, string>
         {
-            get => _nameColumnWidth;
-            set
-            {
-                if (_nameColumnWidth != value)
-                {
-                    _nameColumnWidth = value;
-                    OnPropertyChanged(nameof(NameColumnWidth));
-                }
-            }
-        }
+            ["Name"] = "NameColumn",
+            ["Size"] = "SizeColumn",
+            ["Type"] = "TypeColumn",
+            ["DateModified"] = "DateColumn"
+        };
         
-        public GridLength SizeColumnWidth
-        {
-            get => _sizeColumnWidth;
-            set
-            {
-                if (_sizeColumnWidth != value)
-                {
-                    _sizeColumnWidth = value;
-                    OnPropertyChanged(nameof(SizeColumnWidth));
-                }
-            }
-        }
-        
-        public GridLength TypeColumnWidth
-        {
-            get => _typeColumnWidth;
-            set
-            {
-                if (_typeColumnWidth != value)
-                {
-                    _typeColumnWidth = value;
-                    OnPropertyChanged(nameof(TypeColumnWidth));
-                }
-            }
-        }
-        
-        public GridLength DateColumnWidth
-        {
-            get => _dateColumnWidth;
-            set
-            {
-                if (_dateColumnWidth != value)
-                {
-                    _dateColumnWidth = value;
-                    OnPropertyChanged(nameof(DateColumnWidth));
-                }
-            }
-        }
+        private ColumnDefinition _activeResizeColumn;
+        private string _activeResizeColumnName;
+        private double _originalColumnWidth;
         
         #endregion
 
@@ -163,7 +118,7 @@ namespace ExplorerPro.UI.FileTree
         private string _currentFolderPath = string.Empty;
         private bool _showHiddenFiles = false;
         private ObservableCollection<FileTreeItem> _rootItems = new ObservableCollection<FileTreeItem>();
-        private Point? _dragStartPosition;
+        private Point? _dragStartPoint;
         private ContextMenu _treeContextMenu;
         private bool _isInitialized = false;
         private bool _isHandlingDoubleClick = false;
@@ -353,24 +308,8 @@ namespace ExplorerPro.UI.FileTree
                 // Load saved column settings
                 _columnService.LoadColumnSettings();
                 
-                // Apply loaded settings to our properties
-                var nameCol = _columnService.GetColumn("Name");
-                if (nameCol != null) _nameColumnWidth = new GridLength(nameCol.Width);
-                
-                var sizeCol = _columnService.GetColumn("Size");
-                if (sizeCol != null) _sizeColumnWidth = new GridLength(sizeCol.Width);
-                
-                var typeCol = _columnService.GetColumn("Type");
-                if (typeCol != null) _typeColumnWidth = new GridLength(typeCol.Width);
-                
-                var dateCol = _columnService.GetColumn("DateModified");
-                if (dateCol != null) _dateColumnWidth = new GridLength(dateCol.Width);
-                
-                // Notify property changes so UI bindings update
-                OnPropertyChanged(nameof(NameColumnWidth));
-                OnPropertyChanged(nameof(SizeColumnWidth));
-                OnPropertyChanged(nameof(TypeColumnWidth));
-                OnPropertyChanged(nameof(DateColumnWidth));
+                // Apply loaded settings to header columns
+                ApplyColumnSettingsToHeader();
                 
                 System.Diagnostics.Debug.WriteLine("[DEBUG] Column service initialized successfully");
             }
@@ -381,9 +320,23 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
+        private void ApplyColumnSettingsToHeader()
+        {
+            var nameCol = _columnService.GetColumn("Name");
+            if (nameCol != null) NameColumn.Width = new GridLength(nameCol.Width);
+            
+            var sizeCol = _columnService.GetColumn("Size");
+            if (sizeCol != null) SizeColumn.Width = new GridLength(sizeCol.Width);
+            
+            var typeCol = _columnService.GetColumn("Type");
+            if (typeCol != null) TypeColumn.Width = new GridLength(typeCol.Width);
+            
+            var dateCol = _columnService.GetColumn("DateModified");
+            if (dateCol != null) DateColumn.Width = new GridLength(dateCol.Width);
+        }
+
         private void ColumnService_ColumnWidthChanged(object sender, ColumnWidthChangedEventArgs e)
         {
-            // Column width changes are now handled by the property setters
             System.Diagnostics.Debug.WriteLine($"[DEBUG] Column '{e.ColumnName}' width changed from {e.OldWidth} to {e.NewWidth}");
         }
 
@@ -402,8 +355,6 @@ namespace ExplorerPro.UI.FileTree
             fileTreeView.DragOver += FileTreeView_DragOver;
             fileTreeView.Drop += FileTreeView_Drop;
             fileTreeView.DragLeave += FileTreeView_DragLeave;
-            
-
         }
 
         private void ImprovedFileTreeListView_Loaded(object sender, RoutedEventArgs e)
@@ -424,45 +375,205 @@ namespace ExplorerPro.UI.FileTree
             }
         }
         
-        // Column splitter event handlers
-        private void NameColumnSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+        #endregion
+
+        #region Column Resize Handlers
+        
+        private void ColumnSplitter_DragStarted(object sender, DragStartedEventArgs e)
         {
-            if (HeaderGrid.ColumnDefinitions.Count > 0)
+            if (sender is GridSplitter splitter && splitter.Tag is string columnName)
             {
-                double newWidth = HeaderGrid.ColumnDefinitions[0].ActualWidth;
-                NameColumnWidth = new GridLength(Math.Max(100, Math.Min(600, newWidth)));
-                _columnService?.UpdateColumnWidth("Name", NameColumnWidth.Value);
-                _columnService?.SaveColumnSettings();
+                _activeResizeColumnName = columnName;
+                
+                // Find the column being resized
+                int columnIndex = GetColumnIndex(columnName);
+                if (columnIndex >= 0 && columnIndex < HeaderGrid.ColumnDefinitions.Count)
+                {
+                    _activeResizeColumn = HeaderGrid.ColumnDefinitions[columnIndex];
+                    _originalColumnWidth = _activeResizeColumn.ActualWidth;
+                    
+                    // Temporarily remove SharedSizeGroup to allow free resizing
+                    _activeResizeColumn.SharedSizeGroup = null;
+                    
+                    System.Diagnostics.Debug.WriteLine($"[RESIZE] Started resizing column '{columnName}' from width {_originalColumnWidth}");
+                }
             }
         }
         
-        private void SizeColumnSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+        private void ColumnSplitter_DragDelta(object sender, DragDeltaEventArgs e)
         {
-            if (HeaderGrid.ColumnDefinitions.Count > 2)
+            if (_activeResizeColumn != null && !string.IsNullOrEmpty(_activeResizeColumnName))
             {
-                double newWidth = HeaderGrid.ColumnDefinitions[2].ActualWidth;
-                SizeColumnWidth = new GridLength(Math.Max(60, Math.Min(150, newWidth)));
-                _columnService?.UpdateColumnWidth("Size", SizeColumnWidth.Value);
-                _columnService?.SaveColumnSettings();
+                // Calculate new width
+                double newWidth = _originalColumnWidth + e.HorizontalChange;
+                
+                // Apply constraints
+                newWidth = Math.Max(_activeResizeColumn.MinWidth, Math.Min(_activeResizeColumn.MaxWidth, newWidth));
+                
+                // Update column width immediately for smooth feedback
+                _activeResizeColumn.Width = new GridLength(newWidth);
+                
+                System.Diagnostics.Debug.WriteLine($"[RESIZE] Resizing column '{_activeResizeColumnName}' to {newWidth}");
             }
         }
         
-        private void TypeColumnSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+        private void ColumnSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
         {
-            if (HeaderGrid.ColumnDefinitions.Count > 4)
+            if (_activeResizeColumn != null && !string.IsNullOrEmpty(_activeResizeColumnName))
             {
-                double newWidth = HeaderGrid.ColumnDefinitions[4].ActualWidth;
-                TypeColumnWidth = new GridLength(Math.Max(80, Math.Min(200, newWidth)));
-                _columnService?.UpdateColumnWidth("Type", TypeColumnWidth.Value);
+                double finalWidth = _activeResizeColumn.ActualWidth;
+                
+                // Update column service
+                _columnService?.UpdateColumnWidth(_activeResizeColumnName, finalWidth);
+                
+                // Re-apply SharedSizeGroup
+                if (_columnSharedSizeGroups.TryGetValue(_activeResizeColumnName, out string sharedSizeGroup))
+                {
+                    _activeResizeColumn.SharedSizeGroup = sharedSizeGroup;
+                }
+                
+                // Force layout update to ensure all rows respect the new width
+                UpdateLayout();
+                fileTreeView.UpdateLayout();
+                
+                // Save settings
                 _columnService?.SaveColumnSettings();
+                
+                System.Diagnostics.Debug.WriteLine($"[RESIZE] Completed resizing column '{_activeResizeColumnName}' to {finalWidth}");
+                
+                // Reset state
+                _activeResizeColumn = null;
+                _activeResizeColumnName = null;
+                _originalColumnWidth = 0;
             }
         }
         
-        private void ItemContainerGenerator_StatusChanged(object sender, EventArgs e)
+        private int GetColumnIndex(string columnName)
         {
-            if (fileTreeView.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
+            switch (columnName)
             {
-                TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
+                case "Name": return 0;
+                case "Size": return 2;
+                case "Type": return 4;
+                case "DateModified": return 6;
+                default: return -1;
+            }
+        }
+        
+        private void ColumnHeader_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (sender is Border border)
+            {
+                border.Background = new SolidColorBrush(Color.FromArgb(20, 0, 0, 0));
+            }
+        }
+        
+        private void ColumnHeader_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (sender is Border border)
+            {
+                border.Background = Brushes.Transparent;
+            }
+        }
+        
+        #endregion
+
+        #region Column Context Menu Handlers
+        
+        private void AutoSizeColumn_Click(object sender, RoutedEventArgs e)
+        {
+            // TODO: Implement auto-size for individual column
+            var mousePos = Mouse.GetPosition(HeaderGrid);
+            string columnName = GetColumnNameFromPosition(mousePos.X);
+            if (!string.IsNullOrEmpty(columnName))
+            {
+                AutoSizeColumn(columnName);
+            }
+        }
+        
+        private void AutoSizeAllColumns_Click(object sender, RoutedEventArgs e)
+        {
+            AutoSizeColumn("Name");
+            AutoSizeColumn("Size");
+            AutoSizeColumn("Type");
+            AutoSizeColumn("DateModified");
+        }
+        
+        private void ResetColumnWidths_Click(object sender, RoutedEventArgs e)
+        {
+            _columnService?.ResetToDefaults();
+            ApplyColumnSettingsToHeader();
+        }
+        
+        private void AutoSizeColumn(string columnName)
+        {
+            // Simple implementation - you can enhance this to measure actual content
+            double optimalWidth = _columnService?.GetOptimalColumnWidth(columnName) ?? 100;
+            
+            int columnIndex = GetColumnIndex(columnName);
+            if (columnIndex >= 0 && columnIndex < HeaderGrid.ColumnDefinitions.Count)
+            {
+                var column = HeaderGrid.ColumnDefinitions[columnIndex];
+                
+                // Temporarily remove SharedSizeGroup
+                column.SharedSizeGroup = null;
+                
+                // Set new width
+                column.Width = new GridLength(optimalWidth);
+                
+                // Update column service
+                _columnService?.UpdateColumnWidth(columnName, optimalWidth);
+                
+                // Re-apply SharedSizeGroup
+                if (_columnSharedSizeGroups.TryGetValue(columnName, out string sharedSizeGroup))
+                {
+                    column.SharedSizeGroup = sharedSizeGroup;
+                }
+                
+                // Force layout update
+                UpdateLayout();
+                fileTreeView.UpdateLayout();
+            }
+        }
+        
+        private string GetColumnNameFromPosition(double x)
+        {
+            double currentX = 0;
+            
+            for (int i = 0; i < HeaderGrid.ColumnDefinitions.Count; i += 2) // Skip splitters
+            {
+                currentX += HeaderGrid.ColumnDefinitions[i].ActualWidth;
+                if (x <= currentX)
+                {
+                    switch (i)
+                    {
+                        case 0: return "Name";
+                        case 2: return "Size";
+                        case 4: return "Type";
+                        case 6: return "DateModified";
+                    }
+                }
+                
+                if (i + 1 < HeaderGrid.ColumnDefinitions.Count)
+                {
+                    currentX += HeaderGrid.ColumnDefinitions[i + 1].ActualWidth; // Add splitter width
+                }
+            }
+            
+            return "DateModified"; // Default to last column
+        }
+        
+        #endregion
+
+        #region Scroll Synchronization
+        
+        private void TreeScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            // Ensure horizontal scrolling is synchronized between header and content
+            if (e.HorizontalChange != 0)
+            {
+                // The header automatically scrolls with the content due to the shared parent ScrollViewer
+                System.Diagnostics.Debug.WriteLine($"[SCROLL] Horizontal scroll changed by {e.HorizontalChange}");
             }
         }
         
@@ -519,6 +630,9 @@ namespace ExplorerPro.UI.FileTree
                 
                 // Refresh dynamic resources in DataTemplates
                 RefreshDataTemplateResources();
+                
+                // Refresh column service theme
+                _columnService?.RefreshColumnTheme();
                 
                 Console.WriteLine("FileTree theme elements refreshed successfully");
             }
@@ -793,7 +907,7 @@ namespace ExplorerPro.UI.FileTree
             if (Directory.Exists(selected))
                 return selected;
                 
-                            return Path.GetDirectoryName(selected) ?? _currentFolderPath;
+            return Path.GetDirectoryName(selected) ?? _currentFolderPath;
         }
 
         public void RefreshView()
@@ -940,6 +1054,7 @@ namespace ExplorerPro.UI.FileTree
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+        
         public void NavigateAndHighlight(string path)
         {
             if (string.IsNullOrEmpty(path))
@@ -1154,6 +1269,14 @@ namespace ExplorerPro.UI.FileTree
         private void FileTreeView_DragLeave(object sender, DragEventArgs e)
         {
             _dragDropService.HandleDragLeave(e);
+        }
+        
+        private void ItemContainerGenerator_StatusChanged(object sender, EventArgs e)
+        {
+            if (fileTreeView.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
+            {
+                TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
+            }
         }
         
         #endregion

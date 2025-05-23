@@ -36,47 +36,84 @@
         <Border Grid.Row="0" Background="{DynamicResource BackgroundColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
             <Grid x:Name="HeaderGrid" Height="25">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="{Binding NameColumnWidth, Mode=TwoWay}" MinWidth="100" MaxWidth="600" SharedSizeGroup="NameColumn"/>
+                    <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="100" MaxWidth="600" SharedSizeGroup="NameColumn"/>
                     <ColumnDefinition Width="5"/>
-                    <ColumnDefinition Width="{Binding SizeColumnWidth, Mode=TwoWay}" MinWidth="60" MaxWidth="150" SharedSizeGroup="SizeColumn"/>
+                    <ColumnDefinition x:Name="SizeColumn" Width="100" MinWidth="60" MaxWidth="150" SharedSizeGroup="SizeColumn"/>
                     <ColumnDefinition Width="5"/>
-                    <ColumnDefinition Width="{Binding TypeColumnWidth, Mode=TwoWay}" MinWidth="80" MaxWidth="200" SharedSizeGroup="TypeColumn"/>
+                    <ColumnDefinition x:Name="TypeColumn" Width="120" MinWidth="80" MaxWidth="200" SharedSizeGroup="TypeColumn"/>
                     <ColumnDefinition Width="5"/>
-                    <ColumnDefinition Width="{Binding DateColumnWidth, Mode=TwoWay}" MinWidth="100" MaxWidth="250" SharedSizeGroup="DateColumn"/>
+                    <ColumnDefinition x:Name="DateColumn" Width="150" MinWidth="100" MaxWidth="250" SharedSizeGroup="DateColumn"/>
+                    <ColumnDefinition Width="*"/> <!-- Fill remaining space -->
                 </Grid.ColumnDefinitions>
                 
                 <!-- Column Headers -->
                 <Border Grid.Column="0" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
-                    <TextBlock Text="Name" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                    <DockPanel>
+                        <TextBlock Text="Name" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                        <Border Width="5" DockPanel.Dock="Right" Background="Transparent" Cursor="SizeWE"
+                                MouseEnter="ColumnHeader_MouseEnter" MouseLeave="ColumnHeader_MouseLeave"/>
+                    </DockPanel>
                 </Border>
                 
                 <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"
-                             DragCompleted="NameColumnSplitter_DragCompleted"/>
+                             DragStarted="ColumnSplitter_DragStarted"
+                             DragDelta="ColumnSplitter_DragDelta"
+                             DragCompleted="ColumnSplitter_DragCompleted"
+                             Tag="Name"/>
                 
                 <Border Grid.Column="2" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
-                    <TextBlock Text="Size" Padding="6,3" VerticalAlignment="Center" TextAlignment="Right" Foreground="{DynamicResource TextColor}"/>
+                    <DockPanel>
+                        <TextBlock Text="Size" Padding="6,3" VerticalAlignment="Center" TextAlignment="Right" Foreground="{DynamicResource TextColor}"/>
+                        <Border Width="5" DockPanel.Dock="Right" Background="Transparent" Cursor="SizeWE"
+                                MouseEnter="ColumnHeader_MouseEnter" MouseLeave="ColumnHeader_MouseLeave"/>
+                    </DockPanel>
                 </Border>
                 
                 <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"
-                             DragCompleted="SizeColumnSplitter_DragCompleted"/>
+                             DragStarted="ColumnSplitter_DragStarted"
+                             DragDelta="ColumnSplitter_DragDelta"
+                             DragCompleted="ColumnSplitter_DragCompleted"
+                             Tag="Size"/>
                 
                 <Border Grid.Column="4" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
-                    <TextBlock Text="Type" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                    <DockPanel>
+                        <TextBlock Text="Type" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                        <Border Width="5" DockPanel.Dock="Right" Background="Transparent" Cursor="SizeWE"
+                                MouseEnter="ColumnHeader_MouseEnter" MouseLeave="ColumnHeader_MouseLeave"/>
+                    </DockPanel>
                 </Border>
                 
                 <GridSplitter Grid.Column="5" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"
-                             DragCompleted="TypeColumnSplitter_DragCompleted"/>
+                             DragStarted="ColumnSplitter_DragStarted"
+                             DragDelta="ColumnSplitter_DragDelta"
+                             DragCompleted="ColumnSplitter_DragCompleted"
+                             Tag="Type"/>
                 
                 <Border Grid.Column="6" Background="Transparent">
-                    <TextBlock Text="Date Modified" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                    <DockPanel>
+                        <TextBlock Text="Date Modified" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                        <Border Width="5" DockPanel.Dock="Right" Background="Transparent" Cursor="SizeWE"
+                                MouseEnter="ColumnHeader_MouseEnter" MouseLeave="ColumnHeader_MouseLeave"/>
+                    </DockPanel>
                 </Border>
+                
+                <!-- Header context menu -->
+                <Grid.ContextMenu>
+                    <ContextMenu x:Name="HeaderContextMenu">
+                        <MenuItem Header="Auto-size Column" Click="AutoSizeColumn_Click"/>
+                        <MenuItem Header="Auto-size All Columns" Click="AutoSizeAllColumns_Click"/>
+                        <Separator/>
+                        <MenuItem Header="Reset Column Widths" Click="ResetColumnWidths_Click"/>
+                    </ContextMenu>
+                </Grid.ContextMenu>
             </Grid>
         </Border>
         
         <!-- ScrollViewer to sync horizontal scrolling between header and content -->
         <ScrollViewer Grid.Row="1" x:Name="TreeScrollViewer" 
                       HorizontalScrollBarVisibility="Auto" 
-                      VerticalScrollBarVisibility="Auto">
+                      VerticalScrollBarVisibility="Auto"
+                      ScrollChanged="TreeScrollViewer_ScrollChanged">
             <!-- File TreeView with proper column alignment -->
             <TreeView x:Name="fileTreeView" BorderThickness="0"
                      Background="{DynamicResource TreeViewBackground}"
@@ -99,6 +136,7 @@
                                 <ColumnDefinition SharedSizeGroup="TypeColumn"/>
                                 <ColumnDefinition Width="5"/>
                                 <ColumnDefinition SharedSizeGroup="DateColumn"/>
+                                <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             
                             <!-- Name Column with tree structure -->

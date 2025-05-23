@@ -70,7 +70,7 @@ namespace ExplorerPro.UI.FileTree.Models
             {
                 // Ensure width stays within bounds
                 var newWidth = Math.Max(_minWidth, Math.Min(value, _maxWidth));
-                if (_width != newWidth)
+                if (Math.Abs(_width - newWidth) > 0.01) // Small epsilon for double comparison
                 {
                     _width = newWidth;
                     OnPropertyChanged();
