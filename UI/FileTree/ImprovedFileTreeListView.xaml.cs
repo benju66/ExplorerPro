@@ -1068,27 +1068,22 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            // Set flag to prevent selection changed from creating new tabs
-            _isHandlingDoubleClick = true;
+            // Get the item that was actually clicked on
+            var originalSource = e.OriginalSource as DependencyObject;
+            var treeViewItem = FindAncestor<TreeViewItem>(originalSource);
             
-            try
+            if (treeViewItem?.DataContext is FileTreeItem item)
             {
-                // Get the item that was actually clicked on
-                var originalSource = e.OriginalSource as DependencyObject;
-                var treeViewItem = FindAncestor<TreeViewItem>(originalSource);
+                // Set flag to prevent selection changed from creating new tabs
+                _isHandlingDoubleClick = true;
                 
-                if (treeViewItem?.DataContext is FileTreeItem item)
-                {
-                    HandleDoubleClick(item.Path);
-                    
-                    // Mark the event as handled to prevent it from bubbling up
-                    e.Handled = true;
-                }
-            }
-            finally
-            {
-                // Reset flag after a short delay to ensure selection changed has fired
-                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                HandleDoubleClick(item.Path);
+                
+                // Mark the event as handled to prevent it from bubbling up
+                e.Handled = true;
+                
+                // Reset flag after a longer delay with lower priority to ensure selection changed has completed
+                Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
                 {
                     _isHandlingDoubleClick = false;
                 }));
