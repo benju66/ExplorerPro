@@ -571,21 +571,25 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (!item.IsVisible) continue;
                 
+                bool isInViewport = false;
+                
                 try
                 {
                     var transform = item.TransformToAncestor(fileTreeView);
                     var position = transform.Transform(new Point(0, 0));
                     
                     // Check if item is within viewport
-                    if (position.Y >= -item.ActualHeight && position.Y <= viewportHeight + item.ActualHeight)
-                    {
-                        yield return item;
-                    }
+                    isInViewport = position.Y >= -item.ActualHeight && position.Y <= viewportHeight + item.ActualHeight;
                 }
                 catch
                 {
                     // Skip items that can't be transformed (not in visual tree)
-                    continue;
+                    isInViewport = false;
+                }
+                
+                if (isInViewport)
+                {
+                    yield return item;
                 }
             }
         }
