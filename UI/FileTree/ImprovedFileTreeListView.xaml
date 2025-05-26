@@ -37,15 +37,16 @@
             <!-- Header ScrollViewer for horizontal sync -->
             <ScrollViewer x:Name="HeaderScrollViewer" 
                           HorizontalScrollBarVisibility="Hidden"
-                          VerticalScrollBarVisibility="Disabled">
+                          VerticalScrollBarVisibility="Disabled"
+                          CanContentScroll="False">
                 <Grid x:Name="HeaderGrid" Height="25">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="100" MaxWidth="600" SharedSizeGroup="NameColumn"/>
-                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition x:Name="SizeColumn" Width="100" MinWidth="60" MaxWidth="150" SharedSizeGroup="SizeColumn"/>
-                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition x:Name="TypeColumn" Width="120" MinWidth="80" MaxWidth="200" SharedSizeGroup="TypeColumn"/>
-                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition x:Name="DateColumn" Width="150" MinWidth="100" MaxWidth="250" SharedSizeGroup="DateColumn"/>
                         <ColumnDefinition Width="*"/> <!-- Fill remaining space -->
                     </Grid.ColumnDefinitions>
@@ -59,8 +60,9 @@
                         </DockPanel>
                     </Border>
                     
-                    <!-- Improved GridSplitter with visual feedback -->
-                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent"
+                    <!-- Optimized GridSplitter -->
+                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                                 Background="Transparent"
                                  DragStarted="ColumnSplitter_DragStarted"
                                  DragDelta="ColumnSplitter_DragDelta"
                                  DragCompleted="ColumnSplitter_DragCompleted"
@@ -68,6 +70,7 @@
                         <GridSplitter.Style>
                             <Style TargetType="GridSplitter">
                                 <Setter Property="Cursor" Value="SizeWE"/>
+                                <Setter Property="Focusable" Value="False"/>
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="GridSplitter">
@@ -104,7 +107,8 @@
                         </DockPanel>
                     </Border>
                     
-                    <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch" Background="Transparent"
+                    <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                                 Background="Transparent"
                                  DragStarted="ColumnSplitter_DragStarted"
                                  DragDelta="ColumnSplitter_DragDelta"
                                  DragCompleted="ColumnSplitter_DragCompleted"
@@ -112,6 +116,7 @@
                         <GridSplitter.Style>
                             <Style TargetType="GridSplitter">
                                 <Setter Property="Cursor" Value="SizeWE"/>
+                                <Setter Property="Focusable" Value="False"/>
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="GridSplitter">
@@ -142,7 +147,8 @@
                         </DockPanel>
                     </Border>
                     
-                    <GridSplitter Grid.Column="5" Width="5" HorizontalAlignment="Stretch" Background="Transparent"
+                    <GridSplitter Grid.Column="5" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                                 Background="Transparent"
                                  DragStarted="ColumnSplitter_DragStarted"
                                  DragDelta="ColumnSplitter_DragDelta"
                                  DragCompleted="ColumnSplitter_DragCompleted"
@@ -150,6 +156,7 @@
                         <GridSplitter.Style>
                             <Style TargetType="GridSplitter">
                                 <Setter Property="Cursor" Value="SizeWE"/>
+                                <Setter Property="Focusable" Value="False"/>
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="GridSplitter">
@@ -198,17 +205,19 @@
                       HorizontalScrollBarVisibility="Auto" 
                       VerticalScrollBarVisibility="Auto"
                       ScrollChanged="TreeScrollViewer_ScrollChanged"
-                      ScrollViewer.CanContentScroll="False"
+                      CanContentScroll="False"
                       VirtualizingStackPanel.ScrollUnit="Pixel">
-            <!-- File TreeView with proper column alignment and improved virtualization -->
+            <!-- File TreeView with proper column alignment and optimized virtualization -->
             <TreeView x:Name="fileTreeView" BorderThickness="0"
                      Background="{DynamicResource TreeViewBackground}"
                      VirtualizingStackPanel.IsVirtualizing="True"
                      VirtualizingStackPanel.VirtualizationMode="Recycling"
-                     VirtualizingStackPanel.CacheLengthUnit="Item"
-                     VirtualizingStackPanel.CacheLength="20,20"
+                     VirtualizingStackPanel.ScrollUnit="Pixel"
+                     VirtualizingStackPanel.CacheLengthUnit="Page"
+                     VirtualizingStackPanel.CacheLength="1,1"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                     ScrollViewer.IsDeferredScrollingEnabled="False">
                 
                 <!-- Optimized Item Container Style -->
                 <TreeView.ItemContainerStyle>
