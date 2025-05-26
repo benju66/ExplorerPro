@@ -34,94 +34,195 @@
         
         <!-- Column Headers with Border for background -->
         <Border Grid.Row="0" Background="{DynamicResource BackgroundColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
-            <Grid x:Name="HeaderGrid" Height="25">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="100" MaxWidth="600" SharedSizeGroup="NameColumn"/>
-                    <ColumnDefinition Width="5"/>
-                    <ColumnDefinition x:Name="SizeColumn" Width="100" MinWidth="60" MaxWidth="150" SharedSizeGroup="SizeColumn"/>
-                    <ColumnDefinition Width="5"/>
-                    <ColumnDefinition x:Name="TypeColumn" Width="120" MinWidth="80" MaxWidth="200" SharedSizeGroup="TypeColumn"/>
-                    <ColumnDefinition Width="5"/>
-                    <ColumnDefinition x:Name="DateColumn" Width="150" MinWidth="100" MaxWidth="250" SharedSizeGroup="DateColumn"/>
-                    <ColumnDefinition Width="*"/> <!-- Fill remaining space -->
-                </Grid.ColumnDefinitions>
-                
-                <!-- Column Headers -->
-                <Border Grid.Column="0" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
-                    <DockPanel>
-                        <TextBlock Text="Name" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
-                        <Border Width="5" DockPanel.Dock="Right" Background="Transparent" Cursor="SizeWE"
-                                MouseEnter="ColumnHeader_MouseEnter" MouseLeave="ColumnHeader_MouseLeave"/>
-                    </DockPanel>
-                </Border>
-                
-                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"
-                             DragStarted="ColumnSplitter_DragStarted"
-                             DragDelta="ColumnSplitter_DragDelta"
-                             DragCompleted="ColumnSplitter_DragCompleted"
-                             Tag="Name"/>
-                
-                <Border Grid.Column="2" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
-                    <DockPanel>
-                        <TextBlock Text="Size" Padding="6,3" VerticalAlignment="Center" TextAlignment="Right" Foreground="{DynamicResource TextColor}"/>
-                        <Border Width="5" DockPanel.Dock="Right" Background="Transparent" Cursor="SizeWE"
-                                MouseEnter="ColumnHeader_MouseEnter" MouseLeave="ColumnHeader_MouseLeave"/>
-                    </DockPanel>
-                </Border>
-                
-                <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"
-                             DragStarted="ColumnSplitter_DragStarted"
-                             DragDelta="ColumnSplitter_DragDelta"
-                             DragCompleted="ColumnSplitter_DragCompleted"
-                             Tag="Size"/>
-                
-                <Border Grid.Column="4" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
-                    <DockPanel>
-                        <TextBlock Text="Type" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
-                        <Border Width="5" DockPanel.Dock="Right" Background="Transparent" Cursor="SizeWE"
-                                MouseEnter="ColumnHeader_MouseEnter" MouseLeave="ColumnHeader_MouseLeave"/>
-                    </DockPanel>
-                </Border>
-                
-                <GridSplitter Grid.Column="5" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"
-                             DragStarted="ColumnSplitter_DragStarted"
-                             DragDelta="ColumnSplitter_DragDelta"
-                             DragCompleted="ColumnSplitter_DragCompleted"
-                             Tag="Type"/>
-                
-                <Border Grid.Column="6" Background="Transparent">
-                    <DockPanel>
-                        <TextBlock Text="Date Modified" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
-                        <Border Width="5" DockPanel.Dock="Right" Background="Transparent" Cursor="SizeWE"
-                                MouseEnter="ColumnHeader_MouseEnter" MouseLeave="ColumnHeader_MouseLeave"/>
-                    </DockPanel>
-                </Border>
-                
-                <!-- Header context menu -->
-                <Grid.ContextMenu>
-                    <ContextMenu x:Name="HeaderContextMenu">
-                        <MenuItem Header="Auto-size Column" Click="AutoSizeColumn_Click"/>
-                        <MenuItem Header="Auto-size All Columns" Click="AutoSizeAllColumns_Click"/>
-                        <Separator/>
-                        <MenuItem Header="Reset Column Widths" Click="ResetColumnWidths_Click"/>
-                    </ContextMenu>
-                </Grid.ContextMenu>
-            </Grid>
+            <!-- Header ScrollViewer for horizontal sync -->
+            <ScrollViewer x:Name="HeaderScrollViewer" 
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Disabled">
+                <Grid x:Name="HeaderGrid" Height="25">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="100" MaxWidth="600" SharedSizeGroup="NameColumn"/>
+                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition x:Name="SizeColumn" Width="100" MinWidth="60" MaxWidth="150" SharedSizeGroup="SizeColumn"/>
+                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition x:Name="TypeColumn" Width="120" MinWidth="80" MaxWidth="200" SharedSizeGroup="TypeColumn"/>
+                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition x:Name="DateColumn" Width="150" MinWidth="100" MaxWidth="250" SharedSizeGroup="DateColumn"/>
+                        <ColumnDefinition Width="*"/> <!-- Fill remaining space -->
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Column Headers -->
+                    <Border Grid.Column="0" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
+                        <DockPanel>
+                            <TextBlock Text="Name" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                            <Border Width="5" DockPanel.Dock="Right" Background="Transparent" Cursor="SizeWE"
+                                    MouseEnter="ColumnHeader_MouseEnter" MouseLeave="ColumnHeader_MouseLeave"/>
+                        </DockPanel>
+                    </Border>
+                    
+                    <!-- Improved GridSplitter with visual feedback -->
+                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent"
+                                 DragStarted="ColumnSplitter_DragStarted"
+                                 DragDelta="ColumnSplitter_DragDelta"
+                                 DragCompleted="ColumnSplitter_DragCompleted"
+                                 Tag="Name">
+                        <GridSplitter.Style>
+                            <Style TargetType="GridSplitter">
+                                <Setter Property="Cursor" Value="SizeWE"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="GridSplitter">
+                                            <Border Background="{TemplateBinding Background}" Width="{TemplateBinding Width}">
+                                                <!-- Visual feedback on hover -->
+                                                <Rectangle x:Name="HoverIndicator" 
+                                                          Width="1" 
+                                                          HorizontalAlignment="Center"
+                                                          Fill="Transparent"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="HoverIndicator" Property="Fill" 
+                                                            Value="{DynamicResource TreeLineHighlightColor}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsDragging" Value="True">
+                                                    <Setter TargetName="HoverIndicator" Property="Fill" 
+                                                            Value="{DynamicResource TreeLineHighlightColor}"/>
+                                                    <Setter TargetName="HoverIndicator" Property="Width" Value="3"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </GridSplitter.Style>
+                    </GridSplitter>
+                    
+                    <Border Grid.Column="2" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
+                        <DockPanel>
+                            <TextBlock Text="Size" Padding="6,3" VerticalAlignment="Center" TextAlignment="Right" Foreground="{DynamicResource TextColor}"/>
+                            <Border Width="5" DockPanel.Dock="Right" Background="Transparent" Cursor="SizeWE"
+                                    MouseEnter="ColumnHeader_MouseEnter" MouseLeave="ColumnHeader_MouseLeave"/>
+                        </DockPanel>
+                    </Border>
+                    
+                    <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch" Background="Transparent"
+                                 DragStarted="ColumnSplitter_DragStarted"
+                                 DragDelta="ColumnSplitter_DragDelta"
+                                 DragCompleted="ColumnSplitter_DragCompleted"
+                                 Tag="Size">
+                        <GridSplitter.Style>
+                            <Style TargetType="GridSplitter">
+                                <Setter Property="Cursor" Value="SizeWE"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="GridSplitter">
+                                            <Border Background="{TemplateBinding Background}" Width="{TemplateBinding Width}">
+                                                <Rectangle x:Name="HoverIndicator" Width="1" HorizontalAlignment="Center" Fill="Transparent"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="HoverIndicator" Property="Fill" Value="{DynamicResource TreeLineHighlightColor}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsDragging" Value="True">
+                                                    <Setter TargetName="HoverIndicator" Property="Fill" Value="{DynamicResource TreeLineHighlightColor}"/>
+                                                    <Setter TargetName="HoverIndicator" Property="Width" Value="3"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </GridSplitter.Style>
+                    </GridSplitter>
+                    
+                    <Border Grid.Column="4" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
+                        <DockPanel>
+                            <TextBlock Text="Type" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                            <Border Width="5" DockPanel.Dock="Right" Background="Transparent" Cursor="SizeWE"
+                                    MouseEnter="ColumnHeader_MouseEnter" MouseLeave="ColumnHeader_MouseLeave"/>
+                        </DockPanel>
+                    </Border>
+                    
+                    <GridSplitter Grid.Column="5" Width="5" HorizontalAlignment="Stretch" Background="Transparent"
+                                 DragStarted="ColumnSplitter_DragStarted"
+                                 DragDelta="ColumnSplitter_DragDelta"
+                                 DragCompleted="ColumnSplitter_DragCompleted"
+                                 Tag="Type">
+                        <GridSplitter.Style>
+                            <Style TargetType="GridSplitter">
+                                <Setter Property="Cursor" Value="SizeWE"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="GridSplitter">
+                                            <Border Background="{TemplateBinding Background}" Width="{TemplateBinding Width}">
+                                                <Rectangle x:Name="HoverIndicator" Width="1" HorizontalAlignment="Center" Fill="Transparent"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="HoverIndicator" Property="Fill" Value="{DynamicResource TreeLineHighlightColor}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsDragging" Value="True">
+                                                    <Setter TargetName="HoverIndicator" Property="Fill" Value="{DynamicResource TreeLineHighlightColor}"/>
+                                                    <Setter TargetName="HoverIndicator" Property="Width" Value="3"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </GridSplitter.Style>
+                    </GridSplitter>
+                    
+                    <Border Grid.Column="6" Background="Transparent">
+                        <DockPanel>
+                            <TextBlock Text="Date Modified" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                            <Border Width="5" DockPanel.Dock="Right" Background="Transparent" Cursor="SizeWE"
+                                    MouseEnter="ColumnHeader_MouseEnter" MouseLeave="ColumnHeader_MouseLeave"/>
+                        </DockPanel>
+                    </Border>
+                    
+                    <!-- Header context menu -->
+                    <Grid.ContextMenu>
+                        <ContextMenu x:Name="HeaderContextMenu">
+                            <MenuItem Header="Auto-size Column" Click="AutoSizeColumn_Click"/>
+                            <MenuItem Header="Auto-size All Columns" Click="AutoSizeAllColumns_Click"/>
+                            <Separator/>
+                            <MenuItem Header="Reset Column Widths" Click="ResetColumnWidths_Click"/>
+                        </ContextMenu>
+                    </Grid.ContextMenu>
+                </Grid>
+            </ScrollViewer>
         </Border>
         
         <!-- ScrollViewer to sync horizontal scrolling between header and content -->
         <ScrollViewer Grid.Row="1" x:Name="TreeScrollViewer" 
                       HorizontalScrollBarVisibility="Auto" 
                       VerticalScrollBarVisibility="Auto"
-                      ScrollChanged="TreeScrollViewer_ScrollChanged">
-            <!-- File TreeView with proper column alignment -->
+                      ScrollChanged="TreeScrollViewer_ScrollChanged"
+                      ScrollViewer.CanContentScroll="False"
+                      VirtualizingStackPanel.ScrollUnit="Pixel">
+            <!-- File TreeView with proper column alignment and improved virtualization -->
             <TreeView x:Name="fileTreeView" BorderThickness="0"
                      Background="{DynamicResource TreeViewBackground}"
                      VirtualizingStackPanel.IsVirtualizing="True"
                      VirtualizingStackPanel.VirtualizationMode="Recycling"
-                     ItemContainerStyle="{StaticResource TreeViewItemWithLines}"
+                     VirtualizingStackPanel.CacheLengthUnit="Item"
+                     VirtualizingStackPanel.CacheLength="20,20"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                
+                <!-- Optimized Item Container Style -->
+                <TreeView.ItemContainerStyle>
+                    <Style TargetType="TreeViewItem" BasedOn="{StaticResource TreeViewItemWithLines}">
+                        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
+                        <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling"/>
+                    </Style>
+                </TreeView.ItemContainerStyle>
+                
+                <TreeView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </TreeView.ItemsPanel>
                 
                 <TreeView.ItemTemplate>
                     <HierarchicalDataTemplate ItemsSource="{Binding Children}">
