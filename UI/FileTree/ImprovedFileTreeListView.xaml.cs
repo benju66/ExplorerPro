@@ -68,12 +68,8 @@ namespace ExplorerPro.UI.FileTree
         private ColumnDefinition _activeResizeColumn;
         private string _activeResizeColumnName;
         private double _originalColumnWidth;
-        private GridSplitter _activeSplitter;
         private bool _isResizing = false;
         private DispatcherTimer _resizeThrottleTimer;
-        private DispatcherTimer _columnUpdateTimer;
-        private readonly Dictionary<string, double> _pendingColumnWidths = new Dictionary<string, double>();
-        private readonly object _columnUpdateLock = new object();
         
         #endregion
 
@@ -163,12 +159,6 @@ namespace ExplorerPro.UI.FileTree
 
                 // Set DataContext to self for bindings
                 DataContext = this;
-
-                // Hide the progress overlay - we won't use it for Outlook extraction
-                if (ProgressOverlay != null)
-                {
-                    ProgressOverlay.Visibility = Visibility.Collapsed;
-                }
 
                 // Setup loaded event handler for final initialization
                 this.Loaded += ImprovedFileTreeListView_Loaded;
@@ -332,25 +322,12 @@ namespace ExplorerPro.UI.FileTree
             // Create a throttle timer for saving settings
             _resizeThrottleTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(500) // Save after 500ms of no resize activity
+                Interval = TimeSpan.FromMilliseconds(300) // Save after 300ms of no resize activity
             };
             _resizeThrottleTimer.Tick += (s, e) =>
             {
                 _resizeThrottleTimer.Stop();
                 SaveColumnSettings();
-            };
-
-            // Create timer for batched column updates during resize
-            _columnUpdateTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(50) // Update visible items every 50ms during resize
-            };
-            _columnUpdateTimer.Tick += (s, e) =>
-            {
-                if (_isResizing && _pendingColumnWidths.Count > 0)
-                {
-                    UpdateVisibleTreeViewItemColumns();
-                }
             };
         }
 
@@ -419,7 +396,6 @@ namespace ExplorerPro.UI.FileTree
             {
                 _isResizing = true;
                 _activeResizeColumnName = columnName;
-                _activeSplitter = splitter;
                 
                 // Find the column being resized
                 int columnIndex = GetColumnIndex(columnName);
@@ -427,15 +403,6 @@ namespace ExplorerPro.UI.FileTree
                 {
                     _activeResizeColumn = HeaderGrid.ColumnDefinitions[columnIndex];
                     _originalColumnWidth = _activeResizeColumn.ActualWidth;
-                    
-                    // Temporarily remove SharedSizeGroups from ALL columns for smooth resizing
-                    DisableAllSharedSizeGroups();
-                    
-                    // Capture mouse for smoother dragging
-                    _activeSplitter.CaptureMouse();
-                    
-                    // Start the column update timer
-                    _columnUpdateTimer.Start();
                     
                     System.Diagnostics.Debug.WriteLine($"[RESIZE] Started resizing column '{columnName}' from width {_originalColumnWidth}");
                 }
@@ -452,14 +419,8 @@ namespace ExplorerPro.UI.FileTree
                 // Apply constraints
                 newWidth = Math.Max(_activeResizeColumn.MinWidth, Math.Min(_activeResizeColumn.MaxWidth, newWidth));
                 
-                // Update header column immediately for responsive feedback
+                // Update only the header column for smooth feedback
                 _activeResizeColumn.Width = new GridLength(newWidth, GridUnitType.Pixel);
-                
-                // Store pending width update for tree items
-                lock (_columnUpdateLock)
-                {
-                    _pendingColumnWidths[_activeResizeColumnName] = newWidth;
-                }
                 
                 // Throttle the column service update
                 _resizeThrottleTimer.Stop();
@@ -473,36 +434,15 @@ namespace ExplorerPro.UI.FileTree
             {
                 double finalWidth = _activeResizeColumn.ActualWidth;
                 
-                // Stop the update timer
-                _columnUpdateTimer.Stop();
-                
-                // Release mouse capture
-                if (_activeSplitter != null)
-                {
-                    _activeSplitter.ReleaseMouseCapture();
-                }
-                
-                // Clear pending updates
-                lock (_columnUpdateLock)
-                {
-                    _pendingColumnWidths.Clear();
-                }
-                
-                // Re-enable SharedSizeGroups with new widths
-                RestoreAllSharedSizeGroups();
-                
-                // Update column service
+                // Update column service with final width
                 _columnService?.UpdateColumnWidth(_activeResizeColumnName, finalWidth);
                 
-                // Force a final complete update
-                Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
-                {
-                    UpdateAllTreeViewItemColumns();
-                    fileTreeView.UpdateLayout();
-                    
-                    // Save settings after layout is complete
-                    _columnService?.SaveColumnSettings();
-                }));
+                // Force a layout update to ensure SharedSizeGroups update
+                fileTreeView.UpdateLayout();
+                
+                // Save settings after a delay
+                _resizeThrottleTimer.Stop();
+                _resizeThrottleTimer.Start();
                 
                 System.Diagnostics.Debug.WriteLine($"[RESIZE] Completed resizing column '{_activeResizeColumnName}' to {finalWidth}");
                 
@@ -510,129 +450,7 @@ namespace ExplorerPro.UI.FileTree
                 _isResizing = false;
                 _activeResizeColumn = null;
                 _activeResizeColumnName = null;
-                _activeSplitter = null;
                 _originalColumnWidth = 0;
-            }
-        }
-        
-        private void DisableAllSharedSizeGroups()
-        {
-            // Store SharedSizeGroup values in Tag and clear them
-            foreach (var column in HeaderGrid.ColumnDefinitions)
-            {
-                if (!string.IsNullOrEmpty(column.SharedSizeGroup))
-                {
-                    column.Tag = column.SharedSizeGroup;
-                    column.SharedSizeGroup = null;
-                }
-            }
-        }
-        
-        private void RestoreAllSharedSizeGroups()
-        {
-            // Restore SharedSizeGroups from Tag property
-            foreach (var column in HeaderGrid.ColumnDefinitions)
-            {
-                if (column.Tag is string sharedSizeGroup && !string.IsNullOrEmpty(sharedSizeGroup))
-                {
-                    column.SharedSizeGroup = sharedSizeGroup;
-                    column.Tag = null;
-                }
-            }
-        }
-        
-        private void UpdateVisibleTreeViewItemColumns()
-        {
-            // Get current pending widths
-            Dictionary<string, double> widthsToApply;
-            lock (_columnUpdateLock)
-            {
-                if (_pendingColumnWidths.Count == 0) return;
-                widthsToApply = new Dictionary<string, double>(_pendingColumnWidths);
-            }
-            
-            // Update only visible TreeViewItems for performance
-            var scrollViewer = TreeScrollViewer;
-            if (scrollViewer == null) return;
-            
-            // Get visible items based on scroll position
-            var verticalOffset = scrollViewer.VerticalOffset;
-            var viewportHeight = scrollViewer.ViewportHeight;
-            
-            foreach (var item in GetVisibleTreeViewItems(verticalOffset, viewportHeight))
-            {
-                UpdateTreeViewItemColumns(item, widthsToApply);
-            }
-        }
-        
-        private IEnumerable<TreeViewItem> GetVisibleTreeViewItems(double verticalOffset, double viewportHeight)
-        {
-            foreach (var item in FindVisualChildren<TreeViewItem>(fileTreeView))
-            {
-                if (!item.IsVisible) continue;
-                
-                bool isInViewport = false;
-                
-                try
-                {
-                    var transform = item.TransformToAncestor(fileTreeView);
-                    var position = transform.Transform(new Point(0, 0));
-                    
-                    // Check if item is within viewport
-                    isInViewport = position.Y >= -item.ActualHeight && position.Y <= viewportHeight + item.ActualHeight;
-                }
-                catch
-                {
-                    // Skip items that can't be transformed (not in visual tree)
-                    isInViewport = false;
-                }
-                
-                if (isInViewport)
-                {
-                    yield return item;
-                }
-            }
-        }
-        
-        private void UpdateTreeViewItemColumns(TreeViewItem treeViewItem, Dictionary<string, double> widths)
-        {
-            // Find the Grid in the item's template
-            var presenter = FindVisualChild<ContentPresenter>(treeViewItem);
-            if (presenter == null) return;
-            
-            var grid = FindVisualChild<Grid>(presenter);
-            if (grid == null || grid.ColumnDefinitions.Count < 7) return;
-            
-            // Apply new widths
-            foreach (var kvp in widths)
-            {
-                int columnIndex = GetColumnIndex(kvp.Key);
-                if (columnIndex >= 0 && columnIndex < grid.ColumnDefinitions.Count)
-                {
-                    grid.ColumnDefinitions[columnIndex].Width = new GridLength(kvp.Value);
-                }
-            }
-        }
-        
-        private void UpdateAllTreeViewItemColumns()
-        {
-            // Update ALL TreeViewItems after resize is complete
-            var nameWidth = NameColumn.ActualWidth;
-            var sizeWidth = SizeColumn.ActualWidth;
-            var typeWidth = TypeColumn.ActualWidth;
-            var dateWidth = DateColumn.ActualWidth;
-            
-            var widths = new Dictionary<string, double>
-            {
-                ["Name"] = nameWidth,
-                ["Size"] = sizeWidth,
-                ["Type"] = typeWidth,
-                ["DateModified"] = dateWidth
-            };
-            
-            foreach (var item in FindVisualChildren<TreeViewItem>(fileTreeView))
-            {
-                UpdateTreeViewItemColumns(item, widths);
             }
         }
         
@@ -665,29 +483,12 @@ namespace ExplorerPro.UI.FileTree
             }
         }
         
-        private void ColumnHeader_MouseEnter(object sender, MouseEventArgs e)
-        {
-            if (sender is Border border)
-            {
-                border.Background = new SolidColorBrush(Color.FromArgb(20, 0, 0, 0));
-            }
-        }
-        
-        private void ColumnHeader_MouseLeave(object sender, MouseEventArgs e)
-        {
-            if (sender is Border border)
-            {
-                border.Background = Brushes.Transparent;
-            }
-        }
-        
         #endregion
 
         #region Column Context Menu Handlers
         
         private void AutoSizeColumn_Click(object sender, RoutedEventArgs e)
         {
-            // TODO: Implement auto-size for individual column
             var mousePos = Mouse.GetPosition(HeaderGrid);
             string columnName = GetColumnNameFromPosition(mousePos.X);
             if (!string.IsNullOrEmpty(columnName))
@@ -708,34 +509,22 @@ namespace ExplorerPro.UI.FileTree
         {
             _columnService?.ResetToDefaults();
             ApplyColumnSettingsToHeader();
-            UpdateAllTreeViewItemColumns();
         }
         
         private void AutoSizeColumn(string columnName)
         {
-            // Simple implementation - you can enhance this to measure actual content
             double optimalWidth = _columnService?.GetOptimalColumnWidth(columnName) ?? 100;
             
             int columnIndex = GetColumnIndex(columnName);
             if (columnIndex >= 0 && columnIndex < HeaderGrid.ColumnDefinitions.Count)
             {
                 var column = HeaderGrid.ColumnDefinitions[columnIndex];
-                
-                // Temporarily remove SharedSizeGroup
-                string savedGroup = column.SharedSizeGroup;
-                column.SharedSizeGroup = null;
-                
-                // Set new width
                 column.Width = new GridLength(optimalWidth);
                 
                 // Update column service
                 _columnService?.UpdateColumnWidth(columnName, optimalWidth);
                 
-                // Re-apply SharedSizeGroup
-                column.SharedSizeGroup = savedGroup;
-                
                 // Force layout update
-                UpdateAllTreeViewItemColumns();
                 fileTreeView.UpdateLayout();
             }
         }
@@ -782,31 +571,6 @@ namespace ExplorerPro.UI.FileTree
         
         #endregion
 
-        #region Performance Optimizations
-
-        protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
-        {
-            base.OnRenderSizeChanged(sizeInfo);
-            
-            // Defer column updates during window resize
-            if (sizeInfo.WidthChanged && !_isResizing)
-            {
-                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
-                {
-                    // Update column service with actual widths if they've changed significantly
-                    if (_columnService != null && Math.Abs(NameColumn.ActualWidth - _columnService.GetColumn("Name")?.Width ?? 0) > 1)
-                    {
-                        _columnService.UpdateColumnWidth("Name", NameColumn.ActualWidth);
-                        _columnService.UpdateColumnWidth("Size", SizeColumn.ActualWidth);
-                        _columnService.UpdateColumnWidth("Type", TypeColumn.ActualWidth);
-                        _columnService.UpdateColumnWidth("DateModified", DateColumn.ActualWidth);
-                    }
-                }));
-            }
-        }
-
-        #endregion
-
         #region Theme Management
                 
         /// <summary>
@@ -840,20 +604,6 @@ namespace ExplorerPro.UI.FileTree
                     
                     // Update TreeViewItems
                     RefreshTreeViewItems();
-                }
-                
-                // Update progress overlay if visible
-                if (ProgressOverlay != null && ProgressOverlay.Visibility == Visibility.Visible)
-                {
-                    ProgressOverlay.Background = GetResource<SolidColorBrush>("BackgroundColor");
-                    
-                    // Make background semi-transparent
-                    if (ProgressOverlay.Background is SolidColorBrush brush)
-                    {
-                        Color color = brush.Color;
-                        color.A = 200; // Make semi-transparent
-                        ProgressOverlay.Background = new SolidColorBrush(color);
-                    }
                 }
                 
                 // Refresh dynamic resources in DataTemplates
@@ -1478,8 +1228,6 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_DragEnter(object sender, DragEventArgs e)
         {
-            // No need to show progress overlay for Outlook data anymore
-            // We're processing it silently like Windows Explorer
             _dragDropService.HandleDragEnter(e);
         }
 
@@ -1938,12 +1686,6 @@ namespace ExplorerPro.UI.FileTree
                     {
                         _resizeThrottleTimer.Stop();
                         _resizeThrottleTimer = null;
-                    }
-                    
-                    if (_columnUpdateTimer != null)
-                    {
-                        _columnUpdateTimer.Stop();
-                        _columnUpdateTimer = null;
                     }
                     
                     // Save column settings before disposal

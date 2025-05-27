@@ -27,7 +27,6 @@ namespace ExplorerPro.UI.FileTree.Services
         private const double DEFAULT_SIZE_WIDTH = 100;
         private const double DEFAULT_TYPE_WIDTH = 120;
         private const double DEFAULT_DATE_WIDTH = 150;
-        private const double WIDTH_CHANGE_THRESHOLD = 0.5; // Minimum change to trigger events
 
         #endregion
 
@@ -35,10 +34,8 @@ namespace ExplorerPro.UI.FileTree.Services
 
         private readonly SettingsManager _settingsManager;
         private readonly List<FileTreeColumnDefinition> _columns;
-        private readonly Dictionary<string, double> _lastReportedWidths;
         private bool _isDirty;
         private bool _disposed;
-        private bool _suspendEvents;
 
         #endregion
 
@@ -57,15 +54,6 @@ namespace ExplorerPro.UI.FileTree.Services
         public IReadOnlyList<FileTreeColumnDefinition> VisibleColumns => 
             _columns.Where(c => c.IsVisible).OrderBy(c => c.DisplayIndex).ToList().AsReadOnly();
 
-        /// <summary>
-        /// Gets or sets whether events are suspended (useful during batch operations)
-        /// </summary>
-        public bool SuspendEvents 
-        { 
-            get => _suspendEvents;
-            set => _suspendEvents = value;
-        }
-
         #endregion
 
         #region Constructor
@@ -78,7 +66,6 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             _settingsManager = settingsManager ?? throw new ArgumentNullException(nameof(settingsManager));
             _columns = new List<FileTreeColumnDefinition>();
-            _lastReportedWidths = new Dictionary<string, double>();
             
             InitializeDefaultColumns();
             
@@ -102,7 +89,6 @@ namespace ExplorerPro.UI.FileTree.Services
                 MaxWidth = 600
             };
             _columns.Add(nameColumn);
-            _lastReportedWidths["Name"] = DEFAULT_NAME_WIDTH;
 
             // Size column
             var sizeColumn = new FileTreeColumnDefinition("Size", "Size", DEFAULT_SIZE_WIDTH, ColumnType.Size)
@@ -112,7 +98,6 @@ namespace ExplorerPro.UI.FileTree.Services
                 MaxWidth = 150
             };
             _columns.Add(sizeColumn);
-            _lastReportedWidths["Size"] = DEFAULT_SIZE_WIDTH;
 
             // Type column
             var typeColumn = new FileTreeColumnDefinition("Type", "Type", DEFAULT_TYPE_WIDTH, ColumnType.Type)
@@ -122,7 +107,6 @@ namespace ExplorerPro.UI.FileTree.Services
                 MaxWidth = 200
             };
             _columns.Add(typeColumn);
-            _lastReportedWidths["Type"] = DEFAULT_TYPE_WIDTH;
 
             // Date Modified column
             var dateColumn = new FileTreeColumnDefinition("DateModified", "Date Modified", DEFAULT_DATE_WIDTH, ColumnType.DateModified)
@@ -132,7 +116,6 @@ namespace ExplorerPro.UI.FileTree.Services
                 MaxWidth = 250
             };
             _columns.Add(dateColumn);
-            _lastReportedWidths["DateModified"] = DEFAULT_DATE_WIDTH;
 
             // Future columns (initially hidden)
             _columns.Add(new FileTreeColumnDefinition("DateCreated", "Date Created", 150, ColumnType.DateCreated)
@@ -156,8 +139,8 @@ namespace ExplorerPro.UI.FileTree.Services
 
         public void InitializeColumns(GridView gridView)
         {
-            // Not used in the new implementation since we're not using GridView
-            System.Diagnostics.Debug.WriteLine("[COLUMNS] InitializeColumns called (not used in new implementation)");
+            // Not used in the optimized implementation
+            System.Diagnostics.Debug.WriteLine("[COLUMNS] InitializeColumns called (not used in optimized implementation)");
         }
 
         #endregion
@@ -179,64 +162,15 @@ namespace ExplorerPro.UI.FileTree.Services
                 // Ensure width is within constraints
                 newWidth = Math.Max(column.MinWidth, Math.Min(column.MaxWidth, newWidth));
                 
-                // Check if change is significant enough to process
-                double lastReportedWidth = _lastReportedWidths.ContainsKey(columnName) ? 
-                    _lastReportedWidths[columnName] : oldWidth;
-                    
-                bool significantChange = Math.Abs(lastReportedWidth - newWidth) > WIDTH_CHANGE_THRESHOLD;
-                
                 if (Math.Abs(oldWidth - newWidth) > 0.1) // Small threshold for any update
                 {
                     column.Width = newWidth;
                     _isDirty = true;
                     
-                    // Only raise event if change is significant and events aren't suspended
-                    if (significantChange && !_suspendEvents)
-                    {
-                        _lastReportedWidths[columnName] = newWidth;
-                        
-                        System.Diagnostics.Debug.WriteLine($"[COLUMNS] Updated '{columnName}' width from {oldWidth:F2} to {newWidth:F2}");
-                        
-                        // Raise event
-                        ColumnWidthChanged?.Invoke(this, new ColumnWidthChangedEventArgs(columnName, oldWidth, newWidth));
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Batch update column widths without triggering individual events
-        /// </summary>
-        public void BatchUpdateColumnWidths(Dictionary<string, double> widths)
-        {
-            if (widths == null || widths.Count == 0) return;
-            
-            _suspendEvents = true;
-            try
-            {
-                foreach (var kvp in widths)
-                {
-                    UpdateColumnWidth(kvp.Key, kvp.Value);
-                }
-            }
-            finally
-            {
-                _suspendEvents = false;
-            }
-            
-            // Raise a single event for all changes
-            foreach (var kvp in widths)
-            {
-                if (_lastReportedWidths.ContainsKey(kvp.Key) && 
-                    Math.Abs(_lastReportedWidths[kvp.Key] - kvp.Value) > WIDTH_CHANGE_THRESHOLD)
-                {
-                    var column = GetColumn(kvp.Key);
-                    if (column != null)
-                    {
-                        ColumnWidthChanged?.Invoke(this, 
-                            new ColumnWidthChangedEventArgs(kvp.Key, _lastReportedWidths[kvp.Key], kvp.Value));
-                        _lastReportedWidths[kvp.Key] = kvp.Value;
-                    }
+                    System.Diagnostics.Debug.WriteLine($"[COLUMNS] Updated '{columnName}' width from {oldWidth:F2} to {newWidth:F2}");
+                    
+                    // Raise event
+                    ColumnWidthChanged?.Invoke(this, new ColumnWidthChangedEventArgs(columnName, oldWidth, newWidth));
                 }
             }
         }
@@ -253,10 +187,7 @@ namespace ExplorerPro.UI.FileTree.Services
                     
                     System.Diagnostics.Debug.WriteLine($"[COLUMNS] Set '{columnName}' visibility to {isVisible}");
                     
-                    if (!_suspendEvents)
-                    {
-                        ColumnVisibilityChanged?.Invoke(this, new ColumnVisibilityChangedEventArgs(columnName, isVisible));
-                    }
+                    ColumnVisibilityChanged?.Invoke(this, new ColumnVisibilityChangedEventArgs(columnName, isVisible));
                 }
             }
         }
@@ -265,19 +196,10 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             System.Diagnostics.Debug.WriteLine("[COLUMNS] Resetting all columns to defaults");
             
-            _suspendEvents = true;
-            try
+            foreach (var column in _columns)
             {
-                foreach (var column in _columns)
-                {
-                    column.ResetToDefault();
-                    column.IsVisible = column.Type != ColumnType.DateCreated && column.Type != ColumnType.DateAccessed;
-                    _lastReportedWidths[column.Name] = column.Width;
-                }
-            }
-            finally
-            {
-                _suspendEvents = false;
+                column.ResetToDefault();
+                column.IsVisible = column.Type != ColumnType.DateCreated && column.Type != ColumnType.DateAccessed;
             }
             
             _isDirty = true;
@@ -304,10 +226,7 @@ namespace ExplorerPro.UI.FileTree.Services
             if (changed)
             {
                 _isDirty = true;
-                if (!_suspendEvents)
-                {
-                    ColumnsReordered?.Invoke(this, new ColumnsReorderedEventArgs(newOrder));
-                }
+                ColumnsReordered?.Invoke(this, new ColumnsReorderedEventArgs(newOrder));
             }
         }
 
@@ -317,8 +236,8 @@ namespace ExplorerPro.UI.FileTree.Services
 
         public void MakeColumnsResizable(UIElement control)
         {
-            // Not used in the new implementation since resize is handled in the XAML
-            System.Diagnostics.Debug.WriteLine("[COLUMNS] MakeColumnsResizable called (not used in new implementation)");
+            // Not used in the optimized implementation
+            System.Diagnostics.Debug.WriteLine("[COLUMNS] MakeColumnsResizable called (not used in optimized implementation)");
         }
 
         #endregion
@@ -331,7 +250,6 @@ namespace ExplorerPro.UI.FileTree.Services
             if (column == null) return 100;
             
             // These are reasonable defaults for typical content
-            // In a full implementation, you would measure actual content
             switch (column.Type)
             {
                 case ColumnType.Name:
@@ -359,17 +277,9 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             System.Diagnostics.Debug.WriteLine("[COLUMNS] Auto-sizing all columns");
             
-            _suspendEvents = true;
-            try
+            foreach (var column in VisibleColumns)
             {
-                foreach (var column in VisibleColumns)
-                {
-                    AutoSizeColumn(column.Name);
-                }
-            }
-            finally
-            {
-                _suspendEvents = false;
+                AutoSizeColumn(column.Name);
             }
         }
 
@@ -429,41 +339,32 @@ namespace ExplorerPro.UI.FileTree.Services
                 
                 System.Diagnostics.Debug.WriteLine($"[COLUMNS] Loading settings for {settings.Count} columns");
                 
-                _suspendEvents = true;
-                try
+                foreach (var kvp in settings)
                 {
-                    foreach (var kvp in settings)
+                    var column = GetColumn(kvp.Key);
+                    if (column == null) continue;
+                    
+                    if (kvp.Value is Dictionary<string, object> columnSettings)
                     {
-                        var column = GetColumn(kvp.Key);
-                        if (column == null) continue;
-                        
-                        if (kvp.Value is Dictionary<string, object> columnSettings)
+                        if (columnSettings.TryGetValue("width", out var width))
                         {
-                            if (columnSettings.TryGetValue("width", out var width))
-                            {
-                                double widthValue = Convert.ToDouble(width);
-                                // Ensure loaded width respects constraints
-                                widthValue = Math.Max(column.MinWidth, Math.Min(column.MaxWidth, widthValue));
-                                column.Width = widthValue;
-                                _lastReportedWidths[kvp.Key] = widthValue;
-                                System.Diagnostics.Debug.WriteLine($"[COLUMNS] Loaded width for '{kvp.Key}': {widthValue}");
-                            }
-                            
-                            if (columnSettings.TryGetValue("visible", out var visible) && column.CanHide)
-                            {
-                                column.IsVisible = Convert.ToBoolean(visible);
-                            }
-                            
-                            if (columnSettings.TryGetValue("index", out var index))
-                            {
-                                column.DisplayIndex = Convert.ToInt32(index);
-                            }
+                            double widthValue = Convert.ToDouble(width);
+                            // Ensure loaded width respects constraints
+                            widthValue = Math.Max(column.MinWidth, Math.Min(column.MaxWidth, widthValue));
+                            column.Width = widthValue;
+                            System.Diagnostics.Debug.WriteLine($"[COLUMNS] Loaded width for '{kvp.Key}': {widthValue}");
+                        }
+                        
+                        if (columnSettings.TryGetValue("visible", out var visible) && column.CanHide)
+                        {
+                            column.IsVisible = Convert.ToBoolean(visible);
+                        }
+                        
+                        if (columnSettings.TryGetValue("index", out var index))
+                        {
+                            column.DisplayIndex = Convert.ToInt32(index);
                         }
                     }
-                }
-                finally
-                {
-                    _suspendEvents = false;
                 }
                 
                 System.Diagnostics.Debug.WriteLine("[COLUMNS] Settings loaded successfully");
@@ -472,47 +373,6 @@ namespace ExplorerPro.UI.FileTree.Services
             {
                 System.Diagnostics.Debug.WriteLine($"[COLUMNS] Error loading settings: {ex.Message}");
             }
-        }
-
-        /// <summary>
-        /// Forces an immediate save of column settings if there are pending changes
-        /// </summary>
-        public void FlushSettings()
-        {
-            if (_isDirty)
-            {
-                SaveColumnSettings();
-            }
-        }
-
-        #endregion
-
-        #region Helper Methods
-
-        /// <summary>
-        /// Gets the current widths of all columns
-        /// </summary>
-        public Dictionary<string, double> GetCurrentWidths()
-        {
-            var widths = new Dictionary<string, double>();
-            foreach (var column in _columns)
-            {
-                widths[column.Name] = column.Width;
-            }
-            return widths;
-        }
-
-        /// <summary>
-        /// Gets the current widths of visible columns only
-        /// </summary>
-        public Dictionary<string, double> GetVisibleColumnWidths()
-        {
-            var widths = new Dictionary<string, double>();
-            foreach (var column in VisibleColumns)
-            {
-                widths[column.Name] = column.Width;
-            }
-            return widths;
         }
 
         #endregion
@@ -539,7 +399,6 @@ namespace ExplorerPro.UI.FileTree.Services
                     
                     // Clear collections
                     _columns.Clear();
-                    _lastReportedWidths.Clear();
                 }
                 
                 _disposed = true;
