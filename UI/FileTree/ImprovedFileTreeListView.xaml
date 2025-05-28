@@ -26,93 +26,10 @@
             <!-- Multi-select converters -->
             <local:BoolToMultiSelectTagConverter x:Key="BoolToMultiSelectTagConverter"/>
             <local:MultiSelectVisibilityConverter x:Key="MultiSelectVisibilityConverter"/>
-            
-            <!-- Column Resize Animation Storyboard -->
-            <Storyboard x:Key="ColumnResizeAnimation">
-                <DoubleAnimation Duration="0:0:0.15" 
-                                 Storyboard.TargetProperty="Width"
-                                 EasingFunction="{StaticResource {x:Static SystemParameters.MenuPopupAnimationKey}}"/>
-            </Storyboard>
-            
-            <!-- Column Hover Effect -->
-            <Style x:Key="ColumnHeaderHoverStyle" TargetType="Border">
-                <Style.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True">
-                        <Trigger.EnterActions>
-                            <BeginStoryboard>
-                                <Storyboard>
-                                    <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                    To="#10000000" Duration="0:0:0.15"/>
-                                </Storyboard>
-                            </BeginStoryboard>
-                        </Trigger.EnterActions>
-                        <Trigger.ExitActions>
-                            <BeginStoryboard>
-                                <Storyboard>
-                                    <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                    Duration="0:0:0.15"/>
-                                </Storyboard>
-                            </BeginStoryboard>
-                        </Trigger.ExitActions>
-                    </Trigger>
-                </Style.Triggers>
-            </Style>
-            
-            <!-- Enhanced GridSplitter Style -->
-            <Style x:Key="EnhancedGridSplitterStyle" TargetType="GridSplitter">
-                <Setter Property="Background" Value="Transparent"/>
-                <Setter Property="Cursor" Value="SizeWE"/>
-                <Setter Property="Focusable" Value="False"/>
-                <Setter Property="behaviors:ColumnResizeBehavior.EnableSmoothResize" Value="True"/>
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="GridSplitter">
-                            <Grid Background="{TemplateBinding Background}">
-                                <!-- Invisible hit area for easier grabbing -->
-                                <Rectangle Fill="Transparent" Margin="-3,0"/>
-                                <!-- Visual indicator -->
-                                <Rectangle x:Name="Indicator" 
-                                         Width="1" 
-                                         HorizontalAlignment="Center"
-                                         Fill="{DynamicResource BorderColor}"
-                                         Opacity="0"/>
-                            </Grid>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Trigger.EnterActions>
-                                        <BeginStoryboard>
-                                            <Storyboard>
-                                                <DoubleAnimation Storyboard.TargetName="Indicator"
-                                                               Storyboard.TargetProperty="Opacity"
-                                                               To="0.5" Duration="0:0:0.15"/>
-                                                <DoubleAnimation Storyboard.TargetName="Indicator"
-                                                               Storyboard.TargetProperty="Width"
-                                                               To="3" Duration="0:0:0.15"/>
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </Trigger.EnterActions>
-                                    <Trigger.ExitActions>
-                                        <BeginStoryboard>
-                                            <Storyboard>
-                                                <DoubleAnimation Storyboard.TargetName="Indicator"
-                                                               Storyboard.TargetProperty="Opacity"
-                                                               To="0" Duration="0:0:0.15"/>
-                                                <DoubleAnimation Storyboard.TargetName="Indicator"
-                                                               Storyboard.TargetProperty="Width"
-                                                               To="1" Duration="0:0:0.15"/>
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </Trigger.ExitActions>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
     
-    <!-- Main grid WITHOUT shared size scope -->
+    <!-- Main grid WITHOUT shared size scope for better performance -->
     <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}">
         <!-- Column Headers Row -->
         <Grid.RowDefinitions>
@@ -152,7 +69,7 @@
                     
                     <!-- Column Headers with hover effects -->
                     <Border Grid.Column="1" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" 
-                            Background="Transparent" Style="{StaticResource ColumnHeaderHoverStyle}">
+                            Background="Transparent">
                         <Grid>
                             <TextBlock Text="Name" Padding="8,4" VerticalAlignment="Center" 
                                      Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
@@ -161,13 +78,76 @@
                                   Margin="0,0,8,0" Width="8" Height="8" Visibility="Collapsed"
                                   Data="M 0 4 L 4 0 L 8 4 Z" Fill="{DynamicResource TextColor}"/>
                         </Grid>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#10000000"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                     </Border>
                     
-                    <!-- Enhanced GridSplitter with smooth resize -->
-                    <GridSplitter Grid.Column="2" Style="{StaticResource EnhancedGridSplitterStyle}" Tag="Name"/>
+                    <!-- Enhanced GridSplitter with smooth resize behavior -->
+                    <GridSplitter Grid.Column="2" behaviors:ColumnResizeBehavior.EnableSmoothResize="True" Tag="Name">
+                        <GridSplitter.Style>
+                            <Style TargetType="GridSplitter">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Cursor" Value="SizeWE"/>
+                                <Setter Property="Focusable" Value="False"/>
+                                <Setter Property="Margin" Value="-2,0,-2,0"/>
+                                <Setter Property="Panel.ZIndex" Value="10"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="GridSplitter">
+                                            <Grid Background="{TemplateBinding Background}">
+                                                <!-- Invisible hit area for easier grabbing -->
+                                                <Rectangle Fill="Transparent" Width="9"/>
+                                                <!-- Visual indicator -->
+                                                <Rectangle x:Name="Indicator" 
+                                                         Width="1" 
+                                                         HorizontalAlignment="Center"
+                                                         Fill="{DynamicResource BorderColor}"
+                                                         Opacity="0"/>
+                                            </Grid>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Trigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                                               Storyboard.TargetProperty="Opacity"
+                                                                               To="0.5" Duration="0:0:0.15"/>
+                                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                                               Storyboard.TargetProperty="Width"
+                                                                               To="3" Duration="0:0:0.15"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.EnterActions>
+                                                    <Trigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                                               Storyboard.TargetProperty="Opacity"
+                                                                               To="0" Duration="0:0:0.15"/>
+                                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                                               Storyboard.TargetProperty="Width"
+                                                                               To="1" Duration="0:0:0.15"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.ExitActions>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </GridSplitter.Style>
+                    </GridSplitter>
                     
                     <Border Grid.Column="3" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" 
-                            Background="Transparent" Style="{StaticResource ColumnHeaderHoverStyle}">
+                            Background="Transparent">
                         <Grid>
                             <TextBlock Text="Size" Padding="8,4" VerticalAlignment="Center" TextAlignment="Right" 
                                      Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
@@ -175,12 +155,73 @@
                                   Margin="8,0,0,0" Width="8" Height="8" Visibility="Collapsed"
                                   Data="M 0 4 L 4 0 L 8 4 Z" Fill="{DynamicResource TextColor}"/>
                         </Grid>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#10000000"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                     </Border>
                     
-                    <GridSplitter Grid.Column="4" Style="{StaticResource EnhancedGridSplitterStyle}" Tag="Size"/>
+                    <GridSplitter Grid.Column="4" behaviors:ColumnResizeBehavior.EnableSmoothResize="True" Tag="Size">
+                        <GridSplitter.Style>
+                            <Style TargetType="GridSplitter">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Cursor" Value="SizeWE"/>
+                                <Setter Property="Focusable" Value="False"/>
+                                <Setter Property="Margin" Value="-2,0,-2,0"/>
+                                <Setter Property="Panel.ZIndex" Value="10"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="GridSplitter">
+                                            <Grid Background="{TemplateBinding Background}">
+                                                <Rectangle Fill="Transparent" Width="9"/>
+                                                <Rectangle x:Name="Indicator" 
+                                                         Width="1" 
+                                                         HorizontalAlignment="Center"
+                                                         Fill="{DynamicResource BorderColor}"
+                                                         Opacity="0"/>
+                                            </Grid>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Trigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                                               Storyboard.TargetProperty="Opacity"
+                                                                               To="0.5" Duration="0:0:0.15"/>
+                                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                                               Storyboard.TargetProperty="Width"
+                                                                               To="3" Duration="0:0:0.15"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.EnterActions>
+                                                    <Trigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                                               Storyboard.TargetProperty="Opacity"
+                                                                               To="0" Duration="0:0:0.15"/>
+                                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                                               Storyboard.TargetProperty="Width"
+                                                                               To="1" Duration="0:0:0.15"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.ExitActions>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </GridSplitter.Style>
+                    </GridSplitter>
                     
                     <Border Grid.Column="5" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" 
-                            Background="Transparent" Style="{StaticResource ColumnHeaderHoverStyle}">
+                            Background="Transparent">
                         <Grid>
                             <TextBlock Text="Type" Padding="8,4" VerticalAlignment="Center" 
                                      Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
@@ -188,11 +229,72 @@
                                   Margin="0,0,8,0" Width="8" Height="8" Visibility="Collapsed"
                                   Data="M 0 4 L 4 0 L 8 4 Z" Fill="{DynamicResource TextColor}"/>
                         </Grid>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#10000000"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                     </Border>
                     
-                    <GridSplitter Grid.Column="6" Style="{StaticResource EnhancedGridSplitterStyle}" Tag="Type"/>
+                    <GridSplitter Grid.Column="6" behaviors:ColumnResizeBehavior.EnableSmoothResize="True" Tag="Type">
+                        <GridSplitter.Style>
+                            <Style TargetType="GridSplitter">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Cursor" Value="SizeWE"/>
+                                <Setter Property="Focusable" Value="False"/>
+                                <Setter Property="Margin" Value="-2,0,-2,0"/>
+                                <Setter Property="Panel.ZIndex" Value="10"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="GridSplitter">
+                                            <Grid Background="{TemplateBinding Background}">
+                                                <Rectangle Fill="Transparent" Width="9"/>
+                                                <Rectangle x:Name="Indicator" 
+                                                         Width="1" 
+                                                         HorizontalAlignment="Center"
+                                                         Fill="{DynamicResource BorderColor}"
+                                                         Opacity="0"/>
+                                            </Grid>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Trigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                                               Storyboard.TargetProperty="Opacity"
+                                                                               To="0.5" Duration="0:0:0.15"/>
+                                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                                               Storyboard.TargetProperty="Width"
+                                                                               To="3" Duration="0:0:0.15"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.EnterActions>
+                                                    <Trigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                                               Storyboard.TargetProperty="Opacity"
+                                                                               To="0" Duration="0:0:0.15"/>
+                                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                                               Storyboard.TargetProperty="Width"
+                                                                               To="1" Duration="0:0:0.15"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.ExitActions>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </GridSplitter.Style>
+                    </GridSplitter>
                     
-                    <Border Grid.Column="7" Background="Transparent" Style="{StaticResource ColumnHeaderHoverStyle}">
+                    <Border Grid.Column="7" Background="Transparent">
                         <Grid>
                             <TextBlock Text="Date Modified" Padding="8,4" VerticalAlignment="Center" 
                                      Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
@@ -200,6 +302,15 @@
                                   Margin="0,0,8,0" Width="8" Height="8" Visibility="Collapsed"
                                   Data="M 0 4 L 4 0 L 8 4 Z" Fill="{DynamicResource TextColor}"/>
                         </Grid>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#10000000"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                     </Border>
                     
                     <!-- Header context menu -->
@@ -262,21 +373,21 @@
                     </Style>
                 </TreeView.ItemContainerStyle>
                 
-                <!-- Use custom virtualizing panel -->
+                <!-- Use standard virtualizing panel for better performance -->
                 <TreeView.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <local:FileTreeVirtualizingPanel x:Name="TreeItemsPanel"/>
+                        <VirtualizingStackPanel/>
                     </ItemsPanelTemplate>
                 </TreeView.ItemsPanel>
                 
                 <TreeView.ItemTemplate>
                     <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                        <!-- Grid WITHOUT shared size groups -->
+                        <!-- Grid WITHOUT shared size groups for better performance -->
                         <Grid x:Name="ItemGrid">
                             <Grid.ColumnDefinitions>
                                 <!-- Checkbox column for multi-selection -->
                                 <ColumnDefinition Width="Auto"/>
-                                <!-- Dynamic column widths that will be updated in code -->
+                                <!-- Dynamic column widths that will be synchronized in code -->
                                 <ColumnDefinition x:Name="ItemNameColumn" Width="250"/>
                                 <ColumnDefinition Width="5"/>
                                 <ColumnDefinition x:Name="ItemSizeColumn" Width="100"/>
