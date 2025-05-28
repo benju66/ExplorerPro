@@ -1,4 +1,4 @@
-// UI/FileTree/DragDrop/DragDropHelper.cs - Fixed with proper naming
+// UI/FileTree/DragDrop/DragDropHelper.cs - Consolidated version
 using System.Windows;
 
 namespace ExplorerPro.UI.FileTree.DragDrop

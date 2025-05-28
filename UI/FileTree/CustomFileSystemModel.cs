@@ -58,7 +58,7 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Handles rename operations with undo support
+        /// Handles rename operations (temporarily without undo support)
         /// </summary>
         public bool RenameItem(string oldPath, string newName)
         {
@@ -78,11 +78,18 @@ namespace ExplorerPro.UI.FileTree
                     return false;
                 }
 
-                // Create and execute a rename command - pass null for logger to avoid type conflict
-                var command = new RenameCommand(fileOperations, oldPath, newName, null);
-                undoManager.ExecuteCommand(command);
+                // Perform rename directly (without command pattern for now)
+                string resultPath = fileOperations.RenameItem(oldPath, newName);
                 
-                return command.NewPath != null;
+                if (string.IsNullOrEmpty(resultPath))
+                {
+                    MessageBox.Show($"Failed to rename item.", 
+                        "Rename Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return false;
+                }
+                
+                logger?.LogInformation($"Renamed '{oldPath}' to '{resultPath}'");
+                return true;
             }
             catch (Exception ex)
             {
