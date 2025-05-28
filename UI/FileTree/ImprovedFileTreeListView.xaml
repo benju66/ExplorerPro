@@ -21,6 +21,10 @@
             
             <!-- Boolean to Visibility Converter -->
             <local:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+            
+            <!-- Multi-select converters -->
+            <local:BoolToMultiSelectTagConverter x:Key="BoolToMultiSelectTagConverter"/>
+            <local:MultiSelectVisibilityConverter x:Key="MultiSelectVisibilityConverter"/>
         </ResourceDictionary>
     </UserControl.Resources>
     
@@ -41,6 +45,8 @@
                           CanContentScroll="False">
                 <Grid x:Name="HeaderGrid" Height="25">
                     <Grid.ColumnDefinitions>
+                        <!-- Checkbox column for multi-selection -->
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="CheckboxColumn"/>
                         <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="100" MaxWidth="600" SharedSizeGroup="NameColumn"/>
                         <ColumnDefinition Width="5"/>
                         <ColumnDefinition x:Name="SizeColumn" Width="100" MinWidth="60" MaxWidth="150" SharedSizeGroup="SizeColumn"/>
@@ -51,13 +57,22 @@
                         <ColumnDefinition Width="*"/> <!-- Fill remaining space -->
                     </Grid.ColumnDefinitions>
                     
+                    <!-- Multi-select checkbox header -->
+                    <CheckBox Grid.Column="0" 
+                              x:Name="SelectAllCheckBox"
+                              Margin="4,0,4,0"
+                              VerticalAlignment="Center"
+                              Visibility="{Binding IsMultiSelectMode, Converter={StaticResource BooleanToVisibilityConverter}}"
+                              Click="SelectAllCheckBox_Click"
+                              ToolTip="Select/Deselect All"/>
+                    
                     <!-- Column Headers -->
-                    <Border Grid.Column="0" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
+                    <Border Grid.Column="1" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
                         <TextBlock Text="Name" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
                     </Border>
                     
                     <!-- Optimized GridSplitter with Preview -->
-                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                    <GridSplitter Grid.Column="2" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
                                  Background="Transparent"
                                  ShowsPreview="True"
                                  PreviewStyle="{StaticResource ColumnResizePreviewStyle}"
@@ -78,11 +93,11 @@
                         </GridSplitter.Style>
                     </GridSplitter>
                     
-                    <Border Grid.Column="2" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
+                    <Border Grid.Column="3" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
                         <TextBlock Text="Size" Padding="6,3" VerticalAlignment="Center" TextAlignment="Right" Foreground="{DynamicResource TextColor}"/>
                     </Border>
                     
-                    <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                    <GridSplitter Grid.Column="4" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
                                  Background="Transparent"
                                  ShowsPreview="True"
                                  PreviewStyle="{StaticResource ColumnResizePreviewStyle}"
@@ -103,11 +118,11 @@
                         </GridSplitter.Style>
                     </GridSplitter>
                     
-                    <Border Grid.Column="4" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
+                    <Border Grid.Column="5" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
                         <TextBlock Text="Type" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
                     </Border>
                     
-                    <GridSplitter Grid.Column="5" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                    <GridSplitter Grid.Column="6" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
                                  Background="Transparent"
                                  ShowsPreview="True"
                                  PreviewStyle="{StaticResource ColumnResizePreviewStyle}"
@@ -128,7 +143,7 @@
                         </GridSplitter.Style>
                     </GridSplitter>
                     
-                    <Border Grid.Column="6" Background="Transparent">
+                    <Border Grid.Column="7" Background="Transparent">
                         <TextBlock Text="Date Modified" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
                     </Border>
                     
@@ -162,7 +177,8 @@
                      VirtualizingStackPanel.CacheLength="2,2"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                     ScrollViewer.IsDeferredScrollingEnabled="False">
+                     ScrollViewer.IsDeferredScrollingEnabled="False"
+                     Tag="{Binding IsMultiSelectMode, Converter={StaticResource BoolToMultiSelectTagConverter}}">
                 
                 <!-- Optimized Item Container Style -->
                 <TreeView.ItemContainerStyle>
@@ -183,6 +199,8 @@
                         <!-- Grid with shared size groups for column alignment -->
                         <Grid>
                             <Grid.ColumnDefinitions>
+                                <!-- Checkbox column for multi-selection -->
+                                <ColumnDefinition SharedSizeGroup="CheckboxColumn"/>
                                 <!-- Match the header column definitions exactly -->
                                 <ColumnDefinition SharedSizeGroup="NameColumn"/>
                                 <ColumnDefinition Width="5"/>
@@ -194,8 +212,18 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             
+                            <!-- Multi-selection checkbox -->
+                            <CheckBox Grid.Column="0" 
+                                      Margin="4,0,4,0"
+                                      VerticalAlignment="Center"
+                                      IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                      Visibility="{Binding RelativeSource={RelativeSource AncestorType=TreeView}, 
+                                                  Path=Tag, 
+                                                  Converter={StaticResource MultiSelectVisibilityConverter}}"
+                                      Click="SelectionCheckBox_Click"/>
+                            
                             <!-- Name Column with tree structure -->
-                            <Grid Grid.Column="0" ClipToBounds="True">
+                            <Grid Grid.Column="1" ClipToBounds="True">
                                 <!-- Background for selection -->
                                 <Rectangle x:Name="SelectionBackground" Fill="Transparent" RadiusX="2" RadiusY="2"/>
                                 
@@ -277,7 +305,7 @@
                             </Grid>
                             
                             <!-- Size Column -->
-                            <TextBlock Grid.Column="2" Text="{Binding Size}" 
+                            <TextBlock Grid.Column="3" Text="{Binding Size}" 
                                       VerticalAlignment="Center" 
                                       TextAlignment="Right"
                                       Margin="5,0"
@@ -286,7 +314,7 @@
                                       FontWeight="{Binding FontWeight}"/>
                             
                             <!-- Type Column -->
-                            <TextBlock Grid.Column="4" Text="{Binding Type}" 
+                            <TextBlock Grid.Column="5" Text="{Binding Type}" 
                                       VerticalAlignment="Center" 
                                       TextAlignment="Left"
                                       Margin="5,0"
@@ -295,7 +323,7 @@
                                       FontWeight="{Binding FontWeight}"/>
                             
                             <!-- Date Modified Column -->
-                            <TextBlock Grid.Column="6" Text="{Binding LastModifiedStr}" 
+                            <TextBlock Grid.Column="7" Text="{Binding LastModifiedStr}" 
                                       VerticalAlignment="Center" 
                                       TextAlignment="Left"
                                       Margin="5,0"

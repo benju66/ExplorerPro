@@ -19,7 +19,7 @@ namespace ExplorerPro.UI.FileTree.Services
     /// <summary>
     /// Enhanced drag and drop service with multi-selection, visual feedback, and advanced features
     /// </summary>
-    public class FileTreeDragDropService : IFileTreeDragDropService, IDisposable
+    public class FileTreeDragDropService : IDisposable
     {
         #region Constants
         
@@ -61,11 +61,11 @@ namespace ExplorerPro.UI.FileTree.Services
         
         #region Constructor
         
-        public FileTreeDragDropService(UndoManager undoManager, IFileOperations fileOperations, SelectionService selectionService)
+        public FileTreeDragDropService(UndoManager undoManager = null, IFileOperations fileOperations = null, SelectionService selectionService = null)
         {
-            _undoManager = undoManager ?? throw new ArgumentNullException(nameof(undoManager));
-            _fileOperations = fileOperations ?? throw new ArgumentNullException(nameof(fileOperations));
-            _selectionService = selectionService ?? throw new ArgumentNullException(nameof(selectionService));
+            _undoManager = undoManager ?? UndoManager.Instance;
+            _fileOperations = fileOperations ?? new FileOperations.FileOperations();
+            _selectionService = selectionService ?? new SelectionService();
             
             _springLoadedHelper = new SpringLoadedFolderHelper();
             _springLoadedHelper.FolderExpanding += OnSpringLoadedFolderExpanding;
@@ -129,7 +129,7 @@ namespace ExplorerPro.UI.FileTree.Services
         
         #endregion
         
-        #region IFileTreeDragDropService Implementation
+        #region Public Interface Methods (for compatibility)
         
         public void HandleDragEnter(DragEventArgs e)
         {
@@ -183,20 +183,11 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             try
             {
-                var result = await ExtractOutlookFilesSimplified(dataObject, targetPath);
+                var extractionResult = await OutlookDataExtractor.ExtractOutlookFilesAsync(dataObject, targetPath);
                 
-                OnOutlookExtractionCompleted(new OutlookExtractionCompletedEventArgs(
-                    new OutlookDataExtractor.ExtractionResult
-                    {
-                        Success = result.Success,
-                        ExtractedFiles = result.ExtractedFiles,
-                        ErrorMessage = result.ErrorMessage,
-                        TotalFiles = result.ExtractedFiles.Count
-                    },
-                    targetPath
-                ));
+                OnOutlookExtractionCompleted(new OutlookExtractionCompletedEventArgs(extractionResult, targetPath));
                 
-                return result.Success;
+                return extractionResult.Success;
             }
             catch (Exception ex)
             {
@@ -207,7 +198,7 @@ namespace ExplorerPro.UI.FileTree.Services
         
         public void CancelOutlookExtraction()
         {
-            // Cancellation not implemented in simplified version
+            // Cancellation not implemented in current version
         }
         
         #endregion
@@ -591,31 +582,6 @@ namespace ExplorerPro.UI.FileTree.Services
         
         #endregion
         
-        #region Outlook Handling (Simplified)
-        
-        private async Task<OutlookExtractionResult> ExtractOutlookFilesSimplified(DataObject data, string targetPath)
-        {
-            var result = new OutlookExtractionResult();
-            
-            try
-            {
-                // This is a simplified version - the full implementation would extract attachments
-                await Task.Delay(100); // Simulate async work
-                
-                result.Success = false;
-                result.ErrorMessage = "Outlook extraction not fully implemented";
-            }
-            catch (Exception ex)
-            {
-                result.Success = false;
-                result.ErrorMessage = ex.Message;
-            }
-            
-            return result;
-        }
-        
-        #endregion
-        
         #region Helper Methods
         
         private void CleanupDrag()
@@ -700,16 +666,20 @@ namespace ExplorerPro.UI.FileTree.Services
         }
         
         #endregion
+    }
+    
+    /// <summary>
+    /// Event arguments for Outlook extraction completion
+    /// </summary>
+    public class OutlookExtractionCompletedEventArgs : EventArgs
+    {
+        public OutlookDataExtractor.ExtractionResult Result { get; }
+        public string TargetPath { get; }
         
-        #region Nested Types
-        
-        private class OutlookExtractionResult
+        public OutlookExtractionCompletedEventArgs(OutlookDataExtractor.ExtractionResult result, string targetPath)
         {
-            public bool Success { get; set; }
-            public List<string> ExtractedFiles { get; set; } = new List<string>();
-            public string ErrorMessage { get; set; }
+            Result = result;
+            TargetPath = targetPath;
         }
-        
-        #endregion
     }
 }

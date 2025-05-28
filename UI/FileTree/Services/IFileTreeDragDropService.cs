@@ -11,6 +11,32 @@ namespace ExplorerPro.UI.FileTree.Services
     /// </summary>
     public interface IFileTreeDragDropService
     {
+        #region Events
+
+        /// <summary>
+        /// Raised when files are successfully dropped or moved
+        /// </summary>
+        event EventHandler<FilesDroppedEventArgs> FilesDropped;
+
+        /// <summary>
+        /// Raised when files are moved internally (need source refresh)
+        /// </summary>
+        event EventHandler<FilesMoved> FilesMoved;
+
+        /// <summary>
+        /// Raised when an error occurs during drag/drop operations
+        /// </summary>
+        event EventHandler<string> ErrorOccurred;
+
+        /// <summary>
+        /// Event raised when Outlook extraction is completed
+        /// </summary>
+        event EventHandler<OutlookExtractionCompletedEventArgs> OutlookExtractionCompleted;
+
+        #endregion
+
+        #region Methods
+
         /// <summary>
         /// Handles drag enter events
         /// </summary>
@@ -84,26 +110,10 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         void CancelOutlookExtraction();
 
-        /// <summary>
-        /// Event raised when files are successfully dropped or moved
-        /// </summary>
-        event EventHandler<FilesDroppedEventArgs> FilesDropped;
-
-        /// <summary>
-        /// Event raised when files are moved internally (need source refresh)
-        /// </summary>
-        event EventHandler<FilesMoved> FilesMoved;
-
-        /// <summary>
-        /// Event raised when an error occurs during drag/drop operations
-        /// </summary>
-        event EventHandler<string> ErrorOccurred;
-
-        /// <summary>
-        /// Event raised when Outlook extraction is completed
-        /// </summary>
-        event EventHandler<OutlookExtractionCompletedEventArgs> OutlookExtractionCompleted;
+        #endregion
     }
+
+    #region Event Arguments
 
     /// <summary>
     /// Event arguments for files dropped events
@@ -140,4 +150,21 @@ namespace ExplorerPro.UI.FileTree.Services
             TargetPath = targetPath;
         }
     }
+
+    /// <summary>
+    /// Event arguments for Outlook extraction completion
+    /// </summary>
+    public class OutlookExtractionCompletedEventArgs : EventArgs
+    {
+        public OutlookDataExtractor.ExtractionResult Result { get; }
+        public string TargetPath { get; }
+        
+        public OutlookExtractionCompletedEventArgs(OutlookDataExtractor.ExtractionResult result, string targetPath)
+        {
+            Result = result;
+            TargetPath = targetPath;
+        }
+    }
+
+    #endregion
 }

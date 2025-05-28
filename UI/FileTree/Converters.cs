@@ -133,4 +133,50 @@ namespace ExplorerPro.UI.FileTree
             return DependencyProperty.UnsetValue;
         }
     }
+
+    /// <summary>
+    /// Converts boolean to multi-select mode tag
+    /// </summary>
+    [ValueConversion(typeof(bool), typeof(string))]
+    public class BoolToMultiSelectTagConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is bool isMultiSelect && isMultiSelect)
+            {
+                return "MultiSelect";
+            }
+            return "SingleSelect";
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is string tag)
+            {
+                return tag == "MultiSelect";
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Converts multi-select mode to checkbox visibility
+    /// </summary>
+    [ValueConversion(typeof(string), typeof(Visibility))]
+    public class MultiSelectVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is string tag && tag == "MultiSelect")
+            {
+                return Visibility.Visible;
+            }
+            return Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return DependencyProperty.UnsetValue;
+        }
+    }
 }

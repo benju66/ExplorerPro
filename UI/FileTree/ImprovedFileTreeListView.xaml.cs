@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Optimized for smooth column resizing
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Optimized for smooth column resizing with enhanced drag & drop
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -26,7 +26,7 @@ using Path = System.IO.Path;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedFileTreeListView.xaml with optimized smooth column resizing
+    /// Interaction logic for ImprovedFileTreeListView.xaml with optimized smooth column resizing and enhanced drag & drop
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -41,6 +41,10 @@ namespace ExplorerPro.UI.FileTree
         private UndoManager _undoManager;
         private SettingsManager _settingsManager;
         private readonly IFileOperations _fileOperations;
+        
+        // Enhanced drag & drop services
+        private SelectionService _selectionService;
+        private FileTreeDragDropService _enhancedDragDropService;
 
         #endregion
 
@@ -95,7 +99,7 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Gets whether any items are selected
         /// </summary>
-        public bool HasSelectedItems => fileTreeView.SelectedItem != null;
+        public bool HasSelectedItems => _selectionService?.HasSelection ?? false;
         
         /// <summary>
         /// Gets or sets whether to show hidden files
@@ -113,6 +117,23 @@ namespace ExplorerPro.UI.FileTree
             }
         }
         
+        /// <summary>
+        /// Gets or sets whether multi-selection mode is active
+        /// </summary>
+        private bool _isMultiSelectMode = false;
+        public bool IsMultiSelectMode
+        {
+            get => _isMultiSelectMode;
+            set
+            {
+                if (_isMultiSelectMode != value)
+                {
+                    _isMultiSelectMode = value;
+                    OnPropertyChanged(nameof(IsMultiSelectMode));
+                }
+            }
+        }
+        
         #endregion
 
         #region Fields
@@ -120,7 +141,6 @@ namespace ExplorerPro.UI.FileTree
         private string _currentFolderPath = string.Empty;
         private bool _showHiddenFiles = false;
         private ObservableCollection<FileTreeItem> _rootItems = new ObservableCollection<FileTreeItem>();
-        private Point? _dragStartPoint;
         private ContextMenu _treeContextMenu;
         private bool _isInitialized = false;
         private bool _isHandlingDoubleClick = false;
@@ -216,66 +236,27 @@ namespace ExplorerPro.UI.FileTree
                 var iconProvider = new FileIconProvider(true);
                 _fileTreeService = new FileTreeService(_metadataManager, iconProvider);
                 _fileTreeCache = new FileTreeCacheService(1000);
-                _dragDropService = new FileTreeDragDropService();
+                
+                // Initialize selection service
+                _selectionService = new SelectionService();
+                _selectionService.SelectionChanged += OnSelectionChanged;
+                
+                // Initialize enhanced drag/drop service
+                _enhancedDragDropService = new FileTreeDragDropService(_undoManager, _fileOperations, _selectionService);
+                _enhancedDragDropService.FilesDropped += OnFilesDropped;
+                _enhancedDragDropService.FilesMoved += OnFilesMoved;
+                _enhancedDragDropService.ErrorOccurred += OnDragDropError;
+                _enhancedDragDropService.OutlookExtractionCompleted += OnOutlookExtractionCompleted;
+                
+                // Attach to the tree view
+                _enhancedDragDropService.AttachToControl(fileTreeView);
+                
+                // Keep old service interface for compatibility
+                _dragDropService = new FileTreeDragDropServiceAdapter(_enhancedDragDropService);
 
                 _fileTreeService.ErrorOccurred += (s, error) => 
                 {
                     Dispatcher.Invoke(() => MessageBox.Show(error, "File Tree Error", MessageBoxButton.OK, MessageBoxImage.Warning));
-                };
-
-                _dragDropService.FilesDropped += async (s, e) => 
-                {
-                    await RefreshDirectoryAsync(e.TargetPath);
-                    
-                    if (e.IsInternalMove)
-                    {
-                        var sourceDirectories = e.SourceFiles
-                            .Select(f => Path.GetDirectoryName(f))
-                            .Where(d => !string.IsNullOrEmpty(d))
-                            .Distinct()
-                            .ToArray();
-                            
-                        foreach (var sourceDir in sourceDirectories)
-                        {
-                            await RefreshDirectoryAsync(sourceDir);
-                        }
-                    }
-                };
-
-                _dragDropService.FilesMoved += async (s, e) => 
-                {
-                    await RefreshDirectoryAsync(e.TargetPath);
-                    
-                    foreach (var sourceDir in e.SourceDirectories)
-                    {
-                        await RefreshDirectoryAsync(sourceDir);
-                    }
-                };
-
-                _dragDropService.ErrorOccurred += (s, error) => 
-                {
-                    Dispatcher.Invoke(() => MessageBox.Show(error, "Drag/Drop Error", MessageBoxButton.OK, MessageBoxImage.Warning));
-                };
-
-                // Handle Outlook extraction completion silently
-                _dragDropService.OutlookExtractionCompleted += (s, e) => 
-                {
-                    Dispatcher.Invoke(() => 
-                    {
-                        // Only show error message if extraction failed
-                        if (!e.Result.Success && !string.IsNullOrEmpty(e.Result.ErrorMessage))
-                        {
-                            MessageBox.Show(
-                                $"There was a problem extracting Outlook attachments: {e.Result.ErrorMessage}",
-                                "Extraction Problem",
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Warning
-                            );
-                        }
-                        
-                        // Refresh the target directory regardless
-                        _ = RefreshDirectoryAsync(e.TargetPath);
-                    });
                 };
 
                 _fileTreeCache.ItemEvicted += (s, e) => 
@@ -358,14 +339,12 @@ namespace ExplorerPro.UI.FileTree
             fileTreeView.ContextMenuOpening += FileTreeView_ContextMenuOpening;
             fileTreeView.AddHandler(TreeViewItem.ExpandedEvent, new RoutedEventHandler(TreeViewItem_Expanded));
             fileTreeView.PreviewMouseLeftButtonDown += FileTreeView_PreviewMouseLeftButtonDown;
-            fileTreeView.PreviewMouseLeftButtonUp += FileTreeView_PreviewMouseLeftButtonUp;
-            fileTreeView.MouseMove += FileTreeView_MouseMove;
 
             fileTreeView.AllowDrop = true;
-            fileTreeView.DragEnter += FileTreeView_DragEnter;
-            fileTreeView.DragOver += FileTreeView_DragOver;
-            fileTreeView.Drop += FileTreeView_Drop;
-            fileTreeView.DragLeave += FileTreeView_DragLeave;
+            
+            // Enhanced drag/drop service handles these internally now
+            // We just need to handle keyboard events
+            fileTreeView.PreviewKeyDown += FileTreeView_PreviewKeyDown;
         }
 
         private void ImprovedFileTreeListView_Loaded(object sender, RoutedEventArgs e)
@@ -869,7 +848,11 @@ namespace ExplorerPro.UI.FileTree
         
         public string? GetSelectedPath()
         {
-            if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
+            if (_selectionService?.HasSelection == true && _selectionService.SelectedItems.Count > 0)
+            {
+                return _selectionService.SelectedItems[0].Path;
+            }
+            else if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
             {
                 return selectedItem.Path;
             }
@@ -900,7 +883,11 @@ namespace ExplorerPro.UI.FileTree
 
         public void CopySelected()
         {
-            if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
+            if (_selectionService?.HasSelection == true)
+            {
+                CopyMultipleItems(_selectionService.SelectedPaths);
+            }
+            else if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
             {
                 CopyItem(selectedItem.Path);
             }
@@ -920,7 +907,11 @@ namespace ExplorerPro.UI.FileTree
 
         public void DeleteSelected()
         {
-            if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
+            if (_selectionService?.HasSelection == true)
+            {
+                DeleteMultipleItems(_selectionService.SelectedPaths);
+            }
+            else if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
             {
                 DeleteItemWithUndo(selectedItem.Path);
             }
@@ -944,6 +935,7 @@ namespace ExplorerPro.UI.FileTree
 
         public void ClearSelection()
         {
+            _selectionService?.ClearSelection();
             var selectedTreeViewItem = GetSelectedTreeViewItem();
             selectedTreeViewItem?.SetValue(TreeViewItem.IsSelectedProperty, false);
         }
@@ -981,6 +973,7 @@ namespace ExplorerPro.UI.FileTree
                 
                 _rootItems.Clear();
                 _fileTreeCache.Clear();
+                _selectionService?.ClearSelection();
 
                 var rootItem = _fileTreeService.CreateFileTreeItem(directory, 0);
                 if (rootItem != null)
@@ -1191,7 +1184,11 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
-            if (fileTreeView.SelectedItem is FileTreeItem item)
+            if (_selectionService?.HasSelection == true)
+            {
+                BuildContextMenuForSelection(_selectionService.SelectedPaths);
+            }
+            else if (fileTreeView.SelectedItem is FileTreeItem item)
             {
                 BuildContextMenu(item.Path);
             }
@@ -1203,48 +1200,31 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            _dragStartPoint = e.GetPosition(fileTreeView);
-        }
-
-        private void FileTreeView_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            _dragStartPoint = null;
-        }
-
-        private void FileTreeView_MouseMove(object sender, MouseEventArgs e)
-        {
-            if (e.LeftButton == MouseButtonState.Pressed && _dragStartPoint.HasValue)
+            // Let the enhanced service handle drag initiation
+            var item = GetItemFromPoint(e.GetPosition(fileTreeView));
+            if (item != null)
             {
-                Point currentPosition = e.GetPosition(fileTreeView);
-                Vector dragVector = currentPosition - _dragStartPoint.Value;
-                double dragDistance = Math.Sqrt(Math.Pow(dragVector.X, 2) + Math.Pow(dragVector.Y, 2));
-
-                if (dragDistance > 10.0)
-                {
-                    StartDrag();
-                }
+                // Handle selection with modifiers
+                _selectionService.HandleSelection(item, Keyboard.Modifiers, _rootItems);
             }
         }
 
-        private void FileTreeView_DragEnter(object sender, DragEventArgs e)
+        private void FileTreeView_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            _dragDropService.HandleDragEnter(e);
-        }
-
-        private void FileTreeView_DragOver(object sender, DragEventArgs e)
-        {
-            _dragDropService.HandleDragOver(e, GetItemFromPoint);
-        }
-
-        private void FileTreeView_Drop(object sender, DragEventArgs e)
-        {
-            string currentTreePath = _rootItems.Count > 0 ? _rootItems[0].Path : string.Empty;
-            _dragDropService.HandleDrop(e, GetItemFromPoint, currentTreePath);
-        }
-
-        private void FileTreeView_DragLeave(object sender, DragEventArgs e)
-        {
-            _dragDropService.HandleDragLeave(e);
+            if (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                // Ctrl+A - Select all
+                _selectionService.SelectAll(_rootItems);
+                IsMultiSelectMode = true;
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape && _selectionService.HasSelection)
+            {
+                // ESC - Clear selection
+                _selectionService.ClearSelection();
+                IsMultiSelectMode = false;
+                e.Handled = true;
+            }
         }
         
         private void ItemContainerGenerator_StatusChanged(object sender, EventArgs e)
@@ -1255,6 +1235,81 @@ namespace ExplorerPro.UI.FileTree
             }
         }
         
+        #endregion
+
+        #region Enhanced Drag & Drop Event Handlers
+
+        private async void OnFilesDropped(object sender, FilesDroppedEventArgs e)
+        {
+            await RefreshDirectoryAsync(e.TargetPath);
+            
+            if (e.IsInternalMove)
+            {
+                var sourceDirectories = e.SourceFiles
+                    .Select(f => Path.GetDirectoryName(f))
+                    .Where(d => !string.IsNullOrEmpty(d))
+                    .Distinct()
+                    .ToArray();
+                    
+                foreach (var sourceDir in sourceDirectories)
+                {
+                    await RefreshDirectoryAsync(sourceDir);
+                }
+            }
+        }
+
+        private async void OnFilesMoved(object sender, FilesMoved e)
+        {
+            await RefreshDirectoryAsync(e.TargetPath);
+            
+            foreach (var sourceDir in e.SourceDirectories)
+            {
+                await RefreshDirectoryAsync(sourceDir);
+            }
+        }
+
+        private void OnDragDropError(object sender, string error)
+        {
+            Dispatcher.Invoke(() => 
+                MessageBox.Show(error, "Drag/Drop Error", MessageBoxButton.OK, MessageBoxImage.Warning));
+        }
+
+        private void OnOutlookExtractionCompleted(object sender, OutlookExtractionCompletedEventArgs e)
+        {
+            Dispatcher.Invoke(() => 
+            {
+                if (!e.Result.Success && !string.IsNullOrEmpty(e.Result.ErrorMessage))
+                {
+                    MessageBox.Show(
+                        $"There was a problem extracting Outlook attachments: {e.Result.ErrorMessage}",
+                        "Extraction Problem",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning
+                    );
+                }
+                
+                _ = RefreshDirectoryAsync(e.TargetPath);
+            });
+        }
+
+        private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Update any UI that depends on selection
+            OnPropertyChanged(nameof(HasSelectedItems));
+            
+            // Update context menu based on selection
+            if (e.SelectedItems.Count > 0)
+            {
+                BuildContextMenuForSelection(e.SelectedPaths);
+            }
+            
+            // Auto-enable multi-select mode when multiple items selected
+            if (e.SelectedItems.Count > 1 && !IsMultiSelectMode)
+            {
+                IsMultiSelectMode = true;
+            }
+        }
+
         #endregion
 
         #region Navigation and Context Menu
@@ -1328,6 +1383,37 @@ namespace ExplorerPro.UI.FileTree
                 _treeContextMenu.Items.Add(menuItem);
             }
         }
+
+        private void BuildContextMenuForSelection(IReadOnlyList<string> selectedPaths)
+        {
+            _treeContextMenu.Items.Clear();
+            
+            if (selectedPaths.Count == 1)
+            {
+                // Single selection - use existing context menu
+                BuildContextMenu(selectedPaths[0]);
+            }
+            else if (selectedPaths.Count > 1)
+            {
+                // Multi-selection context menu
+                var menuItem = new MenuItem { Header = $"Delete {selectedPaths.Count} items" };
+                menuItem.Click += (s, e) => DeleteMultipleItems(selectedPaths);
+                _treeContextMenu.Items.Add(menuItem);
+                
+                menuItem = new MenuItem { Header = $"Copy {selectedPaths.Count} items" };
+                menuItem.Click += (s, e) => CopyMultipleItems(selectedPaths);
+                _treeContextMenu.Items.Add(menuItem);
+                
+                _treeContextMenu.Items.Add(new Separator());
+                
+                menuItem = new MenuItem { Header = "Clear Selection" };
+                menuItem.Click += (s, e) => {
+                    _selectionService.ClearSelection();
+                    IsMultiSelectMode = false;
+                };
+                _treeContextMenu.Items.Add(menuItem);
+            }
+        }
         
         #endregion
 
@@ -1352,6 +1438,29 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
+        private void DeleteMultipleItems(IReadOnlyList<string> paths)
+        {
+            if (MessageBox.Show($"Are you sure you want to delete {paths.Count} items?", 
+                "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            {
+                foreach (var path in paths)
+                {
+                    var command = new DeleteItemCommand(_fileOperations, this, path);
+                    _undoManager.ExecuteCommand(command);
+                }
+                
+                // Refresh affected directories
+                var directories = paths.Select(p => Path.GetDirectoryName(p))
+                    .Where(d => !string.IsNullOrEmpty(d))
+                    .Distinct();
+                
+                foreach (var dir in directories)
+                {
+                    RefreshDirectory(dir);
+                }
+            }
+        }
+
         private void CopyItem(string path)
         {
             if (File.Exists(path) || Directory.Exists(path))
@@ -1365,6 +1474,13 @@ namespace ExplorerPro.UI.FileTree
                 MessageBox.Show("The selected file or folder does not exist.", "Error", 
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+
+        private void CopyMultipleItems(IReadOnlyList<string> paths)
+        {
+            var filePaths = new System.Collections.Specialized.StringCollection();
+            filePaths.AddRange(paths.ToArray());
+            Clipboard.SetFileDropList(filePaths);
         }
 
         private void PasteItem(string targetPath)
@@ -1446,16 +1562,6 @@ namespace ExplorerPro.UI.FileTree
 
         #region Drag and Drop
 
-        private void StartDrag()
-        {
-            if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
-            {
-                var selectedPaths = new List<string> { selectedItem.Path };
-                _dragDropService.StartDrag(fileTreeView, selectedPaths);
-                _dragStartPoint = null;
-            }
-        }
-        
         private FileTreeItem GetItemFromPoint(Point point)
         {
             HitTestResult result = VisualTreeHelper.HitTest(fileTreeView, point);
@@ -1568,6 +1674,7 @@ namespace ExplorerPro.UI.FileTree
             if (item != null)
             {
                 item.IsSelected = true;
+                _selectionService?.SelectSingle(item);
                 
                 Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
                     var treeViewItem = FindTreeViewItemForData(fileTreeView, item);
@@ -1665,6 +1772,48 @@ namespace ExplorerPro.UI.FileTree
         
         #endregion
 
+        #region UI Event Handlers
+
+        private void SelectionCheckBox_Click(object sender, RoutedEventArgs e)
+        {
+            // Handle checkbox click for multi-selection
+            if (sender is CheckBox checkBox && checkBox.DataContext is FileTreeItem item)
+            {
+                // The binding handles the selection state change
+                // But we need to ensure the selection service is updated
+                if (checkBox.IsChecked == true && !_selectionService.SelectedPaths.Contains(item.Path))
+                {
+                    _selectionService.HandleSelection(item, ModifierKeys.Control, _rootItems);
+                }
+                else if (checkBox.IsChecked == false && _selectionService.SelectedPaths.Contains(item.Path))
+                {
+                    _selectionService.HandleSelection(item, ModifierKeys.Control, _rootItems);
+                }
+                
+                e.Handled = true;
+            }
+        }
+
+        private void SelectAllCheckBox_Click(object sender, RoutedEventArgs e)
+        {
+            // Handle select all checkbox in header
+            if (sender is CheckBox checkBox)
+            {
+                if (checkBox.IsChecked == true)
+                {
+                    _selectionService.SelectAll(_rootItems);
+                }
+                else
+                {
+                    _selectionService.ClearSelection();
+                }
+                
+                e.Handled = true;
+            }
+        }
+
+        #endregion
+
         #region IDisposable Implementation
         
         private bool _disposed = false;
@@ -1699,6 +1848,11 @@ namespace ExplorerPro.UI.FileTree
                     
                     // Cancel any ongoing operations
                     _dragDropService?.CancelOutlookExtraction();
+                    
+                    // Dispose enhanced services
+                    _enhancedDragDropService?.DetachFromControl();
+                    _enhancedDragDropService?.Dispose();
+                    _selectionService?.Dispose();
                     
                     if (fileTreeView != null)
                     {
