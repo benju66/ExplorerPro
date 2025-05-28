@@ -248,8 +248,8 @@ namespace ExplorerPro.UI.FileTree
                 _enhancedDragDropService.ErrorOccurred += OnDragDropError;
                 _enhancedDragDropService.OutlookExtractionCompleted += OnOutlookExtractionCompleted;
                 
-                // Attach to the tree view
-                _enhancedDragDropService.AttachToControl(fileTreeView);
+                // Attach to the tree view with GetItemFromPoint function
+                _enhancedDragDropService.AttachToControl(fileTreeView, GetItemFromPoint);
                 
                 // Keep old service interface for compatibility
                 _dragDropService = new FileTreeDragDropServiceAdapter(_enhancedDragDropService);
@@ -1200,12 +1200,14 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Let the enhanced service handle drag initiation
+            // Get the clicked item
             var item = GetItemFromPoint(e.GetPosition(fileTreeView));
             if (item != null)
             {
                 // Handle selection with modifiers
                 _selectionService.HandleSelection(item, Keyboard.Modifiers, _rootItems);
+                
+                // Note: Drag initiation is now handled by the FileTreeDragDropService
             }
         }
 
@@ -1562,6 +1564,7 @@ namespace ExplorerPro.UI.FileTree
 
         #region Drag and Drop
 
+        // Updated GetItemFromPoint method to ensure it works correctly
         private FileTreeItem GetItemFromPoint(Point point)
         {
             HitTestResult result = VisualTreeHelper.HitTest(fileTreeView, point);
@@ -1570,14 +1573,15 @@ namespace ExplorerPro.UI.FileTree
                 
             DependencyObject obj = result.VisualHit;
             
+            // Walk up the visual tree to find TreeViewItem
             while (obj != null && !(obj is TreeViewItem))
             {
                 obj = VisualTreeHelper.GetParent(obj);
             }
             
-            if (obj is TreeViewItem item)
+            if (obj is TreeViewItem treeViewItem)
             {
-                return item.DataContext as FileTreeItem;
+                return treeViewItem.DataContext as FileTreeItem;
             }
             
             return null;
@@ -1687,6 +1691,19 @@ namespace ExplorerPro.UI.FileTree
         {
             var items = FindVisualChildren<TreeViewItem>(fileTreeView);
             return items.FirstOrDefault(item => item.IsSelected);
+        }
+
+        // Add this method to properly handle visual updates during drag operations
+        private void RefreshDropTargetVisuals()
+        {
+            // Force a visual update on the tree view
+            fileTreeView.UpdateLayout();
+            
+            // Ensure all TreeViewItems refresh their visual states
+            foreach (var item in FindVisualChildren<TreeViewItem>(fileTreeView))
+            {
+                item.InvalidateVisual();
+            }
         }
         
         #endregion

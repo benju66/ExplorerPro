@@ -1,4 +1,4 @@
-// UI/FileTree/Services/FileTreeDragDropService.cs - Enhanced version with all improvements
+// UI/FileTree/Services/FileTreeDragDropService.cs - Fixed version with proper drag and drop
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -37,6 +37,7 @@ namespace ExplorerPro.UI.FileTree.Services
         
         private Control _control;
         private Point? _dragStartPoint;
+        private DependencyObject _dragStartElement;
         private bool _isDragging;
         
         private DragAdorner _dragAdorner;
@@ -47,6 +48,9 @@ namespace ExplorerPro.UI.FileTree.Services
         private FileTreeItem _currentDropTarget;
         private bool _isValidDropTarget;
         private Visual _dropIndicator;
+        
+        // Store the getItemFromPoint delegate
+        private Func<Point, FileTreeItem> _getItemFromPoint;
         
         #endregion
         
@@ -79,12 +83,13 @@ namespace ExplorerPro.UI.FileTree.Services
         /// <summary>
         /// Attaches the service to a control
         /// </summary>
-        public void AttachToControl(Control control)
+        public void AttachToControl(Control control, Func<Point, FileTreeItem> getItemFromPoint = null)
         {
             if (_control != null)
                 DetachFromControl();
             
             _control = control;
+            _getItemFromPoint = getItemFromPoint;
             
             // Find ScrollViewer for auto-scroll
             var scrollViewer = AutoScrollHelper.FindScrollViewer(_control);
@@ -103,6 +108,14 @@ namespace ExplorerPro.UI.FileTree.Services
             _control.Drop += OnDrop;
             _control.GiveFeedback += OnGiveFeedback;
             _control.QueryContinueDrag += OnQueryContinueDrag;
+        }
+        
+        /// <summary>
+        /// Sets the getItemFromPoint function after attachment
+        /// </summary>
+        public void SetGetItemFromPointFunction(Func<Point, FileTreeItem> getItemFromPoint)
+        {
+            _getItemFromPoint = getItemFromPoint;
         }
         
         /// <summary>
@@ -125,6 +138,7 @@ namespace ExplorerPro.UI.FileTree.Services
             _autoScrollHelper?.Dispose();
             _autoScrollHelper = null;
             _control = null;
+            _getItemFromPoint = null;
         }
         
         #endregion
@@ -138,8 +152,10 @@ namespace ExplorerPro.UI.FileTree.Services
         
         public void HandleDragOver(DragEventArgs e, Func<Point, FileTreeItem> getItemFromPoint)
         {
-            var item = getItemFromPoint(e.GetPosition(_control));
-            UpdateDropTarget(item);
+            // Store the function if provided
+            if (getItemFromPoint != null)
+                _getItemFromPoint = getItemFromPoint;
+                
             OnDragOver(this, e);
         }
         
@@ -150,8 +166,10 @@ namespace ExplorerPro.UI.FileTree.Services
         
         public bool HandleDrop(DragEventArgs e, Func<Point, FileTreeItem> getItemFromPoint, string currentTreePath = null)
         {
-            var item = getItemFromPoint(e.GetPosition(_control));
-            UpdateDropTarget(item);
+            // Store the function if provided
+            if (getItemFromPoint != null)
+                _getItemFromPoint = getItemFromPoint;
+                
             OnDrop(this, e);
             return true;
         }
@@ -208,6 +226,7 @@ namespace ExplorerPro.UI.FileTree.Services
         private void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             _dragStartPoint = e.GetPosition(_control);
+            _dragStartElement = e.OriginalSource as DependencyObject;
         }
         
         private void OnPreviewMouseMove(object sender, MouseEventArgs e)
@@ -227,6 +246,7 @@ namespace ExplorerPro.UI.FileTree.Services
         private void OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             _dragStartPoint = null;
+            _dragStartElement = null;
         }
         
         private void StartDragOperation()
@@ -244,7 +264,7 @@ namespace ExplorerPro.UI.FileTree.Services
                 // Create visual feedback
                 CreateDragAdorner();
                 
-                // Start drag operation - Use fully qualified name to avoid namespace conflict
+                // Start drag operation
                 DragDropEffects effects = System.Windows.DragDrop.DoDragDrop(_control, dataObject, 
                     DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
                 
@@ -289,34 +309,121 @@ namespace ExplorerPro.UI.FileTree.Services
             _adornerLayer = AdornerLayer.GetAdornerLayer(_control);
             if (_adornerLayer != null)
             {
-                // Create simple visual element for the adorner
+                // Create visual element for the adorner
                 var visual = CreateDragVisual();
-                var offset = Mouse.GetPosition(_control);
+                
+                // Calculate proper offset from the drag start element
+                Point offset = new Point(0, 0);
+                if (_dragStartElement != null && _dragStartPoint.HasValue)
+                {
+                    // Find the visual element of the selected item
+                    var itemVisual = FindItemVisual(_dragStartElement);
+                    if (itemVisual != null)
+                    {
+                        // Get position of item relative to control
+                        var itemPosition = itemVisual.TransformToAncestor(_control).Transform(new Point(0, 0));
+                        // Calculate offset from mouse position to item position
+                        offset = new Point(
+                            _dragStartPoint.Value.X - itemPosition.X,
+                            _dragStartPoint.Value.Y - itemPosition.Y
+                        );
+                    }
+                }
                 
                 _dragAdorner = new DragAdorner(_control, visual, offset, _selectionService.SelectionCount);
                 _adornerLayer.Add(_dragAdorner);
+                
+                // Set initial position
+                _dragAdorner.UpdatePosition(Mouse.GetPosition(_adornerLayer));
             }
+        }
+        
+        private Visual FindItemVisual(DependencyObject element)
+        {
+            // Walk up the visual tree to find the TreeViewItem
+            var current = element;
+            while (current != null && !(current is TreeViewItem))
+            {
+                current = VisualTreeHelper.GetParent(current);
+            }
+            
+            if (current is TreeViewItem treeViewItem)
+            {
+                // Find the content presenter
+                return FindVisualChild<ContentPresenter>(treeViewItem);
+            }
+            
+            return element as Visual;
+        }
+        
+        private T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T result)
+                    return result;
+                    
+                var childResult = FindVisualChild<T>(child);
+                if (childResult != null)
+                    return childResult;
+            }
+            return null;
         }
         
         private Visual CreateDragVisual()
         {
-            // Create a simple text block for now
+            // Create a more sophisticated visual with icon
+            var panel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Background = new SolidColorBrush(Color.FromArgb(200, 240, 240, 240)),
+                Margin = new Thickness(2)
+            };
+            
+            // Add icon
+            if (_selectionService.SelectedItems.Count > 0)
+            {
+                var firstItem = _selectionService.SelectedItems[0];
+                if (firstItem.Icon != null)
+                {
+                    var icon = new Image
+                    {
+                        Source = firstItem.Icon,
+                        Width = 16,
+                        Height = 16,
+                        Margin = new Thickness(4, 2, 2, 2)
+                    };
+                    panel.Children.Add(icon);
+                }
+            }
+            
+            // Add text
             var textBlock = new TextBlock
             {
                 Text = _selectionService.SelectionCount == 1 
                     ? Path.GetFileName(_selectionService.SelectedPaths.First())
                     : $"{_selectionService.SelectionCount} items",
-                Padding = new Thickness(8, 4, 8, 4),
-                Background = new SolidColorBrush(Color.FromArgb(180, 0, 120, 212)),
-                Foreground = Brushes.White,
-                FontSize = 12
+                Padding = new Thickness(4, 2, 4, 2),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            panel.Children.Add(textBlock);
+            
+            // Create border
+            var border = new Border
+            {
+                Child = panel,
+                BorderBrush = new SolidColorBrush(Colors.Gray),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(2),
+                Background = new SolidColorBrush(Color.FromArgb(240, 255, 255, 255))
             };
             
             // Force layout
-            textBlock.Measure(new Size(200, 50));
-            textBlock.Arrange(new Rect(textBlock.DesiredSize));
+            border.Measure(new Size(300, 100));
+            border.Arrange(new Rect(border.DesiredSize));
             
-            return textBlock;
+            return border;
         }
         
         #endregion
@@ -332,6 +439,15 @@ namespace ExplorerPro.UI.FileTree.Services
         private void OnDragOver(object sender, DragEventArgs e)
         {
             e.Handled = true;
+            
+            // Get item under mouse using the stored function
+            if (_getItemFromPoint != null)
+            {
+                var position = e.GetPosition(_control);
+                var item = _getItemFromPoint(position);
+                UpdateDropTarget(item);
+            }
+            
             ProcessDragOver(e);
             
             // Update auto-scroll
@@ -422,6 +538,14 @@ namespace ExplorerPro.UI.FileTree.Services
             {
                 _autoScrollHelper?.Stop();
                 _springLoadedHelper?.CollapseAll();
+                
+                // Get final drop target
+                if (_getItemFromPoint != null)
+                {
+                    var position = e.GetPosition(_control);
+                    var item = _getItemFromPoint(position);
+                    UpdateDropTarget(item);
+                }
                 
                 if (!_isValidDropTarget || _currentDropTarget == null)
                 {
@@ -533,17 +657,81 @@ namespace ExplorerPro.UI.FileTree.Services
             // Clear old highlight
             if (_currentDropTarget != null)
             {
-                // TODO: Remove visual highlight from old target
+                ClearDropTargetVisual(_currentDropTarget);
             }
             
             _currentDropTarget = item;
             _isValidDropTarget = ValidateDropTarget(item);
             
             // Apply new highlight
-            if (_currentDropTarget != null && _isValidDropTarget)
+            if (_currentDropTarget != null)
             {
-                // TODO: Add visual highlight to new target
+                ApplyDropTargetVisual(_currentDropTarget, _isValidDropTarget);
             }
+        }
+        
+        private void ApplyDropTargetVisual(FileTreeItem item, bool isValid)
+        {
+            if (item == null) return;
+            
+            // Find the TreeViewItem for this data
+            var treeViewItem = FindTreeViewItemForData(item);
+            if (treeViewItem != null)
+            {
+                if (isValid)
+                {
+                    DragDropHelper.SetIsDropTarget(treeViewItem, true);
+                    DragDropHelper.SetIsInvalidDropTarget(treeViewItem, false);
+                }
+                else
+                {
+                    DragDropHelper.SetIsDropTarget(treeViewItem, false);
+                    DragDropHelper.SetIsInvalidDropTarget(treeViewItem, true);
+                }
+            }
+        }
+        
+        private void ClearDropTargetVisual(FileTreeItem item)
+        {
+            if (item == null) return;
+            
+            var treeViewItem = FindTreeViewItemForData(item);
+            if (treeViewItem != null)
+            {
+                DragDropHelper.SetIsDropTarget(treeViewItem, false);
+                DragDropHelper.SetIsInvalidDropTarget(treeViewItem, false);
+            }
+        }
+        
+        private TreeViewItem FindTreeViewItemForData(FileTreeItem data)
+        {
+            if (_control is TreeView treeView)
+            {
+                return FindTreeViewItem(treeView, data);
+            }
+            return null;
+        }
+        
+        private TreeViewItem FindTreeViewItem(ItemsControl container, object data)
+        {
+            if (container == null) return null;
+            
+            if (container.ItemContainerGenerator.Status == System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated)
+            {
+                var item = container.ItemContainerGenerator.ContainerFromItem(data) as TreeViewItem;
+                if (item != null) return item;
+                
+                foreach (var childData in container.Items)
+                {
+                    var childContainer = container.ItemContainerGenerator.ContainerFromItem(childData) as TreeViewItem;
+                    if (childContainer != null)
+                    {
+                        var result = FindTreeViewItem(childContainer, data);
+                        if (result != null) return result;
+                    }
+                }
+            }
+            return null;
         }
         
         #endregion
@@ -588,6 +776,7 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             _isDragging = false;
             _dragStartPoint = null;
+            _dragStartElement = null;
             
             if (_dragAdorner != null && _adornerLayer != null)
             {

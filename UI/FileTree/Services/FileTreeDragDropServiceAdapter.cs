@@ -1,4 +1,4 @@
-// UI/FileTree/Services/FileTreeDragDropServiceAdapter.cs
+// UI/FileTree/Services/FileTreeDragDropServiceAdapter.cs - Fixed version
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -78,6 +78,14 @@ namespace ExplorerPro.UI.FileTree.Services
         public void CancelOutlookExtraction()
         {
             _enhancedService.CancelOutlookExtraction();
+        }
+        
+        /// <summary>
+        /// Sets the getItemFromPoint function on the enhanced service
+        /// </summary>
+        public void SetGetItemFromPointFunction(Func<Point, FileTreeItem> getItemFromPoint)
+        {
+            _enhancedService.SetGetItemFromPointFunction(getItemFromPoint);
         }
     }
 }
