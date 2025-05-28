@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:ExplorerPro.UI.FileTree"
+             xmlns:behaviors="clr-namespace:ExplorerPro.UI.FileTree.Behaviors"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
     
@@ -25,11 +26,94 @@
             <!-- Multi-select converters -->
             <local:BoolToMultiSelectTagConverter x:Key="BoolToMultiSelectTagConverter"/>
             <local:MultiSelectVisibilityConverter x:Key="MultiSelectVisibilityConverter"/>
+            
+            <!-- Column Resize Animation Storyboard -->
+            <Storyboard x:Key="ColumnResizeAnimation">
+                <DoubleAnimation Duration="0:0:0.15" 
+                                 Storyboard.TargetProperty="Width"
+                                 EasingFunction="{StaticResource {x:Static SystemParameters.MenuPopupAnimationKey}}"/>
+            </Storyboard>
+            
+            <!-- Column Hover Effect -->
+            <Style x:Key="ColumnHeaderHoverStyle" TargetType="Border">
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Trigger.EnterActions>
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                    To="#10000000" Duration="0:0:0.15"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </Trigger.EnterActions>
+                        <Trigger.ExitActions>
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                    Duration="0:0:0.15"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </Trigger.ExitActions>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            
+            <!-- Enhanced GridSplitter Style -->
+            <Style x:Key="EnhancedGridSplitterStyle" TargetType="GridSplitter">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Cursor" Value="SizeWE"/>
+                <Setter Property="Focusable" Value="False"/>
+                <Setter Property="behaviors:ColumnResizeBehavior.EnableSmoothResize" Value="True"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="GridSplitter">
+                            <Grid Background="{TemplateBinding Background}">
+                                <!-- Invisible hit area for easier grabbing -->
+                                <Rectangle Fill="Transparent" Margin="-3,0"/>
+                                <!-- Visual indicator -->
+                                <Rectangle x:Name="Indicator" 
+                                         Width="1" 
+                                         HorizontalAlignment="Center"
+                                         Fill="{DynamicResource BorderColor}"
+                                         Opacity="0"/>
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Trigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                               Storyboard.TargetProperty="Opacity"
+                                                               To="0.5" Duration="0:0:0.15"/>
+                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                               Storyboard.TargetProperty="Width"
+                                                               To="3" Duration="0:0:0.15"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.EnterActions>
+                                    <Trigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                               Storyboard.TargetProperty="Opacity"
+                                                               To="0" Duration="0:0:0.15"/>
+                                                <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                               Storyboard.TargetProperty="Width"
+                                                               To="1" Duration="0:0:0.15"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.ExitActions>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
     
-    <!-- Main grid with shared size scope enabled for column alignment -->
-    <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}" Grid.IsSharedSizeScope="True">
+    <!-- Main grid WITHOUT shared size scope -->
+    <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}">
         <!-- Column Headers Row -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -43,17 +127,17 @@
                           HorizontalScrollBarVisibility="Hidden"
                           VerticalScrollBarVisibility="Disabled"
                           CanContentScroll="False">
-                <Grid x:Name="HeaderGrid" Height="25">
+                <Grid x:Name="HeaderGrid" Height="28">
                     <Grid.ColumnDefinitions>
                         <!-- Checkbox column for multi-selection -->
-                        <ColumnDefinition Width="Auto" SharedSizeGroup="CheckboxColumn"/>
-                        <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="100" MaxWidth="600" SharedSizeGroup="NameColumn"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="100" MaxWidth="600"/>
                         <ColumnDefinition Width="5"/>
-                        <ColumnDefinition x:Name="SizeColumn" Width="100" MinWidth="60" MaxWidth="150" SharedSizeGroup="SizeColumn"/>
+                        <ColumnDefinition x:Name="SizeColumn" Width="100" MinWidth="60" MaxWidth="150"/>
                         <ColumnDefinition Width="5"/>
-                        <ColumnDefinition x:Name="TypeColumn" Width="120" MinWidth="80" MaxWidth="200" SharedSizeGroup="TypeColumn"/>
+                        <ColumnDefinition x:Name="TypeColumn" Width="120" MinWidth="80" MaxWidth="200"/>
                         <ColumnDefinition Width="5"/>
-                        <ColumnDefinition x:Name="DateColumn" Width="150" MinWidth="100" MaxWidth="250" SharedSizeGroup="DateColumn"/>
+                        <ColumnDefinition x:Name="DateColumn" Width="150" MinWidth="100" MaxWidth="250"/>
                         <ColumnDefinition Width="*"/> <!-- Fill remaining space -->
                     </Grid.ColumnDefinitions>
                     
@@ -66,94 +150,83 @@
                               Click="SelectAllCheckBox_Click"
                               ToolTip="Select/Deselect All"/>
                     
-                    <!-- Column Headers -->
-                    <Border Grid.Column="1" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
-                        <TextBlock Text="Name" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                    <!-- Column Headers with hover effects -->
+                    <Border Grid.Column="1" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" 
+                            Background="Transparent" Style="{StaticResource ColumnHeaderHoverStyle}">
+                        <Grid>
+                            <TextBlock Text="Name" Padding="8,4" VerticalAlignment="Center" 
+                                     Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                            <!-- Sort indicator -->
+                            <Path x:Name="NameSortIndicator" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  Margin="0,0,8,0" Width="8" Height="8" Visibility="Collapsed"
+                                  Data="M 0 4 L 4 0 L 8 4 Z" Fill="{DynamicResource TextColor}"/>
+                        </Grid>
                     </Border>
                     
-                    <!-- Optimized GridSplitter with Preview -->
-                    <GridSplitter Grid.Column="2" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
-                                 Background="Transparent"
-                                 ShowsPreview="True"
-                                 PreviewStyle="{StaticResource ColumnResizePreviewStyle}"
-                                 DragStarted="ColumnSplitter_DragStarted"
-                                 DragDelta="ColumnSplitter_DragDelta"
-                                 DragCompleted="ColumnSplitter_DragCompleted"
-                                 Tag="Name">
-                        <GridSplitter.Style>
-                            <Style TargetType="GridSplitter">
-                                <Setter Property="Cursor" Value="SizeWE"/>
-                                <Setter Property="Focusable" Value="False"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource TreeLineHighlightColor}"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </GridSplitter.Style>
-                    </GridSplitter>
+                    <!-- Enhanced GridSplitter with smooth resize -->
+                    <GridSplitter Grid.Column="2" Style="{StaticResource EnhancedGridSplitterStyle}" Tag="Name"/>
                     
-                    <Border Grid.Column="3" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
-                        <TextBlock Text="Size" Padding="6,3" VerticalAlignment="Center" TextAlignment="Right" Foreground="{DynamicResource TextColor}"/>
+                    <Border Grid.Column="3" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" 
+                            Background="Transparent" Style="{StaticResource ColumnHeaderHoverStyle}">
+                        <Grid>
+                            <TextBlock Text="Size" Padding="8,4" VerticalAlignment="Center" TextAlignment="Right" 
+                                     Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                            <Path x:Name="SizeSortIndicator" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                  Margin="8,0,0,0" Width="8" Height="8" Visibility="Collapsed"
+                                  Data="M 0 4 L 4 0 L 8 4 Z" Fill="{DynamicResource TextColor}"/>
+                        </Grid>
                     </Border>
                     
-                    <GridSplitter Grid.Column="4" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
-                                 Background="Transparent"
-                                 ShowsPreview="True"
-                                 PreviewStyle="{StaticResource ColumnResizePreviewStyle}"
-                                 DragStarted="ColumnSplitter_DragStarted"
-                                 DragDelta="ColumnSplitter_DragDelta"
-                                 DragCompleted="ColumnSplitter_DragCompleted"
-                                 Tag="Size">
-                        <GridSplitter.Style>
-                            <Style TargetType="GridSplitter">
-                                <Setter Property="Cursor" Value="SizeWE"/>
-                                <Setter Property="Focusable" Value="False"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource TreeLineHighlightColor}"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </GridSplitter.Style>
-                    </GridSplitter>
+                    <GridSplitter Grid.Column="4" Style="{StaticResource EnhancedGridSplitterStyle}" Tag="Size"/>
                     
-                    <Border Grid.Column="5" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Background="Transparent">
-                        <TextBlock Text="Type" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                    <Border Grid.Column="5" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" 
+                            Background="Transparent" Style="{StaticResource ColumnHeaderHoverStyle}">
+                        <Grid>
+                            <TextBlock Text="Type" Padding="8,4" VerticalAlignment="Center" 
+                                     Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                            <Path x:Name="TypeSortIndicator" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  Margin="0,0,8,0" Width="8" Height="8" Visibility="Collapsed"
+                                  Data="M 0 4 L 4 0 L 8 4 Z" Fill="{DynamicResource TextColor}"/>
+                        </Grid>
                     </Border>
                     
-                    <GridSplitter Grid.Column="6" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
-                                 Background="Transparent"
-                                 ShowsPreview="True"
-                                 PreviewStyle="{StaticResource ColumnResizePreviewStyle}"
-                                 DragStarted="ColumnSplitter_DragStarted"
-                                 DragDelta="ColumnSplitter_DragDelta"
-                                 DragCompleted="ColumnSplitter_DragCompleted"
-                                 Tag="Type">
-                        <GridSplitter.Style>
-                            <Style TargetType="GridSplitter">
-                                <Setter Property="Cursor" Value="SizeWE"/>
-                                <Setter Property="Focusable" Value="False"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource TreeLineHighlightColor}"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </GridSplitter.Style>
-                    </GridSplitter>
+                    <GridSplitter Grid.Column="6" Style="{StaticResource EnhancedGridSplitterStyle}" Tag="Type"/>
                     
-                    <Border Grid.Column="7" Background="Transparent">
-                        <TextBlock Text="Date Modified" Padding="6,3" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                    <Border Grid.Column="7" Background="Transparent" Style="{StaticResource ColumnHeaderHoverStyle}">
+                        <Grid>
+                            <TextBlock Text="Date Modified" Padding="8,4" VerticalAlignment="Center" 
+                                     Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                            <Path x:Name="DateSortIndicator" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  Margin="0,0,8,0" Width="8" Height="8" Visibility="Collapsed"
+                                  Data="M 0 4 L 4 0 L 8 4 Z" Fill="{DynamicResource TextColor}"/>
+                        </Grid>
                     </Border>
                     
                     <!-- Header context menu -->
                     <Grid.ContextMenu>
                         <ContextMenu x:Name="HeaderContextMenu">
-                            <MenuItem Header="Auto-size Column" Click="AutoSizeColumn_Click"/>
-                            <MenuItem Header="Auto-size All Columns" Click="AutoSizeAllColumns_Click"/>
+                            <MenuItem Header="Auto-size Column" Click="AutoSizeColumn_Click">
+                                <MenuItem.Icon>
+                                    <Path Width="12" Height="12" 
+                                          Data="M 2 0 L 2 12 M 10 0 L 10 12 M 5 3 L 7 6 L 5 9"
+                                          Stroke="{DynamicResource TextColor}" StrokeThickness="1"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Auto-size All Columns" Click="AutoSizeAllColumns_Click">
+                                <MenuItem.Icon>
+                                    <Path Width="12" Height="12" 
+                                          Data="M 0 0 L 0 12 M 4 0 L 4 12 M 8 0 L 8 12 M 12 0 L 12 12"
+                                          Stroke="{DynamicResource TextColor}" StrokeThickness="1"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
                             <Separator/>
-                            <MenuItem Header="Reset Column Widths" Click="ResetColumnWidths_Click"/>
+                            <MenuItem Header="Reset Column Widths" Click="ResetColumnWidths_Click">
+                                <MenuItem.Icon>
+                                    <Path Width="12" Height="12" 
+                                          Data="M 2 6 A 4 4 0 1 1 6 2 L 6 4 L 8 2 L 6 0 L 6 2"
+                                          Stroke="{DynamicResource TextColor}" StrokeThickness="1.5"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
                         </ContextMenu>
                     </Grid.ContextMenu>
                 </Grid>
@@ -165,9 +238,9 @@
                       HorizontalScrollBarVisibility="Auto" 
                       VerticalScrollBarVisibility="Auto"
                       ScrollChanged="TreeScrollViewer_ScrollChanged"
-                      CanContentScroll="False"
+                      CanContentScroll="True"
                       VirtualizingStackPanel.ScrollUnit="Pixel">
-            <!-- File TreeView with proper column alignment and optimized virtualization -->
+            <!-- File TreeView with custom virtualizing panel -->
             <TreeView x:Name="fileTreeView" BorderThickness="0"
                      Background="{DynamicResource TreeViewBackground}"
                      VirtualizingStackPanel.IsVirtualizing="True"
@@ -178,7 +251,8 @@
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      ScrollViewer.VerticalScrollBarVisibility="Disabled"
                      ScrollViewer.IsDeferredScrollingEnabled="False"
-                     Tag="{Binding IsMultiSelectMode, Converter={StaticResource BoolToMultiSelectTagConverter}}">
+                     Tag="{Binding IsMultiSelectMode, Converter={StaticResource BoolToMultiSelectTagConverter}}"
+                     ItemsSource="{Binding RootItems}">
                 
                 <!-- Optimized Item Container Style -->
                 <TreeView.ItemContainerStyle>
@@ -188,27 +262,28 @@
                     </Style>
                 </TreeView.ItemContainerStyle>
                 
+                <!-- Use custom virtualizing panel -->
                 <TreeView.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <VirtualizingStackPanel />
+                        <local:FileTreeVirtualizingPanel x:Name="TreeItemsPanel"/>
                     </ItemsPanelTemplate>
                 </TreeView.ItemsPanel>
                 
                 <TreeView.ItemTemplate>
                     <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                        <!-- Grid with shared size groups for column alignment -->
-                        <Grid>
+                        <!-- Grid WITHOUT shared size groups -->
+                        <Grid x:Name="ItemGrid">
                             <Grid.ColumnDefinitions>
                                 <!-- Checkbox column for multi-selection -->
-                                <ColumnDefinition SharedSizeGroup="CheckboxColumn"/>
-                                <!-- Match the header column definitions exactly -->
-                                <ColumnDefinition SharedSizeGroup="NameColumn"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <!-- Dynamic column widths that will be updated in code -->
+                                <ColumnDefinition x:Name="ItemNameColumn" Width="250"/>
                                 <ColumnDefinition Width="5"/>
-                                <ColumnDefinition SharedSizeGroup="SizeColumn"/>
+                                <ColumnDefinition x:Name="ItemSizeColumn" Width="100"/>
                                 <ColumnDefinition Width="5"/>
-                                <ColumnDefinition SharedSizeGroup="TypeColumn"/>
+                                <ColumnDefinition x:Name="ItemTypeColumn" Width="120"/>
                                 <ColumnDefinition Width="5"/>
-                                <ColumnDefinition SharedSizeGroup="DateColumn"/>
+                                <ColumnDefinition x:Name="ItemDateColumn" Width="150"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             
