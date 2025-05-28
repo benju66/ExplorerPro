@@ -1292,7 +1292,7 @@ namespace ExplorerPro.UI.FileTree
             });
         }
 
-        private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void OnSelectionChanged(object sender, FileTreeSelectionChangedEventArgs e)
         {
             // Update any UI that depends on selection
             OnPropertyChanged(nameof(HasSelectedItems));

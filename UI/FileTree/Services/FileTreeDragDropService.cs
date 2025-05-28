@@ -244,8 +244,8 @@ namespace ExplorerPro.UI.FileTree.Services
                 // Create visual feedback
                 CreateDragAdorner();
                 
-                // Start drag operation
-                DragDropEffects effects = DragDrop.DoDragDrop(_control, dataObject, 
+                // Start drag operation - Use fully qualified name to avoid namespace conflict
+                DragDropEffects effects = System.Windows.DragDrop.DoDragDrop(_control, dataObject, 
                     DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
                 
                 // Handle result
