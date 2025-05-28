@@ -27,7 +27,7 @@ namespace ExplorerPro.UI.FileTree.Services
         /// <summary>
         /// Raised when the selection changes
         /// </summary>
-        public event EventHandler<SelectionChangedEventArgs> SelectionChanged;
+        public event EventHandler<FileTreeSelectionChangedEventArgs> SelectionChanged;
         
         #endregion
         
@@ -295,7 +295,7 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         private void OnSelectionChanged()
         {
-            SelectionChanged?.Invoke(this, new SelectionChangedEventArgs(
+            SelectionChanged?.Invoke(this, new FileTreeSelectionChangedEventArgs(
                 _selectedItems.ToList(),
                 _selectedPaths.ToList()
             ));
@@ -316,14 +316,14 @@ namespace ExplorerPro.UI.FileTree.Services
     }
     
     /// <summary>
-    /// Event arguments for selection changes
+    /// Event arguments for file tree selection changes
     /// </summary>
-    public class SelectionChangedEventArgs : EventArgs
+    public class FileTreeSelectionChangedEventArgs : EventArgs
     {
         public IReadOnlyList<FileTreeItem> SelectedItems { get; }
         public IReadOnlyList<string> SelectedPaths { get; }
         
-        public SelectionChangedEventArgs(IReadOnlyList<FileTreeItem> selectedItems, IReadOnlyList<string> selectedPaths)
+        public FileTreeSelectionChangedEventArgs(IReadOnlyList<FileTreeItem> selectedItems, IReadOnlyList<string> selectedPaths)
         {
             SelectedItems = selectedItems;
             SelectedPaths = selectedPaths;

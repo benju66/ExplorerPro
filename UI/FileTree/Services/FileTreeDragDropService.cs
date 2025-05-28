@@ -667,19 +667,4 @@ namespace ExplorerPro.UI.FileTree.Services
         
         #endregion
     }
-    
-    /// <summary>
-    /// Event arguments for Outlook extraction completion
-    /// </summary>
-    public class OutlookExtractionCompletedEventArgs : EventArgs
-    {
-        public OutlookDataExtractor.ExtractionResult Result { get; }
-        public string TargetPath { get; }
-        
-        public OutlookExtractionCompletedEventArgs(OutlookDataExtractor.ExtractionResult result, string targetPath)
-        {
-            Result = result;
-            TargetPath = targetPath;
-        }
-    }
 }
