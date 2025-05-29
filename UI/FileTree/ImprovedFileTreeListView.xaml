@@ -90,14 +90,10 @@
                 
                 <!-- GridSplitter for Name column -->
                 <GridSplitter Grid.Column="1"
-                              Width="5"
-                              HorizontalAlignment="Right"
-                              VerticalAlignment="Stretch"
-                              Background="Transparent"
+                              Style="{StaticResource PolishedColumnResizerStyle}"
                               ResizeDirection="Columns"
                               ResizeBehavior="CurrentAndNext"
                               DragCompleted="NameColumnSplitter_DragCompleted"
-                              Cursor="SizeWE"
                               Panel.ZIndex="2"/>
             </Grid>
         </Border>

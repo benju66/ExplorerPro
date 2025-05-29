@@ -3,9 +3,14 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:local="clr-namespace:ExplorerPro.UI.FileTree.DragDrop">
     
+    <!-- Color Definitions (for use in gradients and animations) -->
+    <Color x:Key="TreeLineColorValue">#CCCCCC</Color>
+    <Color x:Key="TreeLineHighlightColorValue">#0083DB</Color>
+    <Color x:Key="SelectionBorderColorValue">#0078D7</Color>
+    
     <!-- Tree Line Colors -->
-    <SolidColorBrush x:Key="TreeLineColor" Color="#CCCCCC"/>
-    <SolidColorBrush x:Key="TreeLineHighlightColor" Color="#0083DB"/>
+    <SolidColorBrush x:Key="TreeLineColor" Color="{StaticResource TreeLineColorValue}"/>
+    <SolidColorBrush x:Key="TreeLineHighlightColor" Color="{StaticResource TreeLineHighlightColorValue}"/>
     
     <!-- Selection Colors -->
     <SolidColorBrush x:Key="SelectionBackgroundColor" Color="#CCE8FF"/>
@@ -50,6 +55,232 @@
         </Setter>
     </Style>
     
+    <!-- Polished Column Resizer Style with all states and animations -->
+    <Style x:Key="PolishedColumnResizerStyle" TargetType="GridSplitter">
+        <Setter Property="Width" Value="5"/>
+        <Setter Property="MinWidth" Value="5"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Cursor" Value="SizeWE"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+        <Setter Property="VerticalAlignment" Value="Stretch"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="GridSplitter">
+                    <Grid>
+                        <!-- Invisible hit area for easier grabbing -->
+                        <Rectangle Fill="Transparent" Width="5"/>
+                        
+                        <!-- Visual indicator container -->
+                        <Border x:Name="SplitterBorder" 
+                                Width="5">
+                            <Border.Background>
+                                <SolidColorBrush Color="Transparent"/>
+                            </Border.Background>
+                            <Grid>
+                                <!-- Center line that appears on hover -->
+                                <Rectangle x:Name="CenterLine"
+                                           Width="1"
+                                           HorizontalAlignment="Center"
+                                           Fill="{DynamicResource BorderColor}"
+                                           Opacity="0">
+                                    <Rectangle.RenderTransform>
+                                        <ScaleTransform x:Name="LineScale" ScaleX="1" CenterX="0.5"/>
+                                    </Rectangle.RenderTransform>
+                                </Rectangle>
+                                
+                                <!-- Glow effect for dragging -->
+                                <Rectangle x:Name="GlowEffect"
+                                           Width="3"
+                                           HorizontalAlignment="Center"
+                                           Opacity="0">
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop Color="Transparent" Offset="0"/>
+                                            <GradientStop Color="{StaticResource TreeLineHighlightColorValue}" Offset="0.5"/>
+                                            <GradientStop Color="Transparent" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                    <Rectangle.Effect>
+                                        <BlurEffect Radius="2"/>
+                                    </Rectangle.Effect>
+                                </Rectangle>
+                            </Grid>
+                        </Border>
+                        
+                        <!-- Preview indicator for resize -->
+                        <Rectangle x:Name="PreviewIndicator"
+                                   Width="1"
+                                   HorizontalAlignment="Center"
+                                   Fill="{DynamicResource SelectionBorderColor}"
+                                   Opacity="0"
+                                   IsHitTestVisible="False"/>
+                    </Grid>
+                    
+                    <ControlTemplate.Triggers>
+                        <!-- Hover state -->
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <!-- Fade in center line -->
+                                        <DoubleAnimation Storyboard.TargetName="CenterLine"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0.5" 
+                                                         Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        
+                                        <!-- Subtle background highlight -->
+                                        <ColorAnimation Storyboard.TargetName="SplitterBorder"
+                                                        Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                        To="#10007ACC" 
+                                                        Duration="0:0:0.15"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="CenterLine"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" 
+                                                         Duration="0:0:0.3"/>
+                                        <ColorAnimation Storyboard.TargetName="SplitterBorder"
+                                                        Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                        To="Transparent" 
+                                                        Duration="0:0:0.3"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        
+                        <!-- Dragging state -->
+                        <Trigger Property="IsDragging" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <!-- Make center line fully visible -->
+                                        <DoubleAnimation Storyboard.TargetName="CenterLine"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="1" 
+                                                         Duration="0:0:0.1"/>
+                                        
+                                        <!-- Scale up the line width -->
+                                        <DoubleAnimation Storyboard.TargetName="LineScale"
+                                                         Storyboard.TargetProperty="ScaleX"
+                                                         To="2" 
+                                                         Duration="0:0:0.1"/>
+                                        
+                                        <!-- Show glow effect -->
+                                        <DoubleAnimation Storyboard.TargetName="GlowEffect"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0.6" 
+                                                         Duration="0:0:0.1"/>
+                                        
+                                        <!-- Show preview indicator -->
+                                        <DoubleAnimation Storyboard.TargetName="PreviewIndicator"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0.8" 
+                                                         Duration="0:0:0.1"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="LineScale"
+                                                         Storyboard.TargetProperty="ScaleX"
+                                                         To="1" 
+                                                         Duration="0:0:0.2"/>
+                                        <DoubleAnimation Storyboard.TargetName="GlowEffect"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" 
+                                                         Duration="0:0:0.2"/>
+                                        <DoubleAnimation Storyboard.TargetName="PreviewIndicator"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" 
+                                                         Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                            
+                            <!-- Additional visual changes while dragging -->
+                            <Setter TargetName="CenterLine" Property="Fill" 
+                                    Value="{DynamicResource SelectionBorderColor}"/>
+                        </Trigger>
+                        
+                        <!-- Keyboard focus for accessibility -->
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="CenterLine" Property="Opacity" Value="0.7"/>
+                            <Setter TargetName="CenterLine" Property="StrokeDashArray" Value="2,2"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Alternative: Minimalist Professional Style -->
+    <Style x:Key="MinimalistColumnResizerStyle" TargetType="GridSplitter">
+        <Setter Property="Width" Value="5"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Cursor" Value="SizeWE"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+        <Setter Property="VerticalAlignment" Value="Stretch"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="GridSplitter">
+                    <Border x:Name="SplitterBorder">
+                        <Border.Background>
+                            <SolidColorBrush Color="Transparent"/>
+                        </Border.Background>
+                        <Rectangle x:Name="Indicator"
+                                   Width="1"
+                                   HorizontalAlignment="Center"
+                                   Fill="{DynamicResource BorderColor}"
+                                   Opacity="0"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsMouseOver" Value="True"/>
+                                <Condition Property="IsDragging" Value="False"/>
+                            </MultiTrigger.Conditions>
+                            <MultiTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0.3" Duration="0:0:0.1"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </MultiTrigger.EnterActions>
+                            <MultiTrigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Indicator"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </MultiTrigger.ExitActions>
+                        </MultiTrigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="Indicator" Property="Opacity" Value="1"/>
+                            <Setter TargetName="Indicator" Property="Width" Value="2"/>
+                            <Setter TargetName="Indicator" Property="Fill" 
+                                    Value="{DynamicResource TreeLineHighlightColor}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    
     <!-- TreeViewItem Style with Connecting Lines and Enhanced Selection -->
     <Style x:Key="TreeViewItemWithLines" TargetType="{x:Type TreeViewItem}">
         <Setter Property="Background" Value="Transparent"/>
@@ -75,10 +306,13 @@
                         <!-- Selection/Drop Target Background -->
                         <Border x:Name="SelectionBorder" 
                                 Grid.Column="0" Grid.ColumnSpan="2"
-                                Background="Transparent"
                                 BorderBrush="Transparent"
                                 BorderThickness="0"
-                                CornerRadius="2"/>
+                                CornerRadius="2">
+                            <Border.Background>
+                                <SolidColorBrush Color="Transparent"/>
+                            </Border.Background>
+                        </Border>
                         
                         <!-- TreeViewItem Content -->
                         <Border x:Name="Bd" 
