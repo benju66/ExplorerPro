@@ -67,6 +67,35 @@ namespace ExplorerPro.UI.FileTree
         private bool _isUpdatingColumns = false;
         private DispatcherTimer _columnUpdateTimer;
         
+        /// <summary>
+        /// Gets or sets the current column widths for binding
+        /// </summary>
+        public double[] CurrentColumnWidths
+        {
+            get => _currentColumnWidths;
+            set
+            {
+                _currentColumnWidths = value;
+                OnPropertyChanged(nameof(CurrentColumnWidths));
+            }
+        }
+        
+        /// <summary>
+        /// Gets the custom virtualizing panel from the TreeView
+        /// </summary>
+        private FileTreeVirtualizingPanel TreeItemsPanel
+        {
+            get
+            {
+                var itemsPresenter = FindVisualChild<ItemsPresenter>(fileTreeView);
+                if (itemsPresenter != null)
+                {
+                    return VisualTreeHelper.GetChild(itemsPresenter, 0) as FileTreeVirtualizingPanel;
+                }
+                return null;
+            }
+        }
+        
         #endregion
 
         #region Events
@@ -417,6 +446,9 @@ namespace ExplorerPro.UI.FileTree
             
             // Register for global synchronization
             FileTreeVirtualizingPanel.RegisterColumnWidths("FileTree", _currentColumnWidths);
+            
+            // Update the property for binding
+            CurrentColumnWidths = _currentColumnWidths;
         }
         
         private void ColumnUpdateTimer_Tick(object sender, EventArgs e)
@@ -428,6 +460,8 @@ namespace ExplorerPro.UI.FileTree
                 if (registeredWidths != null && !registeredWidths.SequenceEqual(TreeItemsPanel.ColumnWidths ?? new double[0]))
                 {
                     TreeItemsPanel.ColumnWidths = registeredWidths;
+                    // Also update the bound property
+                    CurrentColumnWidths = registeredWidths;
                 }
             }
         }

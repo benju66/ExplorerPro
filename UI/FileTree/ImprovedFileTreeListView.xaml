@@ -373,10 +373,12 @@
                     </Style>
                 </TreeView.ItemContainerStyle>
                 
-                <!-- Use standard virtualizing panel for better performance -->
+                <!-- Use custom virtualizing panel for better column management -->
                 <TreeView.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <VirtualizingStackPanel/>
+                        <local:FileTreeVirtualizingPanel 
+                            ColumnWidths="{Binding CurrentColumnWidths, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            ColumnSpacing="5"/>
                     </ItemsPanelTemplate>
                 </TreeView.ItemsPanel>
                 
