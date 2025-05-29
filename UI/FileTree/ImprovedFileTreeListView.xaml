@@ -376,9 +376,7 @@
                 <!-- Use custom virtualizing panel for better column management -->
                 <TreeView.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <local:FileTreeVirtualizingPanel 
-                            ColumnWidths="{Binding CurrentColumnWidths, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                            ColumnSpacing="5"/>
+                        <local:FileTreeVirtualizingPanel x:Name="TreeItemsPanel" ColumnSpacing="5"/>
                     </ItemsPanelTemplate>
                 </TreeView.ItemsPanel>
                 
@@ -389,14 +387,14 @@
                             <Grid.ColumnDefinitions>
                                 <!-- Checkbox column for multi-selection -->
                                 <ColumnDefinition Width="Auto"/>
-                                <!-- Dynamic column widths that will be synchronized in code -->
-                                <ColumnDefinition x:Name="ItemNameColumn" Width="250"/>
+                                <!-- Fixed column widths - synchronization handled by custom panel -->
+                                <ColumnDefinition Width="250"/>
                                 <ColumnDefinition Width="5"/>
-                                <ColumnDefinition x:Name="ItemSizeColumn" Width="100"/>
+                                <ColumnDefinition Width="100"/>
                                 <ColumnDefinition Width="5"/>
-                                <ColumnDefinition x:Name="ItemTypeColumn" Width="120"/>
+                                <ColumnDefinition Width="120"/>
                                 <ColumnDefinition Width="5"/>
-                                <ColumnDefinition x:Name="ItemDateColumn" Width="150"/>
+                                <ColumnDefinition Width="150"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             
