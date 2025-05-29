@@ -389,13 +389,6 @@ namespace ExplorerPro.UI.FileTree
                     MainGrid.Background = GetResource<SolidColorBrush>("BackgroundColor");
                 }
                 
-                // Update header background
-                if (HeaderGrid != null && HeaderGrid.Parent is Border headerBorder)
-                {
-                    headerBorder.Background = GetResource<SolidColorBrush>("BackgroundColor");
-                    headerBorder.BorderBrush = GetResource<SolidColorBrush>("BorderColor");
-                }
-                
                 // Update TreeView itself
                 if (fileTreeView != null)
                 {
