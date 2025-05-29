@@ -29,7 +29,7 @@
     </UserControl.Resources>
     
     <!-- Main grid with shared size scope for column synchronization -->
-    <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}" Grid.IsSharedSizeScope="True">
+    <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}" >
         <!-- Column Headers Row -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -218,19 +218,18 @@
                 
                 <TreeView.ItemTemplate>
                     <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                        <!-- Grid with shared size groups for column synchronization -->
                         <Grid x:Name="ItemGrid">
                             <Grid.ColumnDefinitions>
-                                <!-- Checkbox column for multi-selection -->
+                                <!-- Checkbox column -->
                                 <ColumnDefinition Width="Auto"/>
-                                <!-- Use shared size groups to sync with header -->
-                                <ColumnDefinition SharedSizeGroup="NameCol"/>
+                                <!-- Bind to header column ActualWidth instead of using SharedSizeGroup -->
+                                <ColumnDefinition Width="{Binding ElementName=NameColumn, Path=ActualWidth}"/>
                                 <ColumnDefinition Width="5"/>
-                                <ColumnDefinition SharedSizeGroup="SizeCol"/>
+                                <ColumnDefinition Width="{Binding ElementName=SizeColumn, Path=ActualWidth}"/>
                                 <ColumnDefinition Width="5"/>
-                                <ColumnDefinition SharedSizeGroup="TypeCol"/>
+                                <ColumnDefinition Width="{Binding ElementName=TypeColumn, Path=ActualWidth}"/>
                                 <ColumnDefinition Width="5"/>
-                                <ColumnDefinition SharedSizeGroup="DateCol"/>
+                                <ColumnDefinition Width="{Binding ElementName=DateColumn, Path=ActualWidth}"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             

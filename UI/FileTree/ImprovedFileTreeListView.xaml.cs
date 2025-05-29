@@ -352,17 +352,44 @@ namespace ExplorerPro.UI.FileTree
 
         private void SetupColumnResizeHandlers()
         {
-            // Find all GridSplitters and attach handlers
-            var splitters = HeaderGrid.Children.OfType<GridSplitter>().ToList();
-            for (int i = 0; i < splitters.Count; i++)
+            // Wait for the control to be loaded
+            Loaded += (s, e) =>
             {
-                var splitter = splitters[i];
-                int columnIndex = i; // Capture index for closure
-                
-                splitter.DragCompleted += (s, e) =>
+                // Find all GridSplitters in the header and attach handlers
+                foreach (var child in HeaderGrid.Children)
                 {
-                    OnColumnResized(columnIndex);
-                };
+                    if (child is GridSplitter splitter)
+                    {
+                        splitter.DragCompleted += GridSplitter_DragCompleted;
+                    }
+                }
+            };
+        }
+
+        private void GridSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+        {
+            if (sender is GridSplitter splitter)
+            {
+                // Get the column index of the splitter
+                int column = Grid.GetColumn(splitter);
+                
+                // Map splitter column index to data column
+                switch (column)
+                {
+                    case 2: // Splitter after Name column
+                        _columnWidths["Name"] = NameColumn.ActualWidth;
+                        break;
+                    case 4: // Splitter after Size column
+                        _columnWidths["Size"] = SizeColumn.ActualWidth;
+                        break;
+                    case 6: // Splitter after Type column
+                        _columnWidths["Type"] = TypeColumn.ActualWidth;
+                        break;
+                    // Note: No splitter after Date column since it's the last one
+                }
+                
+                SaveColumnSettings();
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Column resized - Splitter at column {column}");
             }
         }
 
