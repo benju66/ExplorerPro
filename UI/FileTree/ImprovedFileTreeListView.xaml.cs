@@ -273,7 +273,7 @@ namespace ExplorerPro.UI.FileTree
                 // Apply loaded width to the Name column
                 if (NameColumn != null)
                 {
-                    NameColumn.Width = new GridLength(_nameColumnWidth, GridUnitType.Star);
+                    NameColumn.Width = new GridLength(_nameColumnWidth);
                 }
                 
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Name column initialized with width: {_nameColumnWidth}");
@@ -328,8 +328,6 @@ namespace ExplorerPro.UI.FileTree
             // Enhanced drag/drop service handles these internally now
             // We just need to handle keyboard events
             fileTreeView.PreviewKeyDown += FileTreeView_PreviewKeyDown;
-            
-            // No need to setup column resize handlers - it's handled directly in XAML now
         }
 
         private void ImprovedFileTreeListView_Loaded(object sender, RoutedEventArgs e)

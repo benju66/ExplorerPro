@@ -28,267 +28,255 @@
         </ResourceDictionary>
     </UserControl.Resources>
     
-    <!-- Main grid with SharedSizeScope to sync column widths -->
-    <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}" Grid.IsSharedSizeScope="True">
+    <!-- Main grid -->
+    <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         
-        <!-- Column Headers -->
-        <Border Grid.Row="0" Background="{DynamicResource BackgroundColor}" 
-                BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
-            <Grid x:Name="HeaderGrid" Height="28">
-                <Grid.ColumnDefinitions>
-                    <!-- Checkbox column -->
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="CheckboxColumn"/>
-                    <!-- Name column (resizable) -->
-                    <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="100" SharedSizeGroup="NameColumn"/>
-                    <!-- Splitter -->
-                    <ColumnDefinition Width="8"/>
-                    <!-- Size column -->
-                    <ColumnDefinition Width="100" SharedSizeGroup="SizeColumn"/>
-                    <!-- Type column -->
-                    <ColumnDefinition Width="120" SharedSizeGroup="TypeColumn"/>
-                    <!-- Date Modified column -->
-                    <ColumnDefinition Width="150" SharedSizeGroup="DateColumn"/>
-                    <!-- Remaining space -->
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                
-                <!-- Multi-select checkbox header -->
-                <CheckBox Grid.Column="0" 
-                          x:Name="SelectAllCheckBox"
-                          Margin="4,0,4,0"
-                          VerticalAlignment="Center"
-                          Visibility="{Binding IsMultiSelectMode, Converter={StaticResource BooleanToVisibilityConverter}}"
-                          Click="SelectAllCheckBox_Click"
-                          ToolTip="Select/Deselect All"/>
-                
-                <!-- Name Header -->
-                <Border Grid.Column="1" Background="Transparent">
-                    <TextBlock Text="Name" Padding="8,4" VerticalAlignment="Center" 
-                               Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
-                </Border>
-                
-                <!-- Resizable GridSplitter (only one, after Name column) -->
-                <GridSplitter Grid.Column="2" 
-                              Width="8"
-                              Background="Transparent"
-                              HorizontalAlignment="Stretch"
-                              VerticalAlignment="Stretch"
-                              ResizeBehavior="PreviousAndNext"
-                              ResizeDirection="Columns"
-                              DragCompleted="NameColumnSplitter_DragCompleted">
-                    <GridSplitter.Style>
-                        <Style TargetType="GridSplitter">
-                            <Setter Property="Cursor" Value="SizeWE"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="GridSplitter">
-                                        <Border Background="{TemplateBinding Background}">
-                                            <Rectangle Width="1" Fill="{DynamicResource BorderColor}" 
-                                                       HorizontalAlignment="Center" Opacity="0.3"/>
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="#20007ACC"/>
-                                </Trigger>
-                                <Trigger Property="IsDragging" Value="True">
-                                    <Setter Property="Background" Value="#40007ACC"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </GridSplitter.Style>
-                </GridSplitter>
-                
-                <!-- Size Header -->
-                <Border Grid.Column="3" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1,0,0,0">
-                    <TextBlock Text="Size" Padding="8,4" TextAlignment="Right" VerticalAlignment="Center" 
-                               Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
-                </Border>
-                
-                <!-- Type Header -->
-                <Border Grid.Column="4" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1,0,0,0">
-                    <TextBlock Text="Type" Padding="8,4" VerticalAlignment="Center" 
-                               Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
-                </Border>
-                
-                <!-- Date Modified Header -->
-                <Border Grid.Column="5" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1,0,0,0">
-                    <TextBlock Text="Date Modified" Padding="8,4" VerticalAlignment="Center" 
-                               Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
-                </Border>
-                
-                <!-- Removed header context menu since we have simplified column management -->
-            </Grid>
-        </Border>
-        
-        <!-- Tree content -->
-        <ScrollViewer Grid.Row="1" x:Name="TreeScrollViewer" 
-                      HorizontalScrollBarVisibility="Auto" 
-                      VerticalScrollBarVisibility="Auto"
-                      CanContentScroll="True"
-                      VirtualizingStackPanel.ScrollUnit="Pixel">
+        <!-- Single Grid for both headers and content -->
+        <Grid Grid.RowSpan="2">
+            <Grid.ColumnDefinitions>
+                <!-- Checkbox column -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Name column (resizable) -->
+                <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="100" MaxWidth="600"/>
+                <!-- Size column -->
+                <ColumnDefinition Width="100"/>
+                <!-- Type column -->
+                <ColumnDefinition Width="120"/>
+                <!-- Date Modified column -->
+                <ColumnDefinition Width="150"/>
+                <!-- Remaining space -->
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
             
-            <TreeView x:Name="fileTreeView" BorderThickness="0"
-                      Background="{DynamicResource TreeViewBackground}"
-                      VirtualizingStackPanel.IsVirtualizing="True"
-                      VirtualizingStackPanel.VirtualizationMode="Recycling"
-                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                      ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                      Tag="{Binding IsMultiSelectMode, Converter={StaticResource BoolToMultiSelectTagConverter}}"
-                      ItemsSource="{Binding RootItems}">
+            <!-- Column Headers -->
+            <Border Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="6" 
+                    Height="28" VerticalAlignment="Top"
+                    Background="{DynamicResource BackgroundColor}" 
+                    BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1"
+                    Panel.ZIndex="1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <!-- Match parent grid columns -->
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="{Binding ElementName=NameColumn, Path=Width}"/>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Multi-select checkbox header -->
+                    <CheckBox Grid.Column="0" 
+                              x:Name="SelectAllCheckBox"
+                              Margin="4,0,4,0"
+                              VerticalAlignment="Center"
+                              Visibility="{Binding IsMultiSelectMode, Converter={StaticResource BooleanToVisibilityConverter}}"
+                              Click="SelectAllCheckBox_Click"
+                              ToolTip="Select/Deselect All"/>
+                    
+                    <!-- Name Header -->
+                    <TextBlock Grid.Column="1" Text="Name" Padding="8,4" VerticalAlignment="Center" 
+                               Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                    
+                    <!-- Size Header -->
+                    <Border Grid.Column="2" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1,0,0,0">
+                        <TextBlock Text="Size" Padding="8,4" TextAlignment="Right" VerticalAlignment="Center" 
+                                   Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                    </Border>
+                    
+                    <!-- Type Header -->
+                    <Border Grid.Column="3" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1,0,0,0">
+                        <TextBlock Text="Type" Padding="8,4" VerticalAlignment="Center" 
+                                   Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                    </Border>
+                    
+                    <!-- Date Modified Header -->
+                    <Border Grid.Column="4" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1,0,0,0">
+                        <TextBlock Text="Date Modified" Padding="8,4" VerticalAlignment="Center" 
+                                   Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                    </Border>
+                </Grid>
+            </Border>
+            
+            <!-- GridSplitter for Name column -->
+            <GridSplitter Grid.Column="1" Grid.RowSpan="2"
+                          Width="5"
+                          HorizontalAlignment="Right"
+                          VerticalAlignment="Stretch"
+                          Background="Transparent"
+                          ResizeDirection="Columns"
+                          ResizeBehavior="CurrentAndNext"
+                          DragCompleted="NameColumnSplitter_DragCompleted"
+                          Cursor="SizeWE"
+                          Panel.ZIndex="2"/>
+            
+            <!-- Tree content -->
+            <ScrollViewer Grid.Column="0" Grid.ColumnSpan="6" 
+                          Margin="0,28,0,0"
+                          x:Name="TreeScrollViewer" 
+                          HorizontalScrollBarVisibility="Auto" 
+                          VerticalScrollBarVisibility="Auto"
+                          CanContentScroll="True"
+                          VirtualizingStackPanel.ScrollUnit="Pixel">
                 
-                <TreeView.ItemContainerStyle>
-                    <Style TargetType="TreeViewItem" BasedOn="{StaticResource TreeViewItemWithLines}">
-                        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
-                        <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling"/>
-                    </Style>
-                </TreeView.ItemContainerStyle>
-                
-                <TreeView.ItemTemplate>
-                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                        <Grid x:Name="ItemGrid">
-                            <Grid.ColumnDefinitions>
-                                <!-- Checkbox column -->
-                                <ColumnDefinition Width="Auto" SharedSizeGroup="CheckboxColumn"/>
-                                <!-- Name column (shares size with header) -->
-                                <ColumnDefinition Width="*" SharedSizeGroup="NameColumn"/>
-                                <!-- Spacer matching splitter -->
-                                <ColumnDefinition Width="8"/>
-                                <!-- Size column -->
-                                <ColumnDefinition Width="100" SharedSizeGroup="SizeColumn"/>
-                                <!-- Type column -->
-                                <ColumnDefinition Width="120" SharedSizeGroup="TypeColumn"/>
-                                <!-- Date Modified column -->
-                                <ColumnDefinition Width="150" SharedSizeGroup="DateColumn"/>
-                                <!-- Remaining space -->
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            
-                            <!-- Multi-selection checkbox -->
-                            <CheckBox Grid.Column="0" 
-                                      Margin="4,0,4,0"
-                                      VerticalAlignment="Center"
-                                      IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                      Visibility="{Binding RelativeSource={RelativeSource AncestorType=TreeView}, 
-                                                  Path=Tag, 
-                                                  Converter={StaticResource MultiSelectVisibilityConverter}}"
-                                      Click="SelectionCheckBox_Click"/>
-                            
-                            <!-- Name Column with tree structure -->
-                            <Grid Grid.Column="1" ClipToBounds="True">
-                                <!-- Tree structure content -->
-                                <Grid>
-                                    <!-- Background canvas for drawing connecting lines -->
-                                    <Canvas Background="Transparent"
-                                           Margin="{Binding Level, Converter={StaticResource LevelToIndentConverter}}"
-                                           Height="20" HorizontalAlignment="Left" Width="40"
-                                           ClipToBounds="False">
+                <TreeView x:Name="fileTreeView" BorderThickness="0"
+                          Background="{DynamicResource TreeViewBackground}"
+                          VirtualizingStackPanel.IsVirtualizing="True"
+                          VirtualizingStackPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                          ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                          Tag="{Binding IsMultiSelectMode, Converter={StaticResource BoolToMultiSelectTagConverter}}"
+                          ItemsSource="{Binding RootItems}">
+                    
+                    <TreeView.ItemContainerStyle>
+                        <Style TargetType="TreeViewItem" BasedOn="{StaticResource TreeViewItemWithLines}">
+                            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
+                            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling"/>
+                        </Style>
+                    </TreeView.ItemContainerStyle>
+                    
+                    <TreeView.ItemTemplate>
+                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                            <Grid x:Name="ItemGrid">
+                                <Grid.ColumnDefinitions>
+                                    <!-- Checkbox column -->
+                                    <ColumnDefinition Width="Auto"/>
+                                    <!-- Name column -->
+                                    <ColumnDefinition Width="{Binding ElementName=NameColumn, Path=ActualWidth}"/>
+                                    <!-- Size column -->
+                                    <ColumnDefinition Width="100"/>
+                                    <!-- Type column -->
+                                    <ColumnDefinition Width="120"/>
+                                    <!-- Date Modified column -->
+                                    <ColumnDefinition Width="150"/>
+                                    <!-- Remaining space -->
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <!-- Multi-selection checkbox -->
+                                <CheckBox Grid.Column="0" 
+                                          Margin="4,0,4,0"
+                                          VerticalAlignment="Center"
+                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                          Visibility="{Binding RelativeSource={RelativeSource AncestorType=TreeView}, 
+                                                      Path=Tag, 
+                                                      Converter={StaticResource MultiSelectVisibilityConverter}}"
+                                          Click="SelectionCheckBox_Click"/>
+                                
+                                <!-- Name Column with tree structure -->
+                                <Grid Grid.Column="1" ClipToBounds="True">
+                                    <!-- Tree structure content -->
+                                    <Grid>
+                                        <!-- Background canvas for drawing connecting lines -->
+                                        <Canvas Background="Transparent"
+                                               Margin="{Binding Level, Converter={StaticResource LevelToIndentConverter}}"
+                                               Height="20" HorizontalAlignment="Left" Width="40"
+                                               ClipToBounds="False">
+                                            
+                                            <!-- Horizontal line to expander -->
+                                            <Line x:Name="HorizontalLine"
+                                                  X1="0" Y1="10" X2="25" Y2="10"
+                                                  Stroke="{DynamicResource TreeLineColor}"
+                                                  StrokeThickness="1">
+                                                <Line.Style>
+                                                    <Style TargetType="Line">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Level}" Value="0">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Line.Style>
+                                            </Line>
+                                            
+                                            <!-- Vertical line from parent -->
+                                            <Line x:Name="VerticalLine"
+                                                  X1="0" Y1="0" X2="0" Y2="10"
+                                                  Stroke="{DynamicResource TreeLineColor}"
+                                                  StrokeThickness="1">
+                                                <Line.Style>
+                                                    <Style TargetType="Line">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Level}" Value="0">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Line.Style>
+                                            </Line>
+                                        </Canvas>
                                         
-                                        <!-- Horizontal line to expander -->
-                                        <Line x:Name="HorizontalLine"
-                                              X1="0" Y1="10" X2="25" Y2="10"
-                                              Stroke="{DynamicResource TreeLineColor}"
-                                              StrokeThickness="1">
-                                            <Line.Style>
-                                                <Style TargetType="Line">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Level}" Value="0">
-                                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Line.Style>
-                                        </Line>
-                                        
-                                        <!-- Vertical line from parent -->
-                                        <Line x:Name="VerticalLine"
-                                              X1="0" Y1="0" X2="0" Y2="10"
-                                              Stroke="{DynamicResource TreeLineColor}"
-                                              StrokeThickness="1">
-                                            <Line.Style>
-                                                <Style TargetType="Line">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Level}" Value="0">
-                                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Line.Style>
-                                        </Line>
-                                    </Canvas>
-                                    
-                                    <!-- Name content with indentation and expander -->
-                                    <StackPanel Orientation="Horizontal"
-                                               Margin="{Binding Level, Converter={StaticResource ExpanderRightIndentConverter}}">
-                                        
-                                        <!-- Expander Toggle Button -->
-                                        <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay}"
-                                                     VerticalAlignment="Center">
-                                            <ToggleButton.Style>
-                                                <Style TargetType="ToggleButton" BasedOn="{StaticResource Windows11ExpanderStyle}">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsDirectory}" Value="False">
-                                                            <Setter Property="Visibility" Value="Hidden" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding HasChildren}" Value="False">
-                                                            <Setter Property="Visibility" Value="Hidden" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </ToggleButton.Style>
-                                        </ToggleButton>
-                                        
-                                        <!-- File/Folder Icon -->
-                                        <Image Source="{Binding Icon}" Width="16" Height="16" 
-                                               Margin="2,0,5,0" VerticalAlignment="Center"
-                                               RenderOptions.BitmapScalingMode="HighQuality"/>
-                                        
-                                        <!-- File/Folder Name -->
-                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   Foreground="{Binding Foreground}"
-                                                   FontWeight="{Binding FontWeight}"
-                                                   ToolTip="{Binding Path}"/>
-                                    </StackPanel>
+                                        <!-- Name content with indentation and expander -->
+                                        <StackPanel Orientation="Horizontal"
+                                                   Margin="{Binding Level, Converter={StaticResource ExpanderRightIndentConverter}}">
+                                            
+                                            <!-- Expander Toggle Button -->
+                                            <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay}"
+                                                         VerticalAlignment="Center">
+                                                <ToggleButton.Style>
+                                                    <Style TargetType="ToggleButton" BasedOn="{StaticResource Windows11ExpanderStyle}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsDirectory}" Value="False">
+                                                                <Setter Property="Visibility" Value="Hidden" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding HasChildren}" Value="False">
+                                                                <Setter Property="Visibility" Value="Hidden" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </ToggleButton.Style>
+                                            </ToggleButton>
+                                            
+                                            <!-- File/Folder Icon -->
+                                            <Image Source="{Binding Icon}" Width="16" Height="16" 
+                                                   Margin="2,0,5,0" VerticalAlignment="Center"
+                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                            
+                                            <!-- File/Folder Name -->
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Foreground="{Binding Foreground}"
+                                                       FontWeight="{Binding FontWeight}"
+                                                       ToolTip="{Binding Path}"/>
+                                        </StackPanel>
+                                    </Grid>
                                 </Grid>
+                                
+                                <!-- Size Column -->
+                                <TextBlock Grid.Column="2" Text="{Binding Size}" 
+                                          VerticalAlignment="Center" 
+                                          TextAlignment="Right"
+                                          Margin="5,0"
+                                          TextTrimming="CharacterEllipsis"
+                                          Foreground="{Binding Foreground}"
+                                          FontWeight="{Binding FontWeight}"/>
+                                
+                                <!-- Type Column -->
+                                <TextBlock Grid.Column="3" Text="{Binding Type}" 
+                                          VerticalAlignment="Center" 
+                                          TextAlignment="Left"
+                                          Margin="5,0"
+                                          TextTrimming="CharacterEllipsis"
+                                          Foreground="{Binding Foreground}"
+                                          FontWeight="{Binding FontWeight}"/>
+                                
+                                <!-- Date Modified Column -->
+                                <TextBlock Grid.Column="4" Text="{Binding LastModifiedStr}" 
+                                          VerticalAlignment="Center" 
+                                          TextAlignment="Left"
+                                          Margin="5,0"
+                                          TextTrimming="CharacterEllipsis"
+                                          Foreground="{Binding Foreground}"
+                                          FontWeight="{Binding FontWeight}"/>
                             </Grid>
-                            
-                            <!-- Size Column -->
-                            <TextBlock Grid.Column="3" Text="{Binding Size}" 
-                                      VerticalAlignment="Center" 
-                                      TextAlignment="Right"
-                                      Margin="5,0"
-                                      TextTrimming="CharacterEllipsis"
-                                      Foreground="{Binding Foreground}"
-                                      FontWeight="{Binding FontWeight}"/>
-                            
-                            <!-- Type Column -->
-                            <TextBlock Grid.Column="4" Text="{Binding Type}" 
-                                      VerticalAlignment="Center" 
-                                      TextAlignment="Left"
-                                      Margin="5,0"
-                                      TextTrimming="CharacterEllipsis"
-                                      Foreground="{Binding Foreground}"
-                                      FontWeight="{Binding FontWeight}"/>
-                            
-                            <!-- Date Modified Column -->
-                            <TextBlock Grid.Column="5" Text="{Binding LastModifiedStr}" 
-                                      VerticalAlignment="Center" 
-                                      TextAlignment="Left"
-                                      Margin="5,0"
-                                      TextTrimming="CharacterEllipsis"
-                                      Foreground="{Binding Foreground}"
-                                      FontWeight="{Binding FontWeight}"/>
-                        </Grid>
-                    </HierarchicalDataTemplate>
-                </TreeView.ItemTemplate>
-            </TreeView>
-        </ScrollViewer>
+                        </HierarchicalDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+            </ScrollViewer>
+        </Grid>
     </Grid>
 </UserControl>
