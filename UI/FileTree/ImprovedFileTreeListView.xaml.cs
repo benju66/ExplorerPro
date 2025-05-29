@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Simplified column synchronization
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Complete updated version with simplified column management
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -56,16 +56,10 @@ namespace ExplorerPro.UI.FileTree
         
         #endregion
         
-        #region Column Management - Simplified
+        #region Column Management - Simplified for Name Column Only
         
-        private const string COLUMN_SETTINGS_KEY = "file_tree.column_widths";
-        private Dictionary<string, double> _columnWidths = new Dictionary<string, double>
-        {
-            { "Name", 250 },
-            { "Size", 100 },
-            { "Type", 120 },
-            { "DateModified", 150 }
-        };
+        private const string NAME_COLUMN_WIDTH_KEY = "file_tree.name_column_width";
+        private double _nameColumnWidth = 250; // Default width
         
         #endregion
 
@@ -273,63 +267,52 @@ namespace ExplorerPro.UI.FileTree
         {
             try
             {
-                // Load saved column widths from settings
-                LoadColumnSettings();
+                // Load saved name column width from settings
+                LoadNameColumnWidth();
                 
-                // Apply loaded settings to header columns
-                ApplyColumnWidthsToHeader();
+                // Apply loaded width to the Name column
+                if (NameColumn != null)
+                {
+                    NameColumn.Width = new GridLength(_nameColumnWidth, GridUnitType.Star);
+                }
                 
-                System.Diagnostics.Debug.WriteLine("[DEBUG] Column settings initialized");
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Name column initialized with width: {_nameColumnWidth}");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to initialize columns: {ex.Message}");
-                // Continue with default widths
+                // Continue with default width
             }
         }
 
-        private void LoadColumnSettings()
+        private void LoadNameColumnWidth()
         {
             try
             {
-                var savedWidths = _settingsManager.GetSetting<Dictionary<string, double>>(COLUMN_SETTINGS_KEY, null);
-                if (savedWidths != null)
+                var savedWidth = _settingsManager.GetSetting<double>(NAME_COLUMN_WIDTH_KEY, 250);
+                if (savedWidth >= 100 && savedWidth <= 600) // Sanity check
                 {
-                    foreach (var kvp in savedWidths)
-                    {
-                        if (_columnWidths.ContainsKey(kvp.Key))
-                        {
-                            _columnWidths[kvp.Key] = kvp.Value;
-                        }
-                    }
-                    System.Diagnostics.Debug.WriteLine("[DEBUG] Column settings loaded from settings");
+                    _nameColumnWidth = savedWidth;
                 }
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Name column width loaded: {_nameColumnWidth}");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to load column settings: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to load name column width: {ex.Message}");
             }
         }
 
-        private void SaveColumnSettings()
+        private void SaveNameColumnWidth()
         {
             try
             {
-                _settingsManager.UpdateSetting(COLUMN_SETTINGS_KEY, _columnWidths);
-                System.Diagnostics.Debug.WriteLine("[DEBUG] Column settings saved");
+                _settingsManager.UpdateSetting(NAME_COLUMN_WIDTH_KEY, _nameColumnWidth);
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Name column width saved: {_nameColumnWidth}");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to save column settings: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to save name column width: {ex.Message}");
             }
-        }
-
-        private void ApplyColumnWidthsToHeader()
-        {
-            NameColumn.Width = new GridLength(_columnWidths["Name"]);
-            SizeColumn.Width = new GridLength(_columnWidths["Size"]);
-            TypeColumn.Width = new GridLength(_columnWidths["Type"]);
-            DateColumn.Width = new GridLength(_columnWidths["DateModified"]);
         }
 
         private void SetupEventHandlers()
@@ -346,76 +329,7 @@ namespace ExplorerPro.UI.FileTree
             // We just need to handle keyboard events
             fileTreeView.PreviewKeyDown += FileTreeView_PreviewKeyDown;
             
-            // Simple column resize handlers
-            SetupColumnResizeHandlers();
-        }
-
-        private void SetupColumnResizeHandlers()
-        {
-            // Wait for the control to be loaded
-            Loaded += (s, e) =>
-            {
-                // Find all GridSplitters in the header and attach handlers
-                foreach (var child in HeaderGrid.Children)
-                {
-                    if (child is GridSplitter splitter)
-                    {
-                        splitter.DragCompleted += GridSplitter_DragCompleted;
-                    }
-                }
-            };
-        }
-
-        private void GridSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
-        {
-            if (sender is GridSplitter splitter)
-            {
-                // Get the column index of the splitter
-                int column = Grid.GetColumn(splitter);
-                
-                // Map splitter column index to data column
-                switch (column)
-                {
-                    case 2: // Splitter after Name column
-                        _columnWidths["Name"] = NameColumn.ActualWidth;
-                        break;
-                    case 4: // Splitter after Size column
-                        _columnWidths["Size"] = SizeColumn.ActualWidth;
-                        break;
-                    case 6: // Splitter after Type column
-                        _columnWidths["Type"] = TypeColumn.ActualWidth;
-                        break;
-                    // Note: No splitter after Date column since it's the last one
-                }
-                
-                SaveColumnSettings();
-                System.Diagnostics.Debug.WriteLine($"[DEBUG] Column resized - Splitter at column {column}");
-            }
-        }
-
-        private void OnColumnResized(int splitterIndex)
-        {
-            // Update stored widths
-            switch (splitterIndex)
-            {
-                case 0: // Name column
-                    _columnWidths["Name"] = NameColumn.ActualWidth;
-                    break;
-                case 1: // Size column
-                    _columnWidths["Size"] = SizeColumn.ActualWidth;
-                    break;
-                case 2: // Type column
-                    _columnWidths["Type"] = TypeColumn.ActualWidth;
-                    break;
-                case 3: // DateModified column
-                    _columnWidths["DateModified"] = DateColumn.ActualWidth;
-                    break;
-            }
-            
-            // Save settings
-            SaveColumnSettings();
-            
-            System.Diagnostics.Debug.WriteLine($"[DEBUG] Column resized: splitter {splitterIndex}");
+            // No need to setup column resize handlers - it's handled directly in XAML now
         }
 
         private void ImprovedFileTreeListView_Loaded(object sender, RoutedEventArgs e)
@@ -438,120 +352,23 @@ namespace ExplorerPro.UI.FileTree
         
         #endregion
 
-        #region Column Context Menu Handlers
+        #region Column Resize Handler
         
-        private void AutoSizeColumn_Click(object sender, RoutedEventArgs e)
+        private void NameColumnSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
         {
-            var mousePos = Mouse.GetPosition(HeaderGrid);
-            string columnName = GetColumnNameFromPosition(mousePos.X);
-            if (!string.IsNullOrEmpty(columnName))
+            try
             {
-                AutoSizeColumn(columnName);
-            }
-        }
-        
-        private void AutoSizeAllColumns_Click(object sender, RoutedEventArgs e)
-        {
-            AutoSizeColumn("Name");
-            AutoSizeColumn("Size");
-            AutoSizeColumn("Type");
-            AutoSizeColumn("DateModified");
-        }
-        
-        private void ResetColumnWidths_Click(object sender, RoutedEventArgs e)
-        {
-            // Reset to defaults
-            _columnWidths["Name"] = 250;
-            _columnWidths["Size"] = 100;
-            _columnWidths["Type"] = 120;
-            _columnWidths["DateModified"] = 150;
-            
-            ApplyColumnWidthsToHeader();
-            SaveColumnSettings();
-        }
-        
-        private void AutoSizeColumn(string columnName)
-        {
-            double optimalWidth = GetOptimalColumnWidth(columnName);
-            
-            switch (columnName)
-            {
-                case "Name":
-                    NameColumn.Width = new GridLength(optimalWidth);
-                    _columnWidths["Name"] = optimalWidth;
-                    break;
-                case "Size":
-                    SizeColumn.Width = new GridLength(optimalWidth);
-                    _columnWidths["Size"] = optimalWidth;
-                    break;
-                case "Type":
-                    TypeColumn.Width = new GridLength(optimalWidth);
-                    _columnWidths["Type"] = optimalWidth;
-                    break;
-                case "DateModified":
-                    DateColumn.Width = new GridLength(optimalWidth);
-                    _columnWidths["DateModified"] = optimalWidth;
-                    break;
-            }
-            
-            SaveColumnSettings();
-        }
-        
-        private double GetOptimalColumnWidth(string columnName)
-        {
-            // These are reasonable defaults for typical content
-            switch (columnName)
-            {
-                case "Name":
-                    return 300; // Generous width for long file names
-                case "Size":
-                    return 100; // Enough for "999.9 MB"
-                case "Type":
-                    return 140; // Enough for longer file type descriptions
-                case "DateModified":
-                    return 160; // Enough for full date/time display
-                default:
-                    return 100;
-            }
-        }
-        
-        private string GetColumnNameFromPosition(double x)
-        {
-            double currentX = 0;
-            
-            for (int i = 0; i < HeaderGrid.ColumnDefinitions.Count; i += 2) // Skip splitters
-            {
-                currentX += HeaderGrid.ColumnDefinitions[i].ActualWidth;
-                if (x <= currentX)
+                // Save the new width of the Name column
+                if (NameColumn != null)
                 {
-                    switch (i)
-                    {
-                        case 1: return "Name"; // Skip checkbox column
-                        case 3: return "Size";
-                        case 5: return "Type";
-                        case 7: return "DateModified";
-                    }
-                }
-                
-                if (i + 1 < HeaderGrid.ColumnDefinitions.Count)
-                {
-                    currentX += HeaderGrid.ColumnDefinitions[i + 1].ActualWidth; // Add splitter width
+                    _nameColumnWidth = NameColumn.ActualWidth;
+                    SaveNameColumnWidth();
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Name column resized to: {_nameColumnWidth}");
                 }
             }
-            
-            return "DateModified"; // Default to last column
-        }
-        
-        #endregion
-
-        #region Scroll Synchronization
-        
-        private void TreeScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
-        {
-            // Only sync horizontal scroll between header and content
-            if (e.HorizontalChange != 0 && HeaderScrollViewer != null)
+            catch (Exception ex)
             {
-                HeaderScrollViewer.ScrollToHorizontalOffset(e.HorizontalOffset);
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Error handling column resize: {ex.Message}");
             }
         }
         
@@ -1851,8 +1668,8 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (disposing)
                 {
-                    // Save column settings before disposal
-                    SaveColumnSettings();
+                    // Save name column width before disposal
+                    SaveNameColumnWidth();
                     
                     // Cancel any ongoing operations
                     _dragDropService?.CancelOutlookExtraction();

@@ -28,187 +28,121 @@
         </ResourceDictionary>
     </UserControl.Resources>
     
-    <!-- Main grid with shared size scope for column synchronization -->
-    <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}" >
-        <!-- Column Headers Row -->
+    <!-- Main grid with SharedSizeScope to sync column widths -->
+    <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}" Grid.IsSharedSizeScope="True">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         
-        <!-- Column Headers with Border for background -->
-        <Border Grid.Row="0" Background="{DynamicResource BackgroundColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
-            <!-- Header ScrollViewer for horizontal sync -->
-            <ScrollViewer x:Name="HeaderScrollViewer" 
-                          HorizontalScrollBarVisibility="Hidden"
-                          VerticalScrollBarVisibility="Disabled"
-                          CanContentScroll="False">
-                <Grid x:Name="HeaderGrid" Height="28">
-                    <Grid.ColumnDefinitions>
-                        <!-- Checkbox column for multi-selection -->
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="100" MaxWidth="600" SharedSizeGroup="NameCol"/>
-                        <ColumnDefinition Width="5"/>
-                        <ColumnDefinition x:Name="SizeColumn" Width="100" MinWidth="60" MaxWidth="150" SharedSizeGroup="SizeCol"/>
-                        <ColumnDefinition Width="5"/>
-                        <ColumnDefinition x:Name="TypeColumn" Width="120" MinWidth="80" MaxWidth="200" SharedSizeGroup="TypeCol"/>
-                        <ColumnDefinition Width="5"/>
-                        <ColumnDefinition x:Name="DateColumn" Width="150" MinWidth="100" MaxWidth="250" SharedSizeGroup="DateCol"/>
-                        <ColumnDefinition Width="*"/> <!-- Fill remaining space -->
-                    </Grid.ColumnDefinitions>
-                    
-                    <!-- Multi-select checkbox header -->
-                    <CheckBox Grid.Column="0" 
-                              x:Name="SelectAllCheckBox"
-                              Margin="4,0,4,0"
-                              VerticalAlignment="Center"
-                              Visibility="{Binding IsMultiSelectMode, Converter={StaticResource BooleanToVisibilityConverter}}"
-                              Click="SelectAllCheckBox_Click"
-                              ToolTip="Select/Deselect All"/>
-                    
-                    <!-- Column Headers with hover effects -->
-                    <Border Grid.Column="1" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" 
-                            Background="Transparent">
-                        <Grid>
-                            <TextBlock Text="Name" Padding="8,4" VerticalAlignment="Center" 
-                                     Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
-                        </Grid>
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#10000000"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                    </Border>
-                    
-                    <!-- Simple GridSplitter without behaviors -->
-                    <GridSplitter Grid.Column="2" Tag="Name"
-                                  Background="Transparent"
-                                  Cursor="SizeWE"
-                                  Focusable="False"
-                                  Margin="-2,0,-2,0"
-                                  Panel.ZIndex="10"/>
-                    
-                    <Border Grid.Column="3" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" 
-                            Background="Transparent">
-                        <Grid>
-                            <TextBlock Text="Size" Padding="8,4" VerticalAlignment="Center" TextAlignment="Right" 
-                                     Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
-                        </Grid>
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#10000000"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                    </Border>
-                    
-                    <GridSplitter Grid.Column="4" Tag="Size"
-                                  Background="Transparent"
-                                  Cursor="SizeWE"
-                                  Focusable="False"
-                                  Margin="-2,0,-2,0"
-                                  Panel.ZIndex="10"/>
-                    
-                    <Border Grid.Column="5" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" 
-                            Background="Transparent">
-                        <Grid>
-                            <TextBlock Text="Type" Padding="8,4" VerticalAlignment="Center" 
-                                     Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
-                        </Grid>
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#10000000"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                    </Border>
-                    
-                    <GridSplitter Grid.Column="6" Tag="Type"
-                                  Background="Transparent"
-                                  Cursor="SizeWE"
-                                  Focusable="False"
-                                  Margin="-2,0,-2,0"
-                                  Panel.ZIndex="10"/>
-                    
-                    <Border Grid.Column="7" Background="Transparent">
-                        <Grid>
-                            <TextBlock Text="Date Modified" Padding="8,4" VerticalAlignment="Center" 
-                                     Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
-                        </Grid>
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#10000000"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                    </Border>
-                    
-                    <!-- Header context menu -->
-                    <Grid.ContextMenu>
-                        <ContextMenu x:Name="HeaderContextMenu">
-                            <MenuItem Header="Auto-size Column" Click="AutoSizeColumn_Click">
-                                <MenuItem.Icon>
-                                    <Path Width="12" Height="12" 
-                                          Data="M 2 0 L 2 12 M 10 0 L 10 12 M 5 3 L 7 6 L 5 9"
-                                          Stroke="{DynamicResource TextColor}" StrokeThickness="1"/>
-                                </MenuItem.Icon>
-                            </MenuItem>
-                            <MenuItem Header="Auto-size All Columns" Click="AutoSizeAllColumns_Click">
-                                <MenuItem.Icon>
-                                    <Path Width="12" Height="12" 
-                                          Data="M 0 0 L 0 12 M 4 0 L 4 12 M 8 0 L 8 12 M 12 0 L 12 12"
-                                          Stroke="{DynamicResource TextColor}" StrokeThickness="1"/>
-                                </MenuItem.Icon>
-                            </MenuItem>
-                            <Separator/>
-                            <MenuItem Header="Reset Column Widths" Click="ResetColumnWidths_Click">
-                                <MenuItem.Icon>
-                                    <Path Width="12" Height="12" 
-                                          Data="M 2 6 A 4 4 0 1 1 6 2 L 6 4 L 8 2 L 6 0 L 6 2"
-                                          Stroke="{DynamicResource TextColor}" StrokeThickness="1.5"/>
-                                </MenuItem.Icon>
-                            </MenuItem>
-                        </ContextMenu>
-                    </Grid.ContextMenu>
-                </Grid>
-            </ScrollViewer>
+        <!-- Column Headers -->
+        <Border Grid.Row="0" Background="{DynamicResource BackgroundColor}" 
+                BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
+            <Grid x:Name="HeaderGrid" Height="28">
+                <Grid.ColumnDefinitions>
+                    <!-- Checkbox column -->
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="CheckboxColumn"/>
+                    <!-- Name column (resizable) -->
+                    <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="100" SharedSizeGroup="NameColumn"/>
+                    <!-- Splitter -->
+                    <ColumnDefinition Width="8"/>
+                    <!-- Size column -->
+                    <ColumnDefinition Width="100" SharedSizeGroup="SizeColumn"/>
+                    <!-- Type column -->
+                    <ColumnDefinition Width="120" SharedSizeGroup="TypeColumn"/>
+                    <!-- Date Modified column -->
+                    <ColumnDefinition Width="150" SharedSizeGroup="DateColumn"/>
+                    <!-- Remaining space -->
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Multi-select checkbox header -->
+                <CheckBox Grid.Column="0" 
+                          x:Name="SelectAllCheckBox"
+                          Margin="4,0,4,0"
+                          VerticalAlignment="Center"
+                          Visibility="{Binding IsMultiSelectMode, Converter={StaticResource BooleanToVisibilityConverter}}"
+                          Click="SelectAllCheckBox_Click"
+                          ToolTip="Select/Deselect All"/>
+                
+                <!-- Name Header -->
+                <Border Grid.Column="1" Background="Transparent">
+                    <TextBlock Text="Name" Padding="8,4" VerticalAlignment="Center" 
+                               Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                </Border>
+                
+                <!-- Resizable GridSplitter (only one, after Name column) -->
+                <GridSplitter Grid.Column="2" 
+                              Width="8"
+                              Background="Transparent"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              ResizeBehavior="PreviousAndNext"
+                              ResizeDirection="Columns"
+                              DragCompleted="NameColumnSplitter_DragCompleted">
+                    <GridSplitter.Style>
+                        <Style TargetType="GridSplitter">
+                            <Setter Property="Cursor" Value="SizeWE"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="GridSplitter">
+                                        <Border Background="{TemplateBinding Background}">
+                                            <Rectangle Width="1" Fill="{DynamicResource BorderColor}" 
+                                                       HorizontalAlignment="Center" Opacity="0.3"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#20007ACC"/>
+                                </Trigger>
+                                <Trigger Property="IsDragging" Value="True">
+                                    <Setter Property="Background" Value="#40007ACC"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </GridSplitter.Style>
+                </GridSplitter>
+                
+                <!-- Size Header -->
+                <Border Grid.Column="3" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1,0,0,0">
+                    <TextBlock Text="Size" Padding="8,4" TextAlignment="Right" VerticalAlignment="Center" 
+                               Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                </Border>
+                
+                <!-- Type Header -->
+                <Border Grid.Column="4" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1,0,0,0">
+                    <TextBlock Text="Type" Padding="8,4" VerticalAlignment="Center" 
+                               Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                </Border>
+                
+                <!-- Date Modified Header -->
+                <Border Grid.Column="5" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1,0,0,0">
+                    <TextBlock Text="Date Modified" Padding="8,4" VerticalAlignment="Center" 
+                               Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                </Border>
+                
+                <!-- Removed header context menu since we have simplified column management -->
+            </Grid>
         </Border>
         
-        <!-- ScrollViewer to sync horizontal scrolling between header and content -->
+        <!-- Tree content -->
         <ScrollViewer Grid.Row="1" x:Name="TreeScrollViewer" 
                       HorizontalScrollBarVisibility="Auto" 
                       VerticalScrollBarVisibility="Auto"
-                      ScrollChanged="TreeScrollViewer_ScrollChanged"
                       CanContentScroll="True"
                       VirtualizingStackPanel.ScrollUnit="Pixel">
-            <!-- File TreeView with standard virtualization -->
+            
             <TreeView x:Name="fileTreeView" BorderThickness="0"
-                     Background="{DynamicResource TreeViewBackground}"
-                     VirtualizingStackPanel.IsVirtualizing="True"
-                     VirtualizingStackPanel.VirtualizationMode="Recycling"
-                     VirtualizingStackPanel.ScrollUnit="Pixel"
-                     VirtualizingStackPanel.CacheLengthUnit="Page"
-                     VirtualizingStackPanel.CacheLength="2,2"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                     ScrollViewer.IsDeferredScrollingEnabled="False"
-                     Tag="{Binding IsMultiSelectMode, Converter={StaticResource BoolToMultiSelectTagConverter}}"
-                     ItemsSource="{Binding RootItems}">
+                      Background="{DynamicResource TreeViewBackground}"
+                      VirtualizingStackPanel.IsVirtualizing="True"
+                      VirtualizingStackPanel.VirtualizationMode="Recycling"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                      Tag="{Binding IsMultiSelectMode, Converter={StaticResource BoolToMultiSelectTagConverter}}"
+                      ItemsSource="{Binding RootItems}">
                 
-                <!-- Optimized Item Container Style -->
                 <TreeView.ItemContainerStyle>
                     <Style TargetType="TreeViewItem" BasedOn="{StaticResource TreeViewItemWithLines}">
                         <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
@@ -221,15 +155,18 @@
                         <Grid x:Name="ItemGrid">
                             <Grid.ColumnDefinitions>
                                 <!-- Checkbox column -->
-                                <ColumnDefinition Width="Auto"/>
-                                <!-- Bind to header column ActualWidth instead of using SharedSizeGroup -->
-                                <ColumnDefinition Width="{Binding ElementName=NameColumn, Path=ActualWidth}"/>
-                                <ColumnDefinition Width="5"/>
-                                <ColumnDefinition Width="{Binding ElementName=SizeColumn, Path=ActualWidth}"/>
-                                <ColumnDefinition Width="5"/>
-                                <ColumnDefinition Width="{Binding ElementName=TypeColumn, Path=ActualWidth}"/>
-                                <ColumnDefinition Width="5"/>
-                                <ColumnDefinition Width="{Binding ElementName=DateColumn, Path=ActualWidth}"/>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="CheckboxColumn"/>
+                                <!-- Name column (shares size with header) -->
+                                <ColumnDefinition Width="*" SharedSizeGroup="NameColumn"/>
+                                <!-- Spacer matching splitter -->
+                                <ColumnDefinition Width="8"/>
+                                <!-- Size column -->
+                                <ColumnDefinition Width="100" SharedSizeGroup="SizeColumn"/>
+                                <!-- Type column -->
+                                <ColumnDefinition Width="120" SharedSizeGroup="TypeColumn"/>
+                                <!-- Date Modified column -->
+                                <ColumnDefinition Width="150" SharedSizeGroup="DateColumn"/>
+                                <!-- Remaining space -->
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             
@@ -245,9 +182,6 @@
                             
                             <!-- Name Column with tree structure -->
                             <Grid Grid.Column="1" ClipToBounds="True">
-                                <!-- Background for selection -->
-                                <Rectangle x:Name="SelectionBackground" Fill="Transparent" RadiusX="2" RadiusY="2"/>
-                                
                                 <!-- Tree structure content -->
                                 <Grid>
                                     <!-- Background canvas for drawing connecting lines -->
@@ -335,7 +269,7 @@
                                       FontWeight="{Binding FontWeight}"/>
                             
                             <!-- Type Column -->
-                            <TextBlock Grid.Column="5" Text="{Binding Type}" 
+                            <TextBlock Grid.Column="4" Text="{Binding Type}" 
                                       VerticalAlignment="Center" 
                                       TextAlignment="Left"
                                       Margin="5,0"
@@ -344,7 +278,7 @@
                                       FontWeight="{Binding FontWeight}"/>
                             
                             <!-- Date Modified Column -->
-                            <TextBlock Grid.Column="7" Text="{Binding LastModifiedStr}" 
+                            <TextBlock Grid.Column="5" Text="{Binding LastModifiedStr}" 
                                       VerticalAlignment="Center" 
                                       TextAlignment="Left"
                                       Margin="5,0"
