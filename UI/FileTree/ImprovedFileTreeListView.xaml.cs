@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Complete updated version with simplified column management
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Refactored with selection logic extracted
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -24,7 +24,7 @@ using Path = System.IO.Path;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedFileTreeListView.xaml with simplified column management
+    /// Interaction logic for ImprovedFileTreeListView.xaml with refactored selection handling
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -39,8 +39,10 @@ namespace ExplorerPro.UI.FileTree
         private SettingsManager _settingsManager;
         private readonly IFileOperations _fileOperations;
         
-        // Enhanced drag & drop services
+        // Selection service handles all selection logic
         private SelectionService _selectionService;
+        
+        // Enhanced drag & drop service
         private FileTreeDragDropService _enhancedDragDropService;
 
         #endregion
@@ -88,7 +90,7 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Gets whether any items are selected
+        /// Gets whether any items are selected (delegates to SelectionService)
         /// </summary>
         public bool HasSelectedItems => _selectionService?.HasSelection ?? false;
         
@@ -109,21 +111,9 @@ namespace ExplorerPro.UI.FileTree
         }
         
         /// <summary>
-        /// Gets or sets whether multi-selection mode is active
+        /// Gets the selection service for data binding
         /// </summary>
-        private bool _isMultiSelectMode = false;
-        public bool IsMultiSelectMode
-        {
-            get => _isMultiSelectMode;
-            set
-            {
-                if (_isMultiSelectMode != value)
-                {
-                    _isMultiSelectMode = value;
-                    OnPropertyChanged(nameof(IsMultiSelectMode));
-                }
-            }
-        }
+        public SelectionService SelectionService => _selectionService;
         
         #endregion
 
@@ -227,9 +217,10 @@ namespace ExplorerPro.UI.FileTree
                 _fileTreeService = new FileTreeService(_metadataManager, iconProvider);
                 _fileTreeCache = new FileTreeCacheService(1000);
                 
-                // Initialize selection service
+                // Initialize selection service and bind to UI updates
                 _selectionService = new SelectionService();
                 _selectionService.SelectionChanged += OnSelectionChanged;
+                _selectionService.PropertyChanged += SelectionService_PropertyChanged;
                 
                 // Initialize enhanced drag/drop service
                 _enhancedDragDropService = new FileTreeDragDropService(_undoManager, _fileOperations, _selectionService);
@@ -660,15 +651,8 @@ namespace ExplorerPro.UI.FileTree
         
         public string? GetSelectedPath()
         {
-            if (_selectionService?.HasSelection == true && _selectionService.SelectedItems.Count > 0)
-            {
-                return _selectionService.SelectedItems[0].Path;
-            }
-            else if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
-            {
-                return selectedItem.Path;
-            }
-            return null;
+            return _selectionService?.FirstSelectedPath ?? 
+                   (fileTreeView.SelectedItem as FileTreeItem)?.Path;
         }
 
         public string GetSelectedFolderPath()
@@ -1025,18 +1009,9 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control)
+            // Delegate keyboard shortcuts to selection service
+            if (_selectionService.HandleKeyboardShortcut(e.Key, Keyboard.Modifiers, _rootItems))
             {
-                // Ctrl+A - Select all
-                _selectionService.SelectAll(_rootItems);
-                IsMultiSelectMode = true;
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Escape && _selectionService.HasSelection)
-            {
-                // ESC - Clear selection
-                _selectionService.ClearSelection();
-                IsMultiSelectMode = false;
                 e.Handled = true;
             }
         }
@@ -1116,11 +1091,14 @@ namespace ExplorerPro.UI.FileTree
             {
                 BuildContextMenuForSelection(e.SelectedPaths);
             }
-            
-            // Auto-enable multi-select mode when multiple items selected
-            if (e.SelectedItems.Count > 1 && !IsMultiSelectMode)
+        }
+
+        private void SelectionService_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            // Forward relevant property changes to our own PropertyChanged event
+            if (e.PropertyName == nameof(SelectionService.IsMultiSelectMode))
             {
-                IsMultiSelectMode = true;
+                OnPropertyChanged(nameof(SelectionService));
             }
         }
 
@@ -1221,10 +1199,7 @@ namespace ExplorerPro.UI.FileTree
                 _treeContextMenu.Items.Add(new Separator());
                 
                 menuItem = new MenuItem { Header = "Clear Selection" };
-                menuItem.Click += (s, e) => {
-                    _selectionService.ClearSelection();
-                    IsMultiSelectMode = false;
-                };
+                menuItem.Click += (s, e) => _selectionService.ClearSelection();
                 _treeContextMenu.Items.Add(menuItem);
             }
         }
@@ -1608,17 +1583,8 @@ namespace ExplorerPro.UI.FileTree
             // Handle checkbox click for multi-selection
             if (sender is CheckBox checkBox && checkBox.DataContext is FileTreeItem item)
             {
-                // The binding handles the selection state change
-                // But we need to ensure the selection service is updated
-                if (checkBox.IsChecked == true && !_selectionService.SelectedPaths.Contains(item.Path))
-                {
-                    _selectionService.HandleSelection(item, ModifierKeys.Control, _rootItems);
-                }
-                else if (checkBox.IsChecked == false && _selectionService.SelectedPaths.Contains(item.Path))
-                {
-                    _selectionService.HandleSelection(item, ModifierKeys.Control, _rootItems);
-                }
-                
+                // Let the SelectionService handle the checkbox selection
+                _selectionService.HandleCheckboxSelection(item);
                 e.Handled = true;
             }
         }
@@ -1668,7 +1634,14 @@ namespace ExplorerPro.UI.FileTree
                     // Dispose enhanced services
                     _enhancedDragDropService?.DetachFromControl();
                     _enhancedDragDropService?.Dispose();
-                    _selectionService?.Dispose();
+                    
+                    // Unsubscribe from selection service events
+                    if (_selectionService != null)
+                    {
+                        _selectionService.SelectionChanged -= OnSelectionChanged;
+                        _selectionService.PropertyChanged -= SelectionService_PropertyChanged;
+                        _selectionService.Dispose();
+                    }
                     
                     if (fileTreeView != null)
                     {

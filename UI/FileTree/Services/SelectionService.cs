@@ -2,15 +2,17 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
 namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
-    /// Manages multi-selection state for the file tree
+    /// Manages multi-selection state for the file tree with UI mode support
     /// </summary>
-    public class SelectionService : IDisposable
+    public class SelectionService : IDisposable, INotifyPropertyChanged
     {
         #region Fields
         
@@ -19,6 +21,7 @@ namespace ExplorerPro.UI.FileTree.Services
         private FileTreeItem _lastSelectedItem;
         private FileTreeItem _anchorItem;
         private bool _isSelecting;
+        private bool _isMultiSelectMode;
         
         #endregion
         
@@ -28,6 +31,11 @@ namespace ExplorerPro.UI.FileTree.Services
         /// Raised when the selection changes
         /// </summary>
         public event EventHandler<FileTreeSelectionChangedEventArgs> SelectionChanged;
+        
+        /// <summary>
+        /// Property changed event for data binding
+        /// </summary>
+        public event PropertyChangedEventHandler PropertyChanged;
         
         #endregion
         
@@ -67,6 +75,43 @@ namespace ExplorerPro.UI.FileTree.Services
             set => _isSelecting = value;
         }
         
+        /// <summary>
+        /// Gets or sets whether multi-selection mode is active (shows checkboxes)
+        /// </summary>
+        public bool IsMultiSelectMode
+        {
+            get => _isMultiSelectMode;
+            set
+            {
+                if (_isMultiSelectMode != value)
+                {
+                    _isMultiSelectMode = value;
+                    OnPropertyChanged();
+                    
+                    // Clear selection when exiting multi-select mode
+                    if (!value && HasMultipleSelection)
+                    {
+                        ClearSelection();
+                    }
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Gets whether all items are selected (for select all checkbox)
+        /// </summary>
+        public bool AreAllItemsSelected { get; private set; }
+        
+        /// <summary>
+        /// Gets the first selected item (for single selection scenarios)
+        /// </summary>
+        public FileTreeItem FirstSelectedItem => _selectedItems.FirstOrDefault();
+        
+        /// <summary>
+        /// Gets the first selected path (for single selection scenarios)
+        /// </summary>
+        public string FirstSelectedPath => _selectedPaths.FirstOrDefault();
+        
         #endregion
         
         #region Constructor
@@ -98,17 +143,35 @@ namespace ExplorerPro.UI.FileTree.Services
                 {
                     // Ctrl+Click: Toggle selection
                     ToggleSelection(item);
+                    
+                    // Auto-enable multi-select mode when multiple items selected
+                    if (HasMultipleSelection && !IsMultiSelectMode)
+                    {
+                        IsMultiSelectMode = true;
+                    }
                 }
                 else if (modifiers.HasFlag(ModifierKeys.Shift) && _anchorItem != null)
                 {
                     // Shift+Click: Range selection
                     SelectRange(_anchorItem, item, allItems);
+                    
+                    // Auto-enable multi-select mode for range selection
+                    if (HasMultipleSelection && !IsMultiSelectMode)
+                    {
+                        IsMultiSelectMode = true;
+                    }
                 }
                 else
                 {
                     // Normal click: Single selection
                     SelectSingle(item);
                     _anchorItem = item;
+                    
+                    // Exit multi-select mode on single selection
+                    if (IsMultiSelectMode && SelectionCount <= 1)
+                    {
+                        IsMultiSelectMode = false;
+                    }
                 }
                 
                 _lastSelectedItem = item;
@@ -118,6 +181,45 @@ namespace ExplorerPro.UI.FileTree.Services
                 {
                     OnSelectionChanged();
                 }
+            }
+            finally
+            {
+                _isSelecting = false;
+            }
+        }
+        
+        /// <summary>
+        /// Handles checkbox-based selection toggle
+        /// </summary>
+        public void HandleCheckboxSelection(FileTreeItem item)
+        {
+            if (item == null) return;
+            
+            _isSelecting = true;
+            
+            try
+            {
+                // Toggle the selection state
+                if (item.IsSelected)
+                {
+                    AddToSelection(item);
+                }
+                else
+                {
+                    RemoveFromSelection(item);
+                }
+                
+                // Update multi-select mode based on selection count
+                if (HasMultipleSelection && !IsMultiSelectMode)
+                {
+                    IsMultiSelectMode = true;
+                }
+                else if (!HasSelection || SelectionCount == 1)
+                {
+                    IsMultiSelectMode = false;
+                }
+                
+                OnSelectionChanged();
             }
             finally
             {
@@ -187,11 +289,20 @@ namespace ExplorerPro.UI.FileTree.Services
             
             ClearSelection();
             
-            foreach (var item in FlattenTree(allItems))
+            var flatList = FlattenTree(allItems).ToList();
+            foreach (var item in flatList)
             {
                 AddToSelection(item);
             }
             
+            // Enable multi-select mode when selecting all
+            if (HasMultipleSelection)
+            {
+                IsMultiSelectMode = true;
+            }
+            
+            // Update select all state
+            UpdateSelectAllState(allItems);
             OnSelectionChanged();
         }
         
@@ -207,7 +318,56 @@ namespace ExplorerPro.UI.FileTree.Services
             
             _selectedItems.Clear();
             _selectedPaths.Clear();
+            AreAllItemsSelected = false;
+            OnPropertyChanged(nameof(AreAllItemsSelected));
         }
+        
+        /// <summary>
+        /// Handles keyboard shortcuts for selection
+        /// </summary>
+        public bool HandleKeyboardShortcut(Key key, ModifierKeys modifiers, IEnumerable<FileTreeItem> allItems)
+        {
+            if (key == Key.A && modifiers == ModifierKeys.Control)
+            {
+                // Ctrl+A - Select all
+                SelectAll(allItems);
+                return true;
+            }
+            else if (key == Key.Escape && HasSelection)
+            {
+                // ESC - Clear selection and exit multi-select mode
+                ClearSelection();
+                IsMultiSelectMode = false;
+                return true;
+            }
+            
+            return false;
+        }
+        
+        /// <summary>
+        /// Updates selection based on paths (useful after refresh)
+        /// </summary>
+        public void RestoreSelection(IEnumerable<FileTreeItem> allItems)
+        {
+            if (!_selectedPaths.Any()) return;
+            
+            var pathsToRestore = _selectedPaths.ToList();
+            ClearSelection();
+            
+            foreach (var item in FlattenTree(allItems))
+            {
+                if (pathsToRestore.Contains(item.Path))
+                {
+                    AddToSelection(item);
+                }
+            }
+            
+            UpdateSelectAllState(allItems);
+        }
+        
+        #endregion
+        
+        #region Private Methods
         
         /// <summary>
         /// Adds an item to the selection
@@ -234,27 +394,16 @@ namespace ExplorerPro.UI.FileTree.Services
         }
         
         /// <summary>
-        /// Updates selection based on paths (useful after refresh)
+        /// Updates the select all checkbox state
         /// </summary>
-        public void RestoreSelection(IEnumerable<FileTreeItem> allItems)
+        private void UpdateSelectAllState(IEnumerable<FileTreeItem> allItems)
         {
-            if (!_selectedPaths.Any()) return;
+            if (allItems == null) return;
             
-            var pathsToRestore = _selectedPaths.ToList();
-            ClearSelection();
-            
-            foreach (var item in FlattenTree(allItems))
-            {
-                if (pathsToRestore.Contains(item.Path))
-                {
-                    AddToSelection(item);
-                }
-            }
+            var totalCount = FlattenTree(allItems).Count();
+            AreAllItemsSelected = totalCount > 0 && _selectedItems.Count == totalCount;
+            OnPropertyChanged(nameof(AreAllItemsSelected));
         }
-        
-        #endregion
-        
-        #region Helper Methods
         
         /// <summary>
         /// Flattens the tree structure into a linear list
@@ -299,6 +448,21 @@ namespace ExplorerPro.UI.FileTree.Services
                 _selectedItems.ToList(),
                 _selectedPaths.ToList()
             ));
+            
+            // Notify property changes for data binding
+            OnPropertyChanged(nameof(HasSelection));
+            OnPropertyChanged(nameof(HasMultipleSelection));
+            OnPropertyChanged(nameof(SelectionCount));
+            OnPropertyChanged(nameof(FirstSelectedItem));
+            OnPropertyChanged(nameof(FirstSelectedPath));
+        }
+        
+        /// <summary>
+        /// Raises property changed event
+        /// </summary>
+        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
         
         #endregion

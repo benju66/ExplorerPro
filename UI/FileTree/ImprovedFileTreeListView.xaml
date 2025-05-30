@@ -62,7 +62,8 @@
                           x:Name="SelectAllCheckBox"
                           Margin="4,0,4,0"
                           VerticalAlignment="Center"
-                          Visibility="{Binding IsMultiSelectMode, Converter={StaticResource BooleanToVisibilityConverter}}"
+                          IsChecked="{Binding SelectionService.AreAllItemsSelected, Mode=OneWay}"
+                          Visibility="{Binding SelectionService.IsMultiSelectMode, Converter={StaticResource BooleanToVisibilityConverter}}"
                           Click="SelectAllCheckBox_Click"
                           ToolTip="Select/Deselect All"/>
                 
@@ -112,7 +113,7 @@
                       VirtualizingStackPanel.VirtualizationMode="Recycling"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                       ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                      Tag="{Binding IsMultiSelectMode, Converter={StaticResource BoolToMultiSelectTagConverter}}"
+                      Tag="{Binding SelectionService.IsMultiSelectMode, Converter={StaticResource BoolToMultiSelectTagConverter}}"
                       ItemsSource="{Binding RootItems}">
                 
                 <TreeView.ItemContainerStyle>

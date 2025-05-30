@@ -199,6 +199,9 @@ namespace ExplorerPro.UI.FileTree
                 {
                     _isSelected = value;
                     OnPropertyChanged(nameof(IsSelected));
+                    
+                    // Raise selection changed event if needed
+                    SelectionChanged?.Invoke(this, EventArgs.Empty);
                 }
             }
         }
@@ -292,6 +295,11 @@ namespace ExplorerPro.UI.FileTree
         /// Event raised when children need to be loaded
         /// </summary>
         public event EventHandler LoadChildren;
+        
+        /// <summary>
+        /// Event raised when selection state changes
+        /// </summary>
+        public event EventHandler SelectionChanged;
 
         #endregion
 
