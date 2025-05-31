@@ -165,13 +165,14 @@
                             
                             <!-- Multi-selection checkbox -->
                             <CheckBox Grid.Column="0" 
+                                      x:Name="ItemCheckBox"
                                       Margin="4,0,4,0"
                                       VerticalAlignment="Center"
-                                      IsChecked="{Binding IsSelected, Mode=TwoWay}"
                                       Visibility="{Binding RelativeSource={RelativeSource AncestorType=TreeView}, 
                                                   Path=Tag, 
                                                   Converter={StaticResource MultiSelectVisibilityConverter}}"
-                                      Click="SelectionCheckBox_Click"/>
+                                      Click="SelectionCheckBox_Click"
+                                      Tag="{Binding}"/>
                             
                             <!-- Name Column with tree structure -->
                             <Grid Grid.Column="1" ClipToBounds="True">

@@ -25,8 +25,6 @@ namespace ExplorerPro.UI.FileTree
         private string _lastModifiedStr;
         private bool _isDirectory;
         private bool _isExpanded;
-        private bool _isSelected;
-        private bool _isSelectedInMulti;
         private SolidColorBrush _foreground;
         private FontWeight _fontWeight;
         private ObservableCollection<FileTreeItem> _children;
@@ -190,42 +188,6 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Gets or sets a value indicating whether this item is selected
-        /// </summary>
-        public bool IsSelected
-        {
-            get => _isSelected;
-            set
-            {
-                if (_isSelected != value)
-                {
-                    _isSelected = value;
-                    OnPropertyChanged(nameof(IsSelected));
-                    
-                    // Raise selection changed event if needed
-                    SelectionChanged?.Invoke(this, EventArgs.Empty);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Gets or sets a value indicating whether this item is selected in multi-selection mode
-        /// Used for visual styling in XAML
-        /// </summary>
-        public bool IsSelectedInMulti
-        {
-            get => _isSelectedInMulti;
-            set
-            {
-                if (_isSelectedInMulti != value)
-                {
-                    _isSelectedInMulti = value;
-                    OnPropertyChanged(nameof(IsSelectedInMulti));
-                }
-            }
-        }
-
-        /// <summary>
         /// Gets or sets the text color
         /// </summary>
         public SolidColorBrush Foreground
@@ -324,11 +286,6 @@ namespace ExplorerPro.UI.FileTree
         /// Event raised when children need to be loaded
         /// </summary>
         public event EventHandler LoadChildren;
-        
-        /// <summary>
-        /// Event raised when selection state changes
-        /// </summary>
-        public event EventHandler SelectionChanged;
 
         #endregion
 
@@ -344,8 +301,6 @@ namespace ExplorerPro.UI.FileTree
             FontWeight = FontWeights.Normal;
             _level = 0; // Default level is 0 (root level)
             _hasChildren = false; // Initialize as false
-
-            // Don't add dummy child anymore - expander will be hidden if no children
         }
 
         /// <summary>
@@ -380,8 +335,6 @@ namespace ExplorerPro.UI.FileTree
                     item.RawSize = 0; // We don't calculate folder size by default
                     item.LastModified = dirInfo.LastWriteTime;
                     item.LastModifiedStr = DateFormatter.FormatFileDate(dirInfo.LastWriteTime);
-
-                    // Don't add dummy child - HasChildren will be set when needed
                 }
                 else
                 {
@@ -404,17 +357,6 @@ namespace ExplorerPro.UI.FileTree
         #endregion
 
         #region Helper Methods
-
-        /// <summary>
-        /// Adds a dummy child to show expander
-        /// </summary>
-        public void AddDummyChild()
-        {
-            if (IsDirectory && Children.Count == 0)
-            {
-                Children.Add(new FileTreeItem { Name = "Loading...", Level = this.Level + 1 });
-            }
-        }
 
         /// <summary>
         /// Checks if this item has a dummy child

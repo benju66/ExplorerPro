@@ -287,8 +287,7 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Padding" Value="1,0,0,0"/>
-        <!-- CRITICAL: Bind TreeViewItem.IsSelected to the data model's IsSelected -->
-        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+        <!-- Removed IsSelected binding to prevent dual state issues -->
         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -352,13 +351,6 @@
                             <Setter TargetName="SelectionBorder" Property="BorderBrush" Value="{DynamicResource SelectionBorderColor}"/>
                             <Setter TargetName="SelectionBorder" Property="BorderThickness" Value="1"/>
                         </Trigger>
-                        
-                        <!-- Multi-Selected State (using IsSelectedInMulti from data) -->
-                        <DataTrigger Binding="{Binding IsSelectedInMulti}" Value="true">
-                            <Setter TargetName="SelectionBorder" Property="Background" Value="{DynamicResource MultiSelectionBackgroundColor}"/>
-                            <Setter TargetName="SelectionBorder" Property="BorderBrush" Value="{DynamicResource SelectionBorderColor}"/>
-                            <Setter TargetName="SelectionBorder" Property="BorderThickness" Value="1"/>
-                        </DataTrigger>
                         
                         <!-- Inactive Selection -->
                         <MultiTrigger>
@@ -588,7 +580,6 @@
     <Style x:Key="MultiSelectCheckBoxStyle" TargetType="CheckBox">
         <Setter Property="Margin" Value="2,0,4,0"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
-        <Setter Property="IsChecked" Value="{Binding IsSelectedInMulti, Mode=TwoWay}"/>
         <Setter Property="Visibility" Value="Collapsed"/>
         <Style.Triggers>
             <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=TreeView}, Path=Tag}" Value="MultiSelect">

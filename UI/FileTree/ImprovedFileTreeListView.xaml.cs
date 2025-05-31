@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Enhanced with all selection features
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Fixed with single source of truth for selection
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -26,7 +26,7 @@ using Path = System.IO.Path;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedFileTreeListView.xaml with enhanced selection features
+    /// Interaction logic for ImprovedFileTreeListView.xaml with single source of truth for selection
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -133,6 +133,9 @@ namespace ExplorerPro.UI.FileTree
         private Point _selectionStartPoint;
         private SelectionRectangleAdorner _selectionAdorner;
         private AdornerLayer _adornerLayer;
+        
+        // Track whether we're processing selection changes
+        private bool _isProcessingSelection = false;
         
         #endregion
 
@@ -930,18 +933,40 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
+            // Don't process if we're already handling selection changes
+            if (_isProcessingSelection)
+                return;
+                
             // Don't process selection changes during double-click
             if (_isHandlingDoubleClick)
                 return;
                 
-            // Add a small delay to distinguish between single and double clicks
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            _isProcessingSelection = true;
+            try
             {
-                if (!_isHandlingDoubleClick && e.NewValue is FileTreeItem item)
+                // Get the newly selected item
+                if (e.NewValue is FileTreeItem item)
                 {
-                    OnTreeItemClicked(item.Path);
+                    // Update selection service - single selection mode
+                    _selectionService.SelectSingle(item);
+                    
+                    // Update checkbox states
+                    UpdateCheckboxStates();
+                    
+                    // Add a small delay to distinguish between single and double clicks
+                    Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                    {
+                        if (!_isHandlingDoubleClick)
+                        {
+                            OnTreeItemClicked(item.Path);
+                        }
+                    }));
                 }
-            }));
+            }
+            finally
+            {
+                _isProcessingSelection = false;
+            }
         }
 
         private async void TreeViewItem_Expanded(object sender, RoutedEventArgs e)
@@ -1021,6 +1046,7 @@ namespace ExplorerPro.UI.FileTree
                 if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
                 {
                     _selectionService.ClearSelection();
+                    UpdateTreeViewSelection();
                 }
                 
                 // Prepare for selection rectangle
@@ -1029,10 +1055,17 @@ namespace ExplorerPro.UI.FileTree
             }
             else
             {
-                // Handle normal item selection
-                _selectionService.HandleSelection(item, Keyboard.Modifiers, _rootItems);
+                // Check if we clicked on a checkbox
+                var originalSource = e.OriginalSource as DependencyObject;
+                var checkbox = FindAncestor<CheckBox>(originalSource);
                 
-                // Note: Drag initiation is now handled by the FileTreeDragDropService
+                if (checkbox == null)
+                {
+                    // Handle normal item selection
+                    _selectionService.HandleSelection(item, Keyboard.Modifiers, _rootItems);
+                    UpdateTreeViewSelection();
+                }
+                // If checkbox clicked, let the checkbox handler deal with it
             }
         }
 
@@ -1082,6 +1115,7 @@ namespace ExplorerPro.UI.FileTree
             // Delegate keyboard shortcuts to selection service
             if (_selectionService.HandleKeyboardShortcut(e.Key, Keyboard.Modifiers, _rootItems))
             {
+                UpdateTreeViewSelection();
                 e.Handled = true;
             }
             else if (e.Key == Key.A && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
@@ -1097,9 +1131,73 @@ namespace ExplorerPro.UI.FileTree
             if (fileTreeView.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
             {
                 TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
+                
+                // Update checkbox states when containers are generated
+                UpdateCheckboxStates();
             }
         }
         
+        #endregion
+
+        #region Selection Synchronization
+
+        /// <summary>
+        /// Updates TreeViewItem selection to match SelectionService state
+        /// </summary>
+        private void UpdateTreeViewSelection()
+        {
+            _isProcessingSelection = true;
+            try
+            {
+                // Clear all TreeViewItem selections
+                foreach (var tvi in GetAllTreeViewItems())
+                {
+                    tvi.IsSelected = false;
+                }
+                
+                // Select the first item in SelectionService if any
+                if (_selectionService.FirstSelectedItem != null)
+                {
+                    var treeViewItem = FindTreeViewItemForData(fileTreeView, _selectionService.FirstSelectedItem);
+                    if (treeViewItem != null)
+                    {
+                        treeViewItem.IsSelected = true;
+                        treeViewItem.BringIntoView();
+                    }
+                }
+                
+                // Update checkboxes
+                UpdateCheckboxStates();
+            }
+            finally
+            {
+                _isProcessingSelection = false;
+            }
+        }
+
+        /// <summary>
+        /// Updates all checkbox states to match SelectionService
+        /// </summary>
+        private void UpdateCheckboxStates()
+        {
+            // Update all visible checkboxes
+            foreach (var checkbox in FindVisualChildren<CheckBox>(fileTreeView))
+            {
+                if (checkbox.Tag is FileTreeItem item)
+                {
+                    checkbox.IsChecked = _selectionService.SelectedPaths.Contains(item.Path);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets all TreeViewItems in the tree
+        /// </summary>
+        private IEnumerable<TreeViewItem> GetAllTreeViewItems()
+        {
+            return FindVisualChildren<TreeViewItem>(fileTreeView);
+        }
+
         #endregion
 
         #region Selection Rectangle
@@ -1127,11 +1225,13 @@ namespace ExplorerPro.UI.FileTree
                     {
                         if (!_selectionService.SelectedPaths.Contains(fileItem.Path))
                         {
-                            _selectionService.HandleCheckboxSelection(fileItem);
+                            _selectionService.ToggleSelection(fileItem);
                         }
                     }
                 }
             }
+            
+            UpdateTreeViewSelection();
         }
 
         private void CompleteSelectionRectangle()
@@ -1175,6 +1275,8 @@ namespace ExplorerPro.UI.FileTree
                     dialog.Pattern, 
                     dialog.IncludeSubfolders ? _rootItems : GetVisibleItems(),
                     dialog.AddToSelection);
+                    
+                UpdateTreeViewSelection();
             }
         }
 
@@ -1265,6 +1367,12 @@ namespace ExplorerPro.UI.FileTree
             {
                 BuildContextMenuForSelection(e.SelectedPaths);
             }
+            
+            // Update TreeView selection if needed
+            if (!_isProcessingSelection)
+            {
+                UpdateTreeViewSelection();
+            }
         }
 
         private void SelectionService_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -1273,6 +1381,9 @@ namespace ExplorerPro.UI.FileTree
             if (e.PropertyName == nameof(SelectionService.IsMultiSelectMode))
             {
                 OnPropertyChanged(nameof(SelectionService));
+                
+                // Update checkbox states when mode changes
+                UpdateCheckboxStates();
             }
         }
 
@@ -1294,6 +1405,7 @@ namespace ExplorerPro.UI.FileTree
                     _selectionService.ClearSelection();
                 }
                 
+                UpdateTreeViewSelection();
                 e.Handled = true;
             }
         }
@@ -1301,10 +1413,11 @@ namespace ExplorerPro.UI.FileTree
         private void SelectionCheckBox_Click(object sender, RoutedEventArgs e)
         {
             // Handle checkbox click for multi-selection
-            if (sender is CheckBox checkBox && checkBox.DataContext is FileTreeItem item)
+            if (sender is CheckBox checkBox && checkBox.Tag is FileTreeItem item)
             {
-                // Let the SelectionService handle the checkbox selection
-                _selectionService.HandleCheckboxSelection(item);
+                // Toggle selection in SelectionService
+                _selectionService.ToggleSelection(item);
+                UpdateTreeViewSelection();
                 e.Handled = true;
             }
         }
@@ -1410,13 +1523,19 @@ namespace ExplorerPro.UI.FileTree
                 _treeContextMenu.Items.Add(menuItem);
                 
                 menuItem = new MenuItem { Header = "Invert Selection" };
-                menuItem.Click += (s, e) => _selectionService.InvertSelection(_rootItems);
+                menuItem.Click += (s, e) => {
+                    _selectionService.InvertSelection(_rootItems);
+                    UpdateTreeViewSelection();
+                };
                 _treeContextMenu.Items.Add(menuItem);
                 
                 _treeContextMenu.Items.Add(new Separator());
                 
                 menuItem = new MenuItem { Header = "Clear Selection" };
-                menuItem.Click += (s, e) => _selectionService.ClearSelection();
+                menuItem.Click += (s, e) => {
+                    _selectionService.ClearSelection();
+                    UpdateTreeViewSelection();
+                };
                 _treeContextMenu.Items.Add(menuItem);
             }
         }
@@ -1681,8 +1800,8 @@ namespace ExplorerPro.UI.FileTree
             var item = _fileTreeService.FindItemByPath(_rootItems, path);
             if (item != null)
             {
-                item.IsSelected = true;
-                _selectionService?.SelectSingle(item);
+                _selectionService.SelectSingle(item);
+                UpdateTreeViewSelection();
                 
                 Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
                     var treeViewItem = FindTreeViewItemForData(fileTreeView, item);
