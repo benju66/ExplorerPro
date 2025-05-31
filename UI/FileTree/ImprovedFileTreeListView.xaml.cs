@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Updated with new IFileTree interface implementation
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Updated with single source of truth for selection
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -41,7 +41,7 @@ namespace ExplorerPro.UI.FileTree
         private SettingsManager _settingsManager;
         private readonly IFileOperations _fileOperations;
         
-        // Selection service handles all selection logic
+        // Selection service handles all selection logic - single source of truth
         private SelectionService _selectionService;
         
         // Enhanced drag & drop service
@@ -1063,9 +1063,6 @@ namespace ExplorerPro.UI.FileTree
                     // Update selection service - single selection mode
                     _selectionService.SelectSingle(item);
                     
-                    // Update checkbox states
-                    UpdateCheckboxStates();
-                    
                     // Add a small delay to distinguish between single and double clicks
                     Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                     {
@@ -1244,9 +1241,6 @@ namespace ExplorerPro.UI.FileTree
             if (fileTreeView.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
             {
                 TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
-                
-                // Update checkbox states when containers are generated
-                UpdateCheckboxStates();
             }
         }
         
@@ -1278,28 +1272,10 @@ namespace ExplorerPro.UI.FileTree
                         treeViewItem.BringIntoView();
                     }
                 }
-                
-                // Update checkboxes
-                UpdateCheckboxStates();
             }
             finally
             {
                 _isProcessingSelection = false;
-            }
-        }
-
-        /// <summary>
-        /// Updates all checkbox states to match SelectionService
-        /// </summary>
-        private void UpdateCheckboxStates()
-        {
-            // Update all visible checkboxes
-            foreach (var checkbox in FindVisualChildren<CheckBox>(fileTreeView))
-            {
-                if (checkbox.Tag is FileTreeItem item)
-                {
-                    checkbox.IsChecked = _selectionService.SelectedPaths.Contains(item.Path);
-                }
             }
         }
 
@@ -1497,9 +1473,6 @@ namespace ExplorerPro.UI.FileTree
             {
                 OnPropertyChanged(nameof(SelectionService));
                 OnPropertyChanged(nameof(IsMultiSelectMode));
-                
-                // Update checkbox states when mode changes
-                UpdateCheckboxStates();
             }
             else if (e.PropertyName == nameof(SelectionService.HasSelection))
             {
@@ -1539,8 +1512,7 @@ namespace ExplorerPro.UI.FileTree
             // Handle checkbox click for multi-selection
             if (sender is CheckBox checkBox && checkBox.Tag is FileTreeItem item)
             {
-                // The checkbox binding should handle the property update
-                // We just need to update the SelectionService
+                // Use HandleCheckboxSelection which toggles based on SelectionService state
                 _selectionService.HandleCheckboxSelection(item);
                 e.Handled = true;
             }

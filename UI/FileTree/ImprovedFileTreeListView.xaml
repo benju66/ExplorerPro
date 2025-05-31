@@ -163,12 +163,12 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             
-                            <!-- Multi-selection checkbox -->
+                            <!-- Multi-selection checkbox - OneWay binding to prevent conflicts -->
                             <CheckBox Grid.Column="0" 
                                       x:Name="ItemCheckBox"
                                       Margin="4,0,4,0"
                                       VerticalAlignment="Center"
-                                      IsChecked="{Binding IsSelectedInMulti, Mode=TwoWay}"
+                                      IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Visibility="{Binding RelativeSource={RelativeSource AncestorType=TreeView}, 
                                                   Path=Tag, 
                                                   Converter={StaticResource MultiSelectVisibilityConverter}}"

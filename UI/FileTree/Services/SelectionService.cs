@@ -11,7 +11,8 @@ using System.Windows.Input;
 namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
-    /// Manages multi-selection state for the file tree with UI mode support
+    /// Manages multi-selection state for the file tree with UI mode support.
+    /// This is the single source of truth for all selection state.
     /// </summary>
     public class SelectionService : IDisposable, INotifyPropertyChanged
     {
@@ -220,7 +221,8 @@ namespace ExplorerPro.UI.FileTree.Services
         }
         
         /// <summary>
-        /// Handles checkbox-based selection toggle
+        /// Handles checkbox-based selection toggle.
+        /// This method toggles selection based on SelectionService state, not item state.
         /// </summary>
         public void HandleCheckboxSelection(FileTreeItem item)
         {
@@ -230,14 +232,14 @@ namespace ExplorerPro.UI.FileTree.Services
             
             try
             {
-                // Toggle the selection state
-                if (item.IsSelected)
+                // Toggle based on current state in SelectionService, not item property
+                if (_selectedPaths.Contains(item.Path))
                 {
-                    AddToSelection(item);
+                    RemoveFromSelection(item);
                 }
                 else
                 {
-                    RemoveFromSelection(item);
+                    AddToSelection(item);
                 }
                 
                 // Update multi-select mode based on selection count (unless sticky)
@@ -348,7 +350,6 @@ namespace ExplorerPro.UI.FileTree.Services
             foreach (var item in _selectedItems)
             {
                 item.IsSelected = false;
-                item.IsSelectedInMulti = false;
             }
             
             _selectedItems.Clear();
@@ -557,27 +558,27 @@ namespace ExplorerPro.UI.FileTree.Services
         #region Private Methods
         
         /// <summary>
-        /// Adds an item to the selection
+        /// Adds an item to the selection.
+        /// This is the only method that should set IsSelected to true.
         /// </summary>
         private void AddToSelection(FileTreeItem item)
         {
             if (item == null || _selectedPaths.Contains(item.Path)) return;
             
             item.IsSelected = true;
-            item.IsSelectedInMulti = true;
             _selectedItems.Add(item);
             _selectedPaths.Add(item.Path);
         }
         
         /// <summary>
-        /// Removes an item from the selection
+        /// Removes an item from the selection.
+        /// This is the only method that should set IsSelected to false.
         /// </summary>
         private void RemoveFromSelection(FileTreeItem item)
         {
             if (item == null || !_selectedPaths.Contains(item.Path)) return;
             
             item.IsSelected = false;
-            item.IsSelectedInMulti = false;
             _selectedItems.Remove(item);
             _selectedPaths.Remove(item.Path);
         }

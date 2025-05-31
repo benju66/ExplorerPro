@@ -26,7 +26,6 @@ namespace ExplorerPro.UI.FileTree
         private bool _isDirectory;
         private bool _isExpanded;
         private bool _isSelected;
-        private bool _isSelectedInMulti;
         private SolidColorBrush _foreground;
         private FontWeight _fontWeight;
         private ObservableCollection<FileTreeItem> _children;
@@ -190,7 +189,9 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Gets or sets whether this item is selected
+        /// Gets or sets whether this item is selected.
+        /// This single property is used for both regular and multi-select modes.
+        /// Only SelectionService should modify this property.
         /// </summary>
         public bool IsSelected
         {
@@ -201,25 +202,20 @@ namespace ExplorerPro.UI.FileTree
                 {
                     _isSelected = value;
                     OnPropertyChanged(nameof(IsSelected));
+                    // Also notify IsSelectedInMulti for backward compatibility with bindings
+                    OnPropertyChanged(nameof(IsSelectedInMulti));
                 }
             }
         }
 
         /// <summary>
-        /// Gets or sets whether this item is selected in multi-select mode
-        /// Used for checkbox state in the UI
+        /// Gets whether this item is selected in multi-select mode.
+        /// This is now just an alias for IsSelected for binding compatibility.
         /// </summary>
         public bool IsSelectedInMulti
         {
-            get => _isSelectedInMulti;
-            set
-            {
-                if (_isSelectedInMulti != value)
-                {
-                    _isSelectedInMulti = value;
-                    OnPropertyChanged(nameof(IsSelectedInMulti));
-                }
-            }
+            get => _isSelected;
+            set => IsSelected = value;
         }
 
         /// <summary>
@@ -337,7 +333,6 @@ namespace ExplorerPro.UI.FileTree
             _level = 0; // Default level is 0 (root level)
             _hasChildren = false; // Initialize as false
             _isSelected = false;
-            _isSelectedInMulti = false;
         }
 
         /// <summary>
