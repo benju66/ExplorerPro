@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Refactored with selection logic extracted
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Enhanced with all selection features
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -17,6 +18,7 @@ using ExplorerPro.Models;
 using ExplorerPro.FileOperations;
 using ExplorerPro.Utilities;
 using ExplorerPro.UI.FileTree.Services;
+using ExplorerPro.UI.FileTree.Dialogs;
 using ExplorerPro.Themes;
 // Add alias to avoid ambiguity
 using Path = System.IO.Path;
@@ -24,7 +26,7 @@ using Path = System.IO.Path;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedFileTreeListView.xaml with refactored selection handling
+    /// Interaction logic for ImprovedFileTreeListView.xaml with enhanced selection features
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -125,6 +127,12 @@ namespace ExplorerPro.UI.FileTree
         private ContextMenu _treeContextMenu;
         private bool _isInitialized = false;
         private bool _isHandlingDoubleClick = false;
+        
+        // Selection rectangle fields
+        private bool _isSelectionRectangleMode = false;
+        private Point _selectionStartPoint;
+        private SelectionRectangleAdorner _selectionAdorner;
+        private AdornerLayer _adornerLayer;
         
         #endregion
 
@@ -313,6 +321,8 @@ namespace ExplorerPro.UI.FileTree
             fileTreeView.ContextMenuOpening += FileTreeView_ContextMenuOpening;
             fileTreeView.AddHandler(TreeViewItem.ExpandedEvent, new RoutedEventHandler(TreeViewItem_Expanded));
             fileTreeView.PreviewMouseLeftButtonDown += FileTreeView_PreviewMouseLeftButtonDown;
+            fileTreeView.PreviewMouseLeftButtonUp += FileTreeView_PreviewMouseLeftButtonUp;
+            fileTreeView.PreviewMouseMove += FileTreeView_PreviewMouseMove;
 
             fileTreeView.AllowDrop = true;
             
@@ -884,6 +894,9 @@ namespace ExplorerPro.UI.FileTree
 
                 foreach (var child in children)
                 {
+                    // Set parent reference for efficient parent/child operations
+                    child.Parent = parentItem;
+                    
                     parentItem.Children.Add(child);
                     _fileTreeCache.SetItem(child.Path, child);
                     
@@ -996,14 +1009,71 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            _selectionStartPoint = e.GetPosition(fileTreeView);
+            
             // Get the clicked item
-            var item = GetItemFromPoint(e.GetPosition(fileTreeView));
-            if (item != null)
+            var item = GetItemFromPoint(_selectionStartPoint);
+            
+            // Check if we clicked on empty space (start selection rectangle)
+            if (item == null)
             {
-                // Handle selection with modifiers
+                // Clear selection if not holding Ctrl
+                if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+                {
+                    _selectionService.ClearSelection();
+                }
+                
+                // Prepare for selection rectangle
+                _isSelectionRectangleMode = true;
+                e.Handled = true;
+            }
+            else
+            {
+                // Handle normal item selection
                 _selectionService.HandleSelection(item, Keyboard.Modifiers, _rootItems);
                 
                 // Note: Drag initiation is now handled by the FileTreeDragDropService
+            }
+        }
+
+        private void FileTreeView_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_isSelectionRectangleMode && _selectionAdorner != null)
+            {
+                // Complete selection rectangle
+                CompleteSelectionRectangle();
+            }
+            
+            _isSelectionRectangleMode = false;
+        }
+
+        private void FileTreeView_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (_isSelectionRectangleMode && e.LeftButton == MouseButtonState.Pressed)
+            {
+                var currentPoint = e.GetPosition(fileTreeView);
+                var diff = currentPoint - _selectionStartPoint;
+                
+                // Start drawing selection rectangle if moved enough
+                if (Math.Abs(diff.X) > 5 || Math.Abs(diff.Y) > 5)
+                {
+                    if (_selectionAdorner == null)
+                    {
+                        // Create selection rectangle adorner
+                        _adornerLayer = AdornerLayer.GetAdornerLayer(fileTreeView);
+                        if (_adornerLayer != null)
+                        {
+                            _selectionAdorner = new SelectionRectangleAdorner(fileTreeView, _selectionStartPoint);
+                            _adornerLayer.Add(_selectionAdorner);
+                        }
+                    }
+                    else
+                    {
+                        // Update selection rectangle
+                        _selectionAdorner.UpdateEndPoint(currentPoint);
+                        UpdateSelectionRectangleItems();
+                    }
+                }
             }
         }
 
@@ -1012,6 +1082,12 @@ namespace ExplorerPro.UI.FileTree
             // Delegate keyboard shortcuts to selection service
             if (_selectionService.HandleKeyboardShortcut(e.Key, Keyboard.Modifiers, _rootItems))
             {
+                e.Handled = true;
+            }
+            else if (e.Key == Key.A && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                // Ctrl+Shift+A - Open select by pattern dialog
+                ShowSelectByPatternDialog();
                 e.Handled = true;
             }
         }
@@ -1024,6 +1100,104 @@ namespace ExplorerPro.UI.FileTree
             }
         }
         
+        #endregion
+
+        #region Selection Rectangle
+
+        private void UpdateSelectionRectangleItems()
+        {
+            if (_selectionAdorner == null) return;
+            
+            var selectionBounds = _selectionAdorner.GetSelectionBounds();
+            var addToSelection = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+            
+            if (!addToSelection)
+            {
+                _selectionService.ClearSelection();
+            }
+            
+            // Get all visible TreeViewItems and check if they intersect with selection rectangle
+            var items = GetAllVisibleTreeViewItems();
+            foreach (var treeViewItem in items)
+            {
+                if (treeViewItem.DataContext is FileTreeItem fileItem)
+                {
+                    var itemBounds = GetItemBounds(treeViewItem);
+                    if (itemBounds.IntersectsWith(selectionBounds))
+                    {
+                        if (!_selectionService.SelectedPaths.Contains(fileItem.Path))
+                        {
+                            _selectionService.HandleCheckboxSelection(fileItem);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void CompleteSelectionRectangle()
+        {
+            // Remove adorner
+            if (_adornerLayer != null && _selectionAdorner != null)
+            {
+                _adornerLayer.Remove(_selectionAdorner);
+                _selectionAdorner = null;
+            }
+            
+            // Enable multi-select mode if multiple items selected
+            if (_selectionService.HasMultipleSelection && !_selectionService.IsMultiSelectMode)
+            {
+                _selectionService.IsMultiSelectMode = true;
+            }
+        }
+
+        private IEnumerable<TreeViewItem> GetAllVisibleTreeViewItems()
+        {
+            return FindVisualChildren<TreeViewItem>(fileTreeView)
+                .Where(item => item.IsVisible);
+        }
+
+        private Rect GetItemBounds(TreeViewItem item)
+        {
+            var topLeft = item.TranslatePoint(new Point(0, 0), fileTreeView);
+            return new Rect(topLeft, new Size(item.ActualWidth, item.ActualHeight));
+        }
+
+        #endregion
+
+        #region Select by Pattern
+
+        private void ShowSelectByPatternDialog()
+        {
+            var dialog = new SelectByPatternDialog(Window.GetWindow(this));
+            if (dialog.ShowDialog() == true)
+            {
+                _selectionService.SelectByPattern(
+                    dialog.Pattern, 
+                    dialog.IncludeSubfolders ? _rootItems : GetVisibleItems(),
+                    dialog.AddToSelection);
+            }
+        }
+
+        private IEnumerable<FileTreeItem> GetVisibleItems()
+        {
+            // Get only expanded items
+            var result = new List<FileTreeItem>();
+            GetVisibleItemsRecursive(_rootItems, result);
+            return result;
+        }
+
+        private void GetVisibleItemsRecursive(IEnumerable<FileTreeItem> items, List<FileTreeItem> result)
+        {
+            foreach (var item in items)
+            {
+                result.Add(item);
+                if (item.IsExpanded && item.Children != null)
+                {
+                    GetVisibleItemsRecursive(item.Children, result);
+                }
+            }
+        }
+
         #endregion
 
         #region Enhanced Drag & Drop Event Handlers
@@ -1099,6 +1273,19 @@ namespace ExplorerPro.UI.FileTree
             if (e.PropertyName == nameof(SelectionService.IsMultiSelectMode))
             {
                 OnPropertyChanged(nameof(SelectionService));
+            }
+        }
+
+        #endregion
+
+        #region UI Button Handlers
+
+        private void ClearSelectionButton_Click(object sender, RoutedEventArgs e)
+        {
+            _selectionService?.ClearSelection();
+            if (!_selectionService.StickyMultiSelectMode)
+            {
+                _selectionService.IsMultiSelectMode = false;
             }
         }
 
@@ -1194,6 +1381,16 @@ namespace ExplorerPro.UI.FileTree
                 
                 menuItem = new MenuItem { Header = $"Copy {selectedPaths.Count} items" };
                 menuItem.Click += (s, e) => CopyMultipleItems(selectedPaths);
+                _treeContextMenu.Items.Add(menuItem);
+                
+                _treeContextMenu.Items.Add(new Separator());
+                
+                menuItem = new MenuItem { Header = "Select by Pattern..." };
+                menuItem.Click += (s, e) => ShowSelectByPatternDialog();
+                _treeContextMenu.Items.Add(menuItem);
+                
+                menuItem = new MenuItem { Header = "Invert Selection" };
+                menuItem.Click += (s, e) => _selectionService.InvertSelection(_rootItems);
                 _treeContextMenu.Items.Add(menuItem);
                 
                 _treeContextMenu.Items.Add(new Separator());
@@ -1634,6 +1831,13 @@ namespace ExplorerPro.UI.FileTree
                     // Dispose enhanced services
                     _enhancedDragDropService?.DetachFromControl();
                     _enhancedDragDropService?.Dispose();
+                    
+                    // Clean up selection adorner if active
+                    if (_selectionAdorner != null && _adornerLayer != null)
+                    {
+                        _adornerLayer.Remove(_selectionAdorner);
+                        _selectionAdorner = null;
+                    }
                     
                     // Unsubscribe from selection service events
                     if (_selectionService != null)

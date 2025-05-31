@@ -62,6 +62,7 @@ C:\ExplorerPro\obj\Debug\net9.0-windows\TestWindow.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\Themes\BaseTheme.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\Themes\DarkTheme.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\Themes\LightTheme.baml
+C:\ExplorerPro\obj\Debug\net9.0-windows\UI\FileTree\Dialogs\SelectByPatternDialog.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\TestWindow.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Controls\DateEditControl.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Controls\PreviewHandlers\ImagePreviewControl.g.cs
@@ -72,6 +73,7 @@ C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Dialogs\FilePropertiesDialog.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Dialogs\ManageRecurringItemsDialog.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Dialogs\SettingsDialog.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Dialogs\TextInputDialog.g.cs
+C:\ExplorerPro\obj\Debug\net9.0-windows\UI\FileTree\Dialogs\SelectByPatternDialog.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\FileTree\FileTreeDemo.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\FileTree\ImprovedFileTreeListView.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\MainWindow\MainWindow.g.cs

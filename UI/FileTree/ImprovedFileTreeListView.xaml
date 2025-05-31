@@ -33,6 +33,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         
         <!-- Column Headers -->
@@ -67,9 +68,31 @@
                           Click="SelectAllCheckBox_Click"
                           ToolTip="Select/Deselect All"/>
                 
-                <!-- Name Header -->
-                <TextBlock Grid.Column="1" Text="Name" Padding="8,4" VerticalAlignment="Center" 
-                           Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                <!-- Name Header with sticky multi-select toggle -->
+                <Grid Grid.Column="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <TextBlock Grid.Column="0" Text="Name" Padding="8,4" VerticalAlignment="Center" 
+                               Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
+                    
+                    <!-- Sticky multi-select toggle button -->
+                    <ToggleButton Grid.Column="2" 
+                                  x:Name="StickyMultiSelectToggle"
+                                  Width="22" Height="22"
+                                  Margin="0,0,4,0"
+                                  IsChecked="{Binding SelectionService.StickyMultiSelectMode, Mode=TwoWay}"
+                                  ToolTip="Toggle sticky multi-select mode"
+                                  Style="{StaticResource {x:Type ToggleButton}}">
+                        <Path Data="M4,4 L4,20 L20,20 L20,4 Z M7,8 L11,12 L17,6" 
+                              Stroke="{DynamicResource TextColor}" 
+                              StrokeThickness="2" 
+                              Width="16" Height="16"/>
+                    </ToggleButton>
+                </Grid>
                 
                 <!-- Size Header -->
                 <Border Grid.Column="2" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1,0,0,0">
@@ -261,5 +284,40 @@
                 </TreeView.ItemTemplate>
             </TreeView>
         </ScrollViewer>
+        
+        <!-- Selection Count Badge -->
+        <Border Grid.Row="2" 
+                x:Name="SelectionCountBadge"
+                Background="{DynamicResource SelectionBackgroundColor}"
+                BorderBrush="{DynamicResource SelectionBorderColor}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Padding="10,5"
+                HorizontalAlignment="Left"
+                Margin="10,5"
+                Visibility="{Binding SelectionService.HasSelection, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <TextBlock Grid.Column="0" 
+                           Text="{Binding SelectionService.SelectionCountText}"
+                           VerticalAlignment="Center"
+                           FontWeight="SemiBold"/>
+                
+                <Button Grid.Column="1" 
+                        Content="✕" 
+                        Width="16" Height="16"
+                        Margin="10,0,0,0"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        FontSize="10"
+                        ToolTip="Clear selection"
+                        Click="ClearSelectionButton_Click"/>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

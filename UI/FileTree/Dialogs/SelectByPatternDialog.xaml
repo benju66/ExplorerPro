@@ -1,0 +1,86 @@
+<!-- UI/FileTree/Dialogs/SelectByPatternDialog.xaml -->
+<Window x:Class="ExplorerPro.UI.FileTree.Dialogs.SelectByPatternDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Select by Pattern" 
+        Height="250" Width="400"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource TextColor}">
+    
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Description -->
+        <TextBlock Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,10">
+            Enter a pattern to select matching files and folders.
+            Use * for any characters, ? for single character.
+        </TextBlock>
+        
+        <!-- Pattern input -->
+        <Label Grid.Row="1" Content="Pattern:" Target="{x:Reference PatternTextBox}"/>
+        <TextBox Grid.Row="2" 
+                 x:Name="PatternTextBox" 
+                 Margin="0,5,0,10"
+                 VerticalAlignment="Center"
+                 Text="{Binding Pattern, UpdateSourceTrigger=PropertyChanged}">
+            <TextBox.InputBindings>
+                <KeyBinding Key="Return" Command="{Binding SelectCommand}"/>
+            </TextBox.InputBindings>
+        </TextBox>
+        
+        <!-- Options -->
+        <StackPanel Grid.Row="3" Orientation="Vertical" Margin="0,0,0,10">
+            <CheckBox x:Name="AddToSelectionCheckBox" 
+                      Content="Add to current selection" 
+                      IsChecked="{Binding AddToSelection}"
+                      Margin="0,5"/>
+            <CheckBox x:Name="IncludeSubfoldersCheckBox" 
+                      Content="Include items in subfolders" 
+                      IsChecked="{Binding IncludeSubfolders}"
+                      Margin="0,5"
+                      ToolTip="Search in expanded subfolders"/>
+        </StackPanel>
+        
+        <!-- Examples -->
+        <Border Grid.Row="4" 
+                BorderBrush="{DynamicResource BorderColor}" 
+                BorderThickness="1" 
+                Background="{DynamicResource BackgroundColor}"
+                Padding="10"
+                Margin="0,0,0,10">
+            <StackPanel>
+                <TextBlock FontWeight="Bold" Margin="0,0,0,5">Examples:</TextBlock>
+                <TextBlock Text="*.pdf - All PDF files" Foreground="{DynamicResource SubtleTextColor}"/>
+                <TextBlock Text="IMG_* - Files starting with IMG_" Foreground="{DynamicResource SubtleTextColor}"/>
+                <TextBlock Text="*2024* - Files containing 2024" Foreground="{DynamicResource SubtleTextColor}"/>
+                <TextBlock Text="?.txt - Single character text files" Foreground="{DynamicResource SubtleTextColor}"/>
+            </StackPanel>
+        </Border>
+        
+        <!-- Buttons -->
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Select" 
+                    IsDefault="True"
+                    Width="75" 
+                    Margin="0,0,10,0"
+                    Command="{Binding SelectCommand}"/>
+            <Button Content="Cancel" 
+                    IsCancel="True"
+                    Width="75"
+                    Click="CancelButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

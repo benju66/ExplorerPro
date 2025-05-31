@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Windows.Input;
 
 namespace ExplorerPro.UI.FileTree.Services
@@ -22,6 +23,14 @@ namespace ExplorerPro.UI.FileTree.Services
         private FileTreeItem _anchorItem;
         private bool _isSelecting;
         private bool _isMultiSelectMode;
+        private bool _stickyMultiSelectMode;
+        
+        // Performance optimization: cached flat list
+        private List<FileTreeItem> _flatTreeCache;
+        private bool _flatTreeCacheValid;
+        
+        // Pattern selection
+        private string _lastPattern;
         
         #endregion
         
@@ -88,11 +97,31 @@ namespace ExplorerPro.UI.FileTree.Services
                     _isMultiSelectMode = value;
                     OnPropertyChanged();
                     
-                    // Clear selection when exiting multi-select mode
-                    if (!value && HasMultipleSelection)
+                    // Clear selection when exiting multi-select mode (unless sticky)
+                    if (!value && !_stickyMultiSelectMode && HasMultipleSelection)
                     {
                         ClearSelection();
                     }
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Gets or sets whether multi-select mode is sticky (manual toggle)
+        /// </summary>
+        public bool StickyMultiSelectMode
+        {
+            get => _stickyMultiSelectMode;
+            set
+            {
+                if (_stickyMultiSelectMode != value)
+                {
+                    _stickyMultiSelectMode = value;
+                    if (value)
+                    {
+                        IsMultiSelectMode = true;
+                    }
+                    OnPropertyChanged();
                 }
             }
         }
@@ -112,6 +141,19 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public string FirstSelectedPath => _selectedPaths.FirstOrDefault();
         
+        /// <summary>
+        /// Gets the formatted selection count string
+        /// </summary>
+        public string SelectionCountText
+        {
+            get
+            {
+                if (!HasSelection) return "";
+                if (SelectionCount == 1) return "1 item selected";
+                return $"{SelectionCount} items selected";
+            }
+        }
+        
         #endregion
         
         #region Constructor
@@ -120,6 +162,7 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             _selectedItems = new ObservableCollection<FileTreeItem>();
             _selectedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _flatTreeCache = new List<FileTreeItem>();
         }
         
         #endregion
@@ -134,6 +177,7 @@ namespace ExplorerPro.UI.FileTree.Services
             if (item == null) return;
             
             _isSelecting = true;
+            InvalidateFlatTreeCache();
             
             try
             {
@@ -144,8 +188,8 @@ namespace ExplorerPro.UI.FileTree.Services
                     // Ctrl+Click: Toggle selection
                     ToggleSelection(item);
                     
-                    // Auto-enable multi-select mode when multiple items selected
-                    if (HasMultipleSelection && !IsMultiSelectMode)
+                    // Auto-enable multi-select mode when multiple items selected (unless sticky)
+                    if (!_stickyMultiSelectMode && HasMultipleSelection && !IsMultiSelectMode)
                     {
                         IsMultiSelectMode = true;
                     }
@@ -155,8 +199,8 @@ namespace ExplorerPro.UI.FileTree.Services
                     // Shift+Click: Range selection
                     SelectRange(_anchorItem, item, allItems);
                     
-                    // Auto-enable multi-select mode for range selection
-                    if (HasMultipleSelection && !IsMultiSelectMode)
+                    // Auto-enable multi-select mode for range selection (unless sticky)
+                    if (!_stickyMultiSelectMode && HasMultipleSelection && !IsMultiSelectMode)
                     {
                         IsMultiSelectMode = true;
                     }
@@ -167,8 +211,8 @@ namespace ExplorerPro.UI.FileTree.Services
                     SelectSingle(item);
                     _anchorItem = item;
                     
-                    // Exit multi-select mode on single selection
-                    if (IsMultiSelectMode && SelectionCount <= 1)
+                    // Exit multi-select mode on single selection (unless sticky)
+                    if (!_stickyMultiSelectMode && IsMultiSelectMode && SelectionCount <= 1)
                     {
                         IsMultiSelectMode = false;
                     }
@@ -209,14 +253,17 @@ namespace ExplorerPro.UI.FileTree.Services
                     RemoveFromSelection(item);
                 }
                 
-                // Update multi-select mode based on selection count
-                if (HasMultipleSelection && !IsMultiSelectMode)
+                // Update multi-select mode based on selection count (unless sticky)
+                if (!_stickyMultiSelectMode)
                 {
-                    IsMultiSelectMode = true;
-                }
-                else if (!HasSelection || SelectionCount == 1)
-                {
-                    IsMultiSelectMode = false;
+                    if (HasMultipleSelection && !IsMultiSelectMode)
+                    {
+                        IsMultiSelectMode = true;
+                    }
+                    else if (!HasSelection || SelectionCount == 1)
+                    {
+                        IsMultiSelectMode = false;
+                    }
                 }
                 
                 OnSelectionChanged();
@@ -263,7 +310,7 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             if (from == null || to == null || allItems == null) return;
             
-            var flatList = FlattenTree(allItems).ToList();
+            var flatList = GetFlattenedTree(allItems);
             var fromIndex = flatList.IndexOf(from);
             var toIndex = flatList.IndexOf(to);
             
@@ -289,14 +336,14 @@ namespace ExplorerPro.UI.FileTree.Services
             
             ClearSelection();
             
-            var flatList = FlattenTree(allItems).ToList();
+            var flatList = GetFlattenedTree(allItems);
             foreach (var item in flatList)
             {
                 AddToSelection(item);
             }
             
-            // Enable multi-select mode when selecting all
-            if (HasMultipleSelection)
+            // Enable multi-select mode when selecting all (unless sticky)
+            if (!_stickyMultiSelectMode && HasMultipleSelection)
             {
                 IsMultiSelectMode = true;
             }
@@ -314,6 +361,7 @@ namespace ExplorerPro.UI.FileTree.Services
             foreach (var item in _selectedItems)
             {
                 item.IsSelected = false;
+                item.IsSelectedInMulti = false;
             }
             
             _selectedItems.Clear();
@@ -335,13 +383,164 @@ namespace ExplorerPro.UI.FileTree.Services
             }
             else if (key == Key.Escape && HasSelection)
             {
-                // ESC - Clear selection and exit multi-select mode
+                // ESC - Clear selection and exit multi-select mode (unless sticky)
                 ClearSelection();
-                IsMultiSelectMode = false;
+                if (!_stickyMultiSelectMode)
+                {
+                    IsMultiSelectMode = false;
+                }
+                return true;
+            }
+            else if (key == Key.Home && modifiers.HasFlag(ModifierKeys.Shift) && _lastSelectedItem != null)
+            {
+                // Shift+Home - Select from current to first
+                var flatList = GetFlattenedTree(allItems);
+                if (flatList.Count > 0)
+                {
+                    SelectRange(_lastSelectedItem, flatList[0], allItems);
+                }
+                return true;
+            }
+            else if (key == Key.End && modifiers.HasFlag(ModifierKeys.Shift) && _lastSelectedItem != null)
+            {
+                // Shift+End - Select from current to last
+                var flatList = GetFlattenedTree(allItems);
+                if (flatList.Count > 0)
+                {
+                    SelectRange(_lastSelectedItem, flatList[flatList.Count - 1], allItems);
+                }
+                return true;
+            }
+            else if (key == Key.Space && modifiers == ModifierKeys.Control && _lastSelectedItem != null)
+            {
+                // Ctrl+Space - Toggle current item
+                ToggleSelection(_lastSelectedItem);
+                return true;
+            }
+            else if ((key == Key.Up || key == Key.Down) && modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                // Shift+Arrow - Extend selection
+                return HandleArrowKeySelection(key, modifiers, allItems);
+            }
+            
+            return false;
+        }
+        
+        /// <summary>
+        /// Handles arrow key selection extension
+        /// </summary>
+        private bool HandleArrowKeySelection(Key key, ModifierKeys modifiers, IEnumerable<FileTreeItem> allItems)
+        {
+            if (_lastSelectedItem == null) return false;
+            
+            var flatList = GetFlattenedTree(allItems);
+            var currentIndex = flatList.IndexOf(_lastSelectedItem);
+            if (currentIndex == -1) return false;
+            
+            int newIndex = currentIndex;
+            if (key == Key.Up && currentIndex > 0)
+                newIndex = currentIndex - 1;
+            else if (key == Key.Down && currentIndex < flatList.Count - 1)
+                newIndex = currentIndex + 1;
+                
+            if (newIndex != currentIndex)
+            {
+                var newItem = flatList[newIndex];
+                
+                if (modifiers.HasFlag(ModifierKeys.Shift))
+                {
+                    // Extend selection
+                    if (_anchorItem != null)
+                    {
+                        SelectRange(_anchorItem, newItem, allItems);
+                    }
+                    else
+                    {
+                        AddToSelection(newItem);
+                    }
+                }
+                
+                _lastSelectedItem = newItem;
                 return true;
             }
             
             return false;
+        }
+        
+        /// <summary>
+        /// Selects items matching a pattern
+        /// </summary>
+        public void SelectByPattern(string pattern, IEnumerable<FileTreeItem> allItems, bool addToSelection = false)
+        {
+            if (string.IsNullOrEmpty(pattern) || allItems == null) return;
+            
+            _lastPattern = pattern;
+            
+            // Convert wildcard pattern to regex
+            string regexPattern = "^" + Regex.Escape(pattern)
+                .Replace("\\*", ".*")
+                .Replace("\\?", ".") + "$";
+            
+            var regex = new Regex(regexPattern, RegexOptions.IgnoreCase);
+            
+            if (!addToSelection)
+            {
+                ClearSelection();
+            }
+            
+            var flatList = GetFlattenedTree(allItems);
+            foreach (var item in flatList)
+            {
+                if (regex.IsMatch(item.Name))
+                {
+                    AddToSelection(item);
+                }
+            }
+            
+            // Enable multi-select mode if needed
+            if (!_stickyMultiSelectMode && HasMultipleSelection && !IsMultiSelectMode)
+            {
+                IsMultiSelectMode = true;
+            }
+            
+            OnSelectionChanged();
+        }
+        
+        /// <summary>
+        /// Inverts the current selection
+        /// </summary>
+        public void InvertSelection(IEnumerable<FileTreeItem> allItems)
+        {
+            if (allItems == null) return;
+            
+            var currentlySelected = _selectedPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            ClearSelection();
+            
+            var flatList = GetFlattenedTree(allItems);
+            foreach (var item in flatList)
+            {
+                if (!currentlySelected.Contains(item.Path))
+                {
+                    AddToSelection(item);
+                }
+            }
+            
+            OnSelectionChanged();
+        }
+        
+        /// <summary>
+        /// Selects all child items of selected folders
+        /// </summary>
+        public void SelectChildrenOfSelectedFolders(IEnumerable<FileTreeItem> allItems)
+        {
+            var foldersToProcess = _selectedItems.Where(i => i.IsDirectory).ToList();
+            
+            foreach (var folder in foldersToProcess)
+            {
+                SelectAllDescendants(folder);
+            }
+            
+            OnSelectionChanged();
         }
         
         /// <summary>
@@ -354,7 +553,8 @@ namespace ExplorerPro.UI.FileTree.Services
             var pathsToRestore = _selectedPaths.ToList();
             ClearSelection();
             
-            foreach (var item in FlattenTree(allItems))
+            var flatList = GetFlattenedTree(allItems);
+            foreach (var item in flatList)
             {
                 if (pathsToRestore.Contains(item.Path))
                 {
@@ -377,6 +577,7 @@ namespace ExplorerPro.UI.FileTree.Services
             if (item == null || _selectedPaths.Contains(item.Path)) return;
             
             item.IsSelected = true;
+            item.IsSelectedInMulti = true;
             _selectedItems.Add(item);
             _selectedPaths.Add(item.Path);
         }
@@ -389,8 +590,26 @@ namespace ExplorerPro.UI.FileTree.Services
             if (item == null || !_selectedPaths.Contains(item.Path)) return;
             
             item.IsSelected = false;
+            item.IsSelectedInMulti = false;
             _selectedItems.Remove(item);
             _selectedPaths.Remove(item.Path);
+        }
+        
+        /// <summary>
+        /// Selects all descendants of an item
+        /// </summary>
+        private void SelectAllDescendants(FileTreeItem item)
+        {
+            if (item == null) return;
+            
+            foreach (var child in item.Children)
+            {
+                AddToSelection(child);
+                if (child.IsDirectory)
+                {
+                    SelectAllDescendants(child);
+                }
+            }
         }
         
         /// <summary>
@@ -400,30 +619,49 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             if (allItems == null) return;
             
-            var totalCount = FlattenTree(allItems).Count();
+            var totalCount = GetFlattenedTree(allItems).Count;
             AreAllItemsSelected = totalCount > 0 && _selectedItems.Count == totalCount;
             OnPropertyChanged(nameof(AreAllItemsSelected));
         }
         
         /// <summary>
-        /// Flattens the tree structure into a linear list
+        /// Gets a flattened tree structure (with caching for performance)
         /// </summary>
-        private IEnumerable<FileTreeItem> FlattenTree(IEnumerable<FileTreeItem> items)
+        private List<FileTreeItem> GetFlattenedTree(IEnumerable<FileTreeItem> items)
         {
-            if (items == null) yield break;
+            if (!_flatTreeCacheValid)
+            {
+                _flatTreeCache.Clear();
+                FlattenTreeRecursive(items, _flatTreeCache);
+                _flatTreeCacheValid = true;
+            }
+            return _flatTreeCache;
+        }
+        
+        /// <summary>
+        /// Recursively flattens tree into list
+        /// </summary>
+        private void FlattenTreeRecursive(IEnumerable<FileTreeItem> items, List<FileTreeItem> result)
+        {
+            if (items == null) return;
             
             foreach (var item in items)
             {
-                yield return item;
+                result.Add(item);
                 
-                if (item.IsExpanded && item.Children != null)
+                if (item.IsExpanded && item.Children != null && item.Children.Count > 0)
                 {
-                    foreach (var child in FlattenTree(item.Children))
-                    {
-                        yield return child;
-                    }
+                    FlattenTreeRecursive(item.Children, result);
                 }
             }
+        }
+        
+        /// <summary>
+        /// Invalidates the flat tree cache
+        /// </summary>
+        private void InvalidateFlatTreeCache()
+        {
+            _flatTreeCacheValid = false;
         }
         
         /// <summary>
@@ -453,6 +691,7 @@ namespace ExplorerPro.UI.FileTree.Services
             OnPropertyChanged(nameof(HasSelection));
             OnPropertyChanged(nameof(HasMultipleSelection));
             OnPropertyChanged(nameof(SelectionCount));
+            OnPropertyChanged(nameof(SelectionCountText));
             OnPropertyChanged(nameof(FirstSelectedItem));
             OnPropertyChanged(nameof(FirstSelectedPath));
         }
@@ -474,6 +713,7 @@ namespace ExplorerPro.UI.FileTree.Services
             ClearSelection();
             _selectedItems.Clear();
             _selectedPaths.Clear();
+            _flatTreeCache.Clear();
         }
         
         #endregion

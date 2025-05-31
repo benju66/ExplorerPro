@@ -26,11 +26,13 @@ namespace ExplorerPro.UI.FileTree
         private bool _isDirectory;
         private bool _isExpanded;
         private bool _isSelected;
+        private bool _isSelectedInMulti;
         private SolidColorBrush _foreground;
         private FontWeight _fontWeight;
         private ObservableCollection<FileTreeItem> _children;
         private int _level;
         private bool _hasChildren;
+        private WeakReference _parentRef;
 
         #endregion
 
@@ -207,6 +209,23 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
+        /// Gets or sets a value indicating whether this item is selected in multi-selection mode
+        /// Used for visual styling in XAML
+        /// </summary>
+        public bool IsSelectedInMulti
+        {
+            get => _isSelectedInMulti;
+            set
+            {
+                if (_isSelectedInMulti != value)
+                {
+                    _isSelectedInMulti = value;
+                    OnPropertyChanged(nameof(IsSelectedInMulti));
+                }
+            }
+        }
+
+        /// <summary>
         /// Gets or sets the text color
         /// </summary>
         public SolidColorBrush Foreground
@@ -290,6 +309,16 @@ namespace ExplorerPro.UI.FileTree
         /// Gets or sets the icon for the item
         /// </summary>
         public ImageSource Icon { get; set; }
+
+        /// <summary>
+        /// Gets or sets a weak reference to the parent item
+        /// Used for efficient parent/child selection operations
+        /// </summary>
+        public FileTreeItem Parent
+        {
+            get => _parentRef?.Target as FileTreeItem;
+            set => _parentRef = value != null ? new WeakReference(value) : null;
+        }
 
         /// <summary>
         /// Event raised when children need to be loaded
@@ -401,6 +430,37 @@ namespace ExplorerPro.UI.FileTree
         public void ClearChildren()
         {
             Children.Clear();
+        }
+
+        /// <summary>
+        /// Gets all descendants of this item (recursive)
+        /// </summary>
+        public IEnumerable<FileTreeItem> GetAllDescendants()
+        {
+            foreach (var child in Children)
+            {
+                yield return child;
+                foreach (var descendant in child.GetAllDescendants())
+                {
+                    yield return descendant;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Checks if this item is an ancestor of the given item
+        /// </summary>
+        public bool IsAncestorOf(FileTreeItem item)
+        {
+            if (item == null || !IsDirectory) return false;
+            
+            var current = item.Parent;
+            while (current != null)
+            {
+                if (current == this) return true;
+                current = current.Parent;
+            }
+            return false;
         }
 
         #endregion
