@@ -25,6 +25,8 @@ namespace ExplorerPro.UI.FileTree
         private string _lastModifiedStr;
         private bool _isDirectory;
         private bool _isExpanded;
+        private bool _isSelected;
+        private bool _isSelectedInMulti;
         private SolidColorBrush _foreground;
         private FontWeight _fontWeight;
         private ObservableCollection<FileTreeItem> _children;
@@ -188,6 +190,39 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
+        /// Gets or sets whether this item is selected
+        /// </summary>
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                if (_isSelected != value)
+                {
+                    _isSelected = value;
+                    OnPropertyChanged(nameof(IsSelected));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets whether this item is selected in multi-select mode
+        /// Used for checkbox state in the UI
+        /// </summary>
+        public bool IsSelectedInMulti
+        {
+            get => _isSelectedInMulti;
+            set
+            {
+                if (_isSelectedInMulti != value)
+                {
+                    _isSelectedInMulti = value;
+                    OnPropertyChanged(nameof(IsSelectedInMulti));
+                }
+            }
+        }
+
+        /// <summary>
         /// Gets or sets the text color
         /// </summary>
         public SolidColorBrush Foreground
@@ -301,6 +336,8 @@ namespace ExplorerPro.UI.FileTree
             FontWeight = FontWeights.Normal;
             _level = 0; // Default level is 0 (root level)
             _hasChildren = false; // Initialize as false
+            _isSelected = false;
+            _isSelectedInMulti = false;
         }
 
         /// <summary>

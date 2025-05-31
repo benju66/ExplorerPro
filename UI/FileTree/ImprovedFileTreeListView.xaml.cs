@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Fixed with single source of truth for selection
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Updated with new IFileTree interface implementation
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -116,6 +116,21 @@ namespace ExplorerPro.UI.FileTree
         /// Gets the selection service for data binding
         /// </summary>
         public SelectionService SelectionService => _selectionService;
+        
+        /// <summary>
+        /// Gets whether multi-select mode is active
+        /// </summary>
+        public bool IsMultiSelectMode => _selectionService?.IsMultiSelectMode ?? false;
+        
+        /// <summary>
+        /// Gets whether any items are selected
+        /// </summary>
+        public bool HasSelection => _selectionService?.HasSelection ?? false;
+        
+        /// <summary>
+        /// Gets the count of selected items
+        /// </summary>
+        public int SelectionCount => _selectionService?.SelectionCount ?? 0;
         
         #endregion
 
@@ -655,7 +670,7 @@ namespace ExplorerPro.UI.FileTree
 
         #endregion
 
-        #region IFileTree Implementation (unchanged)
+        #region IFileTree Implementation
         
         public string GetCurrentPath()
         {
@@ -666,6 +681,11 @@ namespace ExplorerPro.UI.FileTree
         {
             return _selectionService?.FirstSelectedPath ?? 
                    (fileTreeView.SelectedItem as FileTreeItem)?.Path;
+        }
+        
+        public IReadOnlyList<string> GetSelectedPaths()
+        {
+            return _selectionService?.SelectedPaths ?? new List<string>();
         }
 
         public string GetSelectedFolderPath()
@@ -684,10 +704,57 @@ namespace ExplorerPro.UI.FileTree
         {
             RefreshTreeView();
         }
+        
+        public void RefreshDirectory(string directoryPath)
+        {
+            RefreshDirectoryAsync(directoryPath).Wait();
+        }
 
         public void SelectItem(string path)
         {
             SelectItemByPath(path);
+        }
+        
+        public void SelectItems(IEnumerable<string> paths)
+        {
+            if (paths == null || !paths.Any())
+                return;
+                
+            _selectionService.ClearSelection();
+            
+            foreach (var path in paths)
+            {
+                var item = _fileTreeService.FindItemByPath(_rootItems, path);
+                if (item != null)
+                {
+                    _selectionService.ToggleSelection(item);
+                }
+            }
+            
+            UpdateTreeViewSelection();
+        }
+        
+        public void SelectAll()
+        {
+            _selectionService.SelectAll(_rootItems);
+            UpdateTreeViewSelection();
+        }
+        
+        public void InvertSelection()
+        {
+            _selectionService.InvertSelection(_rootItems);
+            UpdateTreeViewSelection();
+        }
+        
+        public void SelectByPattern(string pattern, bool addToSelection = false)
+        {
+            _selectionService.SelectByPattern(pattern, _rootItems, addToSelection);
+            UpdateTreeViewSelection();
+        }
+        
+        public void ToggleMultiSelectMode()
+        {
+            _selectionService.StickyMultiSelectMode = !_selectionService.StickyMultiSelectMode;
         }
 
         public void CopySelected()
@@ -861,6 +928,52 @@ namespace ExplorerPro.UI.FileTree
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to navigate and highlight: {ex.Message}");
             }
+        }
+        
+        public void ExpandToPath(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return;
+                
+            var item = _fileTreeService.FindItemByPath(_rootItems, path);
+            if (item != null)
+            {
+                // Expand all parent nodes
+                var parent = item.Parent;
+                while (parent != null)
+                {
+                    parent.IsExpanded = true;
+                    parent = parent.Parent;
+                }
+                
+                // Bring the item into view
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                {
+                    var treeViewItem = FindTreeViewItemForData(fileTreeView, item);
+                    treeViewItem?.BringIntoView();
+                }));
+            }
+        }
+        
+        public void CollapseAll()
+        {
+            foreach (var item in _rootItems)
+            {
+                CollapseItemRecursive(item);
+            }
+        }
+        
+        public void ExpandAll()
+        {
+            foreach (var item in _rootItems)
+            {
+                ExpandItemRecursive(item);
+            }
+        }
+        
+        public FileTreeItem FindItemByPath(string path)
+        {
+            return _fileTreeService.FindItemByPath(_rootItems, path);
         }
         
         #endregion
@@ -1361,6 +1474,8 @@ namespace ExplorerPro.UI.FileTree
         {
             // Update any UI that depends on selection
             OnPropertyChanged(nameof(HasSelectedItems));
+            OnPropertyChanged(nameof(HasSelection));
+            OnPropertyChanged(nameof(SelectionCount));
             
             // Update context menu based on selection
             if (e.SelectedItems.Count > 0)
@@ -1381,9 +1496,18 @@ namespace ExplorerPro.UI.FileTree
             if (e.PropertyName == nameof(SelectionService.IsMultiSelectMode))
             {
                 OnPropertyChanged(nameof(SelectionService));
+                OnPropertyChanged(nameof(IsMultiSelectMode));
                 
                 // Update checkbox states when mode changes
                 UpdateCheckboxStates();
+            }
+            else if (e.PropertyName == nameof(SelectionService.HasSelection))
+            {
+                OnPropertyChanged(nameof(HasSelection));
+            }
+            else if (e.PropertyName == nameof(SelectionService.SelectionCount))
+            {
+                OnPropertyChanged(nameof(SelectionCount));
             }
         }
 
@@ -1415,9 +1539,9 @@ namespace ExplorerPro.UI.FileTree
             // Handle checkbox click for multi-selection
             if (sender is CheckBox checkBox && checkBox.Tag is FileTreeItem item)
             {
-                // Toggle selection in SelectionService
-                _selectionService.ToggleSelection(item);
-                UpdateTreeViewSelection();
+                // The checkbox binding should handle the property update
+                // We just need to update the SelectionService
+                _selectionService.HandleCheckboxSelection(item);
                 e.Handled = true;
             }
         }
@@ -1726,11 +1850,6 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
-        private async void RefreshDirectory(string directoryPath)
-        {
-            await RefreshDirectoryAsync(directoryPath);
-        }
-
         private async Task RefreshDirectoryAsync(string directoryPath)
         {
             if (string.IsNullOrEmpty(directoryPath))
@@ -1807,6 +1926,27 @@ namespace ExplorerPro.UI.FileTree
                     var treeViewItem = FindTreeViewItemForData(fileTreeView, item);
                     treeViewItem?.BringIntoView();
                 }));
+            }
+        }
+        
+        private void CollapseItemRecursive(FileTreeItem item)
+        {
+            item.IsExpanded = false;
+            foreach (var child in item.Children)
+            {
+                CollapseItemRecursive(child);
+            }
+        }
+        
+        private void ExpandItemRecursive(FileTreeItem item)
+        {
+            item.IsExpanded = true;
+            foreach (var child in item.Children)
+            {
+                if (child.IsDirectory)
+                {
+                    ExpandItemRecursive(child);
+                }
             }
         }
 
