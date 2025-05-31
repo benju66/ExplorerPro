@@ -33,7 +33,6 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         
         <!-- Column Headers -->
@@ -284,40 +283,5 @@
                 </TreeView.ItemTemplate>
             </TreeView>
         </ScrollViewer>
-        
-        <!-- Selection Count Badge -->
-        <Border Grid.Row="2" 
-                x:Name="SelectionCountBadge"
-                Background="{DynamicResource SelectionBackgroundColor}"
-                BorderBrush="{DynamicResource SelectionBorderColor}"
-                BorderThickness="1"
-                CornerRadius="3"
-                Padding="10,5"
-                HorizontalAlignment="Left"
-                Margin="10,5"
-                Visibility="{Binding SelectionService.HasSelection, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                
-                <TextBlock Grid.Column="0" 
-                           Text="{Binding SelectionService.SelectionCountText}"
-                           VerticalAlignment="Center"
-                           FontWeight="SemiBold"/>
-                
-                <Button Grid.Column="1" 
-                        Content="✕" 
-                        Width="16" Height="16"
-                        Margin="10,0,0,0"
-                        Padding="0"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        FontSize="10"
-                        ToolTip="Clear selection"
-                        Click="ClearSelectionButton_Click"/>
-            </Grid>
-        </Border>
     </Grid>
 </UserControl>

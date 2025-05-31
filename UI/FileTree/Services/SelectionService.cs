@@ -141,19 +141,6 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public string FirstSelectedPath => _selectedPaths.FirstOrDefault();
         
-        /// <summary>
-        /// Gets the formatted selection count string
-        /// </summary>
-        public string SelectionCountText
-        {
-            get
-            {
-                if (!HasSelection) return "";
-                if (SelectionCount == 1) return "1 item selected";
-                return $"{SelectionCount} items selected";
-            }
-        }
-        
         #endregion
         
         #region Constructor
@@ -691,7 +678,6 @@ namespace ExplorerPro.UI.FileTree.Services
             OnPropertyChanged(nameof(HasSelection));
             OnPropertyChanged(nameof(HasMultipleSelection));
             OnPropertyChanged(nameof(SelectionCount));
-            OnPropertyChanged(nameof(SelectionCountText));
             OnPropertyChanged(nameof(FirstSelectedItem));
             OnPropertyChanged(nameof(FirstSelectedPath));
         }

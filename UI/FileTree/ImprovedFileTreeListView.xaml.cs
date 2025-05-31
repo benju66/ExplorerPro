@@ -1280,12 +1280,32 @@ namespace ExplorerPro.UI.FileTree
 
         #region UI Button Handlers
 
-        private void ClearSelectionButton_Click(object sender, RoutedEventArgs e)
+        private void SelectAllCheckBox_Click(object sender, RoutedEventArgs e)
         {
-            _selectionService?.ClearSelection();
-            if (!_selectionService.StickyMultiSelectMode)
+            // Handle select all checkbox in header
+            if (sender is CheckBox checkBox)
             {
-                _selectionService.IsMultiSelectMode = false;
+                if (checkBox.IsChecked == true)
+                {
+                    _selectionService.SelectAll(_rootItems);
+                }
+                else
+                {
+                    _selectionService.ClearSelection();
+                }
+                
+                e.Handled = true;
+            }
+        }
+
+        private void SelectionCheckBox_Click(object sender, RoutedEventArgs e)
+        {
+            // Handle checkbox click for multi-selection
+            if (sender is CheckBox checkBox && checkBox.DataContext is FileTreeItem item)
+            {
+                // Let the SelectionService handle the checkbox selection
+                _selectionService.HandleCheckboxSelection(item);
+                e.Handled = true;
             }
         }
 
@@ -1771,39 +1791,6 @@ namespace ExplorerPro.UI.FileTree
             return null;
         }
         
-        #endregion
-
-        #region UI Event Handlers
-
-        private void SelectionCheckBox_Click(object sender, RoutedEventArgs e)
-        {
-            // Handle checkbox click for multi-selection
-            if (sender is CheckBox checkBox && checkBox.DataContext is FileTreeItem item)
-            {
-                // Let the SelectionService handle the checkbox selection
-                _selectionService.HandleCheckboxSelection(item);
-                e.Handled = true;
-            }
-        }
-
-        private void SelectAllCheckBox_Click(object sender, RoutedEventArgs e)
-        {
-            // Handle select all checkbox in header
-            if (sender is CheckBox checkBox)
-            {
-                if (checkBox.IsChecked == true)
-                {
-                    _selectionService.SelectAll(_rootItems);
-                }
-                else
-                {
-                    _selectionService.ClearSelection();
-                }
-                
-                e.Handled = true;
-            }
-        }
-
         #endregion
 
         #region IDisposable Implementation
