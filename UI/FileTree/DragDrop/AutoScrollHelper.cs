@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using System.Windows.Media;
+using ExplorerPro.UI.FileTree.Utilities;
 
 namespace ExplorerPro.UI.FileTree.DragDrop
 {
@@ -201,18 +202,7 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         /// </summary>
         public static ScrollViewer FindScrollViewer(DependencyObject element)
         {
-            if (element is ScrollViewer scrollViewer)
-                return scrollViewer;
-            
-            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(element); i++)
-            {
-                var child = VisualTreeHelper.GetChild(element, i);
-                var result = FindScrollViewer(child);
-                if (result != null)
-                    return result;
-            }
-            
-            return null;
+            return VisualTreeHelperEx.FindScrollViewer(element);
         }
         
         #endregion

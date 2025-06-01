@@ -19,6 +19,7 @@ using ExplorerPro.FileOperations;
 using ExplorerPro.Utilities;
 using ExplorerPro.UI.FileTree.Services;
 using ExplorerPro.UI.FileTree.Dialogs;
+using ExplorerPro.UI.FileTree.Utilities;
 using ExplorerPro.Themes;
 // Add alias to avoid ambiguity
 using Path = System.IO.Path;
@@ -448,13 +449,13 @@ namespace ExplorerPro.UI.FileTree
                 var textColor = GetResource<SolidColorBrush>("TextColor");
                 
                 // Update all TreeViewItems
-                foreach (var item in FindVisualChildren<TreeViewItem>(fileTreeView))
+                foreach (var item in VisualTreeHelperEx.FindVisualChildren<TreeViewItem>(fileTreeView))
                 {
                     // Apply theme to the TreeViewItem
                     item.Foreground = textColor;
                     
                     // Find and update all TextBlocks within the item
-                    foreach (var textBlock in FindVisualChildren<TextBlock>(item))
+                    foreach (var textBlock in VisualTreeHelperEx.FindVisualChildren<TextBlock>(item))
                     {
                         // Don't override custom colors from metadata
                         if (textBlock.Foreground == SystemColors.WindowTextBrush)
@@ -464,7 +465,7 @@ namespace ExplorerPro.UI.FileTree
                     }
                     
                     // Update tree lines in the item
-                    foreach (var line in FindVisualChildren<System.Windows.Shapes.Line>(item))
+                    foreach (var line in VisualTreeHelperEx.FindVisualChildren<System.Windows.Shapes.Line>(item))
                     {
                         line.Stroke = treeLine;
                         
@@ -480,13 +481,13 @@ namespace ExplorerPro.UI.FileTree
                     }
                     
                     // Update toggle buttons
-                    foreach (var toggle in FindVisualChildren<ToggleButton>(item))
+                    foreach (var toggle in VisualTreeHelperEx.FindVisualChildren<ToggleButton>(item))
                     {
                         RefreshTreeViewToggleButton(toggle);
                     }
                     
                     // Update Images (file/folder icons)
-                    foreach (var image in FindVisualChildren<Image>(item))
+                    foreach (var image in VisualTreeHelperEx.FindVisualChildren<Image>(item))
                     {
                         // Keep the image as is - just ensure it's visible
                         image.Opacity = 1.0;
@@ -510,7 +511,7 @@ namespace ExplorerPro.UI.FileTree
                 toggle.Background = Brushes.Transparent;
                     
                 // Find the Path element for the expander arrow
-                var pathElement = FindVisualChild<System.Windows.Shapes.Path>(toggle);
+                var pathElement = VisualTreeHelperEx.FindVisualChild<System.Windows.Shapes.Path>(toggle);
                 if (pathElement != null)
                 {
                     pathElement.Stroke = GetResource<SolidColorBrush>("TextColor");
@@ -537,7 +538,7 @@ namespace ExplorerPro.UI.FileTree
         {
             try
             {
-                foreach (var line in FindVisualChildren<System.Windows.Shapes.Line>(sender as DependencyObject))
+                foreach (var line in VisualTreeHelperEx.FindVisualChildren<System.Windows.Shapes.Line>(sender as DependencyObject))
                 {
                     line.Stroke = GetResource<SolidColorBrush>("TreeLineHighlightColor");
                 }
@@ -552,7 +553,7 @@ namespace ExplorerPro.UI.FileTree
         {
             try
             {
-                foreach (var line in FindVisualChildren<System.Windows.Shapes.Line>(sender as DependencyObject))
+                foreach (var line in VisualTreeHelperEx.FindVisualChildren<System.Windows.Shapes.Line>(sender as DependencyObject))
                 {
                     line.Stroke = GetResource<SolidColorBrush>("TreeLineColor");
                 }
@@ -569,7 +570,7 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (sender is ToggleButton toggle)
                 {
-                    var pathElement = FindVisualChild<System.Windows.Shapes.Path>(toggle);
+                    var pathElement = VisualTreeHelperEx.FindVisualChild<System.Windows.Shapes.Path>(toggle);
                     if (pathElement != null)
                     {
                         pathElement.Stroke = GetResource<SolidColorBrush>("TreeLineHighlightColor");
@@ -589,7 +590,7 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (sender is ToggleButton toggle)
                 {
-                    var pathElement = FindVisualChild<System.Windows.Shapes.Path>(toggle);
+                    var pathElement = VisualTreeHelperEx.FindVisualChild<System.Windows.Shapes.Path>(toggle);
                     if (pathElement != null)
                     {
                         pathElement.Stroke = GetResource<SolidColorBrush>("TextColor");
@@ -611,14 +612,14 @@ namespace ExplorerPro.UI.FileTree
                 fileTreeView.UpdateLayout();
                 
                 // Refresh the items panel (if available)
-                var itemsPresenter = FindVisualChild<ItemsPresenter>(fileTreeView);
+                var itemsPresenter = VisualTreeHelperEx.FindVisualChild<ItemsPresenter>(fileTreeView);
                 if (itemsPresenter != null)
                 {
                     itemsPresenter.UpdateLayout();
                 }
                 
                 // Explicitly update all visible TextBlocks in the tree
-                var textBlocks = FindVisualChildren<TextBlock>(fileTreeView);
+                var textBlocks = VisualTreeHelperEx.FindVisualChildren<TextBlock>(fileTreeView);
                 foreach (var textBlock in textBlocks)
                 {
                     // Don't override custom foreground colors (from metadata)
@@ -953,7 +954,7 @@ namespace ExplorerPro.UI.FileTree
                 // Bring the item into view
                 Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                 {
-                    var treeViewItem = FindTreeViewItemForData(fileTreeView, item);
+                    var treeViewItem = VisualTreeHelperEx.FindTreeViewItemForData(fileTreeView, item);
                     treeViewItem?.BringIntoView();
                 }));
             }
@@ -1110,7 +1111,7 @@ namespace ExplorerPro.UI.FileTree
         {
             // Get the item that was actually clicked on
             var originalSource = e.OriginalSource as DependencyObject;
-            var treeViewItem = FindAncestor<TreeViewItem>(originalSource);
+            var treeViewItem = VisualTreeHelperEx.FindAncestor<TreeViewItem>(originalSource);
             
             if (treeViewItem?.DataContext is FileTreeItem item)
             {
@@ -1177,7 +1178,7 @@ namespace ExplorerPro.UI.FileTree
             {
                 // Check if we clicked on a checkbox
                 var originalSource = e.OriginalSource as DependencyObject;
-                var checkbox = FindAncestor<CheckBox>(originalSource);
+                var checkbox = VisualTreeHelperEx.FindAncestor<CheckBox>(originalSource);
                 
                 if (checkbox == null)
                 {
@@ -1309,7 +1310,7 @@ namespace ExplorerPro.UI.FileTree
                         // For single selection mode or when we need TreeViewItem.IsSelected
                         if (!_selectionService.IsMultiSelectMode && _selectionService.FirstSelectedItem != null)
                         {
-                            var treeViewItem = FindTreeViewItemForData(fileTreeView, _selectionService.FirstSelectedItem);
+                            var treeViewItem = VisualTreeHelperEx.FindTreeViewItemForData(fileTreeView, _selectionService.FirstSelectedItem);
                             if (treeViewItem != null)
                             {
                                 treeViewItem.IsSelected = true;
@@ -1322,7 +1323,7 @@ namespace ExplorerPro.UI.FileTree
                             var firstItem = _selectionService.FirstSelectedItem;
                             if (firstItem != null)
                             {
-                                var treeViewItem = FindTreeViewItemForData(fileTreeView, firstItem);
+                                var treeViewItem = VisualTreeHelperEx.FindTreeViewItemForData(fileTreeView, firstItem);
                                 if (treeViewItem != null)
                                 {
                                     treeViewItem.IsSelected = true;
@@ -1446,7 +1447,7 @@ namespace ExplorerPro.UI.FileTree
 
         private IEnumerable<TreeViewItem> GetAllVisibleTreeViewItems()
         {
-            return FindVisualChildren<TreeViewItem>(fileTreeView)
+            return VisualTreeHelperEx.FindVisualChildren<TreeViewItem>(fileTreeView)
                 .Where(item => item.IsVisible);
         }
 
@@ -2000,7 +2001,7 @@ namespace ExplorerPro.UI.FileTree
                 UpdateTreeViewSelection();
                 
                 Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
-                    var treeViewItem = FindTreeViewItemForData(fileTreeView, item);
+                    var treeViewItem = VisualTreeHelperEx.FindTreeViewItemForData(fileTreeView, item);
                     treeViewItem?.BringIntoView();
                 }));
             }
@@ -2029,7 +2030,7 @@ namespace ExplorerPro.UI.FileTree
 
         private TreeViewItem GetSelectedTreeViewItem()
         {
-            var items = FindVisualChildren<TreeViewItem>(fileTreeView);
+            var items = VisualTreeHelperEx.FindVisualChildren<TreeViewItem>(fileTreeView);
             return items.FirstOrDefault(item => item.IsSelected);
         }
 
@@ -2040,101 +2041,10 @@ namespace ExplorerPro.UI.FileTree
             fileTreeView.UpdateLayout();
             
             // Ensure all TreeViewItems refresh their visual states
-            foreach (var item in FindVisualChildren<TreeViewItem>(fileTreeView))
+            foreach (var item in VisualTreeHelperEx.FindVisualChildren<TreeViewItem>(fileTreeView))
             {
                 item.InvalidateVisual();
             }
-        }
-        
-        #endregion
-
-        #region Helper Methods
-
-        internal static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
-        {
-            if (parent == null) yield break;
-            
-            int childCount = VisualTreeHelper.GetChildrenCount(parent);
-            for (int i = 0; i < childCount; i++)
-            {
-                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
-                
-                if (child is T t)
-                {
-                    yield return t;
-                }
-                
-                foreach (var grandChild in FindVisualChildren<T>(child))
-                {
-                    yield return grandChild;
-                }
-            }
-        }
-        
-        internal static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
-        {
-            if (parent == null) return null;
-            
-            int childCount = VisualTreeHelper.GetChildrenCount(parent);
-            for (int i = 0; i < childCount; i++)
-            {
-                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
-                
-                if (child is T t)
-                {
-                    return t;
-                }
-                
-                T childOfChild = FindVisualChild<T>(child);
-                if (childOfChild != null)
-                {
-                    return childOfChild;
-                }
-            }
-            
-            return null;
-        }
-        
-        internal static T FindAncestor<T>(DependencyObject current) where T : DependencyObject
-        {
-            while (current != null && !(current is T))
-            {
-                current = VisualTreeHelper.GetParent(current);
-            }
-            
-            return current as T;
-        }
-        
-       private TreeViewItem FindTreeViewItemForData(ItemsControl container, object item)
-        {
-            if (container == null || item == null)
-                return null;
-                
-            // Ensure containers are generated
-            container.UpdateLayout();
-            
-            // Force container generation if needed
-            if (container.ItemContainerGenerator.Status != GeneratorStatus.ContainersGenerated)
-            {
-                container.UpdateLayout();
-                container.ApplyTemplate();
-            }
-                
-            if (container.ItemContainerGenerator.ContainerFromItem(item) is TreeViewItem tvi)
-                return tvi;
-                
-            for (int i = 0; i < container.Items.Count; i++)
-            {
-                var childContainer = container.ItemContainerGenerator.ContainerFromIndex(i) as TreeViewItem;
-                if (childContainer != null)
-                {
-                    var result = FindTreeViewItemForData(childContainer, item);
-                    if (result != null)
-                        return result;
-                }
-            }
-            
-            return null;
         }
         
         #endregion

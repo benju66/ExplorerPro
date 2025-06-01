@@ -13,6 +13,7 @@ using ExplorerPro.Models;
 using ExplorerPro.FileOperations;
 using ExplorerPro.UI.FileTree.Commands;
 using ExplorerPro.UI.FileTree.DragDrop;
+using ExplorerPro.UI.FileTree.Utilities;
 
 namespace ExplorerPro.UI.FileTree.Services
 {
@@ -102,7 +103,7 @@ namespace ExplorerPro.UI.FileTree.Services
             _getItemFromPoint = getItemFromPoint;
             
             // Find ScrollViewer for auto-scroll
-            var scrollViewer = AutoScrollHelper.FindScrollViewer(_control);
+            var scrollViewer = VisualTreeHelperEx.FindScrollViewer(_control);
             if (scrollViewer != null)
             {
                 _autoScrollHelper = new AutoScrollHelper(scrollViewer);
@@ -702,29 +703,7 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             if (_control is TreeView treeView)
             {
-                return FindTreeViewItem(treeView, data);
-            }
-            return null;
-        }
-        
-        private TreeViewItem FindTreeViewItem(ItemsControl container, object data)
-        {
-            if (container == null) return null;
-            
-            if (container.ItemContainerGenerator.Status == System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated)
-            {
-                var item = container.ItemContainerGenerator.ContainerFromItem(data) as TreeViewItem;
-                if (item != null) return item;
-                
-                foreach (var childData in container.Items)
-                {
-                    var childContainer = container.ItemContainerGenerator.ContainerFromItem(childData) as TreeViewItem;
-                    if (childContainer != null)
-                    {
-                        var result = FindTreeViewItem(childContainer, data);
-                        if (result != null) return result;
-                    }
-                }
+                return VisualTreeHelperEx.FindTreeViewItem(treeView, data);
             }
             return null;
         }
