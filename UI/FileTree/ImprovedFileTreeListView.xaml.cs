@@ -1353,7 +1353,13 @@ namespace ExplorerPro.UI.FileTree
             
             // Ensure containers are generated
             parent.UpdateLayout();
-            parent.ItemContainerGenerator.GenerateNext();
+            
+            // Force container generation if needed
+            if (parent.ItemContainerGenerator.Status != GeneratorStatus.ContainersGenerated)
+            {
+                parent.UpdateLayout();
+                parent.ApplyTemplate();
+            }
             
             for (int i = 0; i < parent.Items.Count; i++)
             {
@@ -2087,14 +2093,20 @@ namespace ExplorerPro.UI.FileTree
             return current as T;
         }
         
-        private TreeViewItem FindTreeViewItemForData(ItemsControl container, object item)
+       private TreeViewItem FindTreeViewItemForData(ItemsControl container, object item)
         {
             if (container == null || item == null)
                 return null;
                 
             // Ensure containers are generated
             container.UpdateLayout();
-            container.ItemContainerGenerator.GenerateNext();
+            
+            // Force container generation if needed
+            if (container.ItemContainerGenerator.Status != GeneratorStatus.ContainersGenerated)
+            {
+                container.UpdateLayout();
+                container.ApplyTemplate();
+            }
                 
             if (container.ItemContainerGenerator.ContainerFromItem(item) is TreeViewItem tvi)
                 return tvi;
