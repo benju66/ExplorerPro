@@ -1,4 +1,4 @@
-// UI/FileTree/Services/FileTreeDragDropService.cs - Fixed version with proper drag and drop
+// UI/FileTree/Services/FileTreeDragDropService.cs - Updated for new selection system
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -18,6 +18,7 @@ namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
     /// Enhanced drag and drop service with multi-selection, visual feedback, and advanced features
+    /// Updated to work with the new SelectionService as single source of truth
     /// </summary>
     public class FileTreeDragDropService : IDisposable
     {
@@ -37,8 +38,9 @@ namespace ExplorerPro.UI.FileTree.Services
         
         private Control _control;
         private Point? _dragStartPoint;
-        private DependencyObject _dragStartElement;
         private bool _isDragging;
+        private bool _isMouseDown;
+        private FileTreeItem _potentialDragItem;
         
         private DragAdorner _dragAdorner;
         private AdornerLayer _adornerLayer;
@@ -47,7 +49,6 @@ namespace ExplorerPro.UI.FileTree.Services
         
         private FileTreeItem _currentDropTarget;
         private bool _isValidDropTarget;
-        private Visual _dropIndicator;
         
         // Store the getItemFromPoint delegate
         private Func<Point, FileTreeItem> _getItemFromPoint;
@@ -63,13 +64,22 @@ namespace ExplorerPro.UI.FileTree.Services
         
         #endregion
         
+        #region Properties
+        
+        /// <summary>
+        /// Gets whether a drag operation is in progress
+        /// </summary>
+        public bool IsDragging => _isDragging;
+        
+        #endregion
+        
         #region Constructor
         
         public FileTreeDragDropService(UndoManager undoManager = null, IFileOperations fileOperations = null, SelectionService selectionService = null)
         {
             _undoManager = undoManager ?? UndoManager.Instance;
             _fileOperations = fileOperations ?? new FileOperations.FileOperations();
-            _selectionService = selectionService ?? new SelectionService();
+            _selectionService = selectionService ?? throw new ArgumentNullException(nameof(selectionService));
             
             _springLoadedHelper = new SpringLoadedFolderHelper();
             _springLoadedHelper.FolderExpanding += OnSpringLoadedFolderExpanding;
@@ -98,16 +108,21 @@ namespace ExplorerPro.UI.FileTree.Services
                 _autoScrollHelper = new AutoScrollHelper(scrollViewer);
             }
             
-            // Attach event handlers
-            _control.PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDown;
-            _control.PreviewMouseMove += OnPreviewMouseMove;
-            _control.PreviewMouseLeftButtonUp += OnPreviewMouseLeftButtonUp;
+            // Attach ONLY drag/drop event handlers, not mouse events
+            // Let the tree view handle selection through mouse events
             _control.DragEnter += OnDragEnter;
             _control.DragOver += OnDragOver;
             _control.DragLeave += OnDragLeave;
             _control.Drop += OnDrop;
             _control.GiveFeedback += OnGiveFeedback;
             _control.QueryContinueDrag += OnQueryContinueDrag;
+            
+            // Monitor mouse for drag initiation, but with lower priority
+            _control.PreviewMouseMove += OnPreviewMouseMove;
+            _control.PreviewMouseLeftButtonUp += OnPreviewMouseLeftButtonUp;
+            
+            // Subscribe to selection changes to know when to enable dragging
+            _selectionService.SelectionChanged += OnSelectionChanged;
         }
         
         /// <summary>
@@ -125,15 +140,19 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             if (_control == null) return;
             
-            _control.PreviewMouseLeftButtonDown -= OnPreviewMouseLeftButtonDown;
-            _control.PreviewMouseMove -= OnPreviewMouseMove;
-            _control.PreviewMouseLeftButtonUp -= OnPreviewMouseLeftButtonUp;
             _control.DragEnter -= OnDragEnter;
             _control.DragOver -= OnDragOver;
             _control.DragLeave -= OnDragLeave;
             _control.Drop -= OnDrop;
             _control.GiveFeedback -= OnGiveFeedback;
             _control.QueryContinueDrag -= OnQueryContinueDrag;
+            _control.PreviewMouseMove -= OnPreviewMouseMove;
+            _control.PreviewMouseLeftButtonUp -= OnPreviewMouseLeftButtonUp;
+            
+            if (_selectionService != null)
+            {
+                _selectionService.SelectionChanged -= OnSelectionChanged;
+            }
             
             _autoScrollHelper?.Dispose();
             _autoScrollHelper = null;
@@ -176,8 +195,11 @@ namespace ExplorerPro.UI.FileTree.Services
         
         public void StartDrag(DependencyObject source, IEnumerable<string> selectedPaths)
         {
-            // This is now handled internally with multi-selection support
-            StartDragOperation();
+            // Use the selection service's current selection
+            if (_selectionService.HasSelection)
+            {
+                StartDragOperation();
+            }
         }
         
         public bool HandleExternalFileDrop(string[] droppedFiles, string targetPath)
@@ -223,30 +245,54 @@ namespace ExplorerPro.UI.FileTree.Services
         
         #region Drag Initiation
         
-        private void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        private void OnSelectionChanged(object sender, FileTreeSelectionChangedEventArgs e)
         {
-            _dragStartPoint = e.GetPosition(_control);
-            _dragStartElement = e.OriginalSource as DependencyObject;
+            // Track when mouse is down and we have a selection
+            if (Mouse.LeftButton == MouseButtonState.Pressed && _selectionService.HasSelection)
+            {
+                _isMouseDown = true;
+                _dragStartPoint = Mouse.GetPosition(_control);
+                
+                // Get the item under the mouse
+                if (_getItemFromPoint != null)
+                {
+                    _potentialDragItem = _getItemFromPoint(_dragStartPoint.Value);
+                    
+                    // Only prepare for drag if the clicked item is selected
+                    if (_potentialDragItem == null || !_selectionService.IsItemSelected(_potentialDragItem))
+                    {
+                        _dragStartPoint = null;
+                        _potentialDragItem = null;
+                    }
+                }
+            }
         }
         
         private void OnPreviewMouseMove(object sender, MouseEventArgs e)
         {
-            if (e.LeftButton != MouseButtonState.Pressed || !_dragStartPoint.HasValue)
+            // Only process if we have a potential drag operation
+            if (e.LeftButton != MouseButtonState.Pressed || !_dragStartPoint.HasValue || _isDragging)
                 return;
             
-            Point currentPosition = e.GetPosition(_control);
-            Vector difference = _dragStartPoint.Value - currentPosition;
-            
-            if (Math.Abs(difference.X) > DRAG_THRESHOLD || Math.Abs(difference.Y) > DRAG_THRESHOLD)
+            // Check if we should start dragging
+            if (_selectionService.HasSelection && _potentialDragItem != null && 
+                _selectionService.IsItemSelected(_potentialDragItem))
             {
-                StartDragOperation();
+                Point currentPosition = e.GetPosition(_control);
+                Vector difference = _dragStartPoint.Value - currentPosition;
+                
+                if (Math.Abs(difference.X) > DRAG_THRESHOLD || Math.Abs(difference.Y) > DRAG_THRESHOLD)
+                {
+                    StartDragOperation();
+                }
             }
         }
         
         private void OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             _dragStartPoint = null;
-            _dragStartElement = null;
+            _potentialDragItem = null;
+            _isMouseDown = false;
         }
         
         private void StartDragOperation()
@@ -258,7 +304,7 @@ namespace ExplorerPro.UI.FileTree.Services
             {
                 _isDragging = true;
                 
-                // Create data object with selected files
+                // Create data object with selected files from SelectionService
                 var dataObject = CreateDragDataObject();
                 
                 // Create visual feedback
@@ -288,7 +334,7 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             var dataObject = new DataObject();
             
-            // Add file paths
+            // Use SelectionService to get selected paths
             var paths = _selectionService.SelectedPaths.ToArray();
             dataObject.SetData(DataFormats.FileDrop, paths);
             
@@ -303,7 +349,7 @@ namespace ExplorerPro.UI.FileTree.Services
         
         private void CreateDragAdorner()
         {
-            if (_control == null || _selectionService.SelectedItems.Count == 0)
+            if (_control == null || !_selectionService.HasSelection)
                 return;
             
             _adornerLayer = AdornerLayer.GetAdornerLayer(_control);
@@ -312,23 +358,8 @@ namespace ExplorerPro.UI.FileTree.Services
                 // Create visual element for the adorner
                 var visual = CreateDragVisual();
                 
-                // Calculate proper offset from the drag start element
-                Point offset = new Point(0, 0);
-                if (_dragStartElement != null && _dragStartPoint.HasValue)
-                {
-                    // Find the visual element of the selected item
-                    var itemVisual = FindItemVisual(_dragStartElement);
-                    if (itemVisual != null)
-                    {
-                        // Get position of item relative to control
-                        var itemPosition = itemVisual.TransformToAncestor(_control).Transform(new Point(0, 0));
-                        // Calculate offset from mouse position to item position
-                        offset = new Point(
-                            _dragStartPoint.Value.X - itemPosition.X,
-                            _dragStartPoint.Value.Y - itemPosition.Y
-                        );
-                    }
-                }
+                // Calculate proper offset
+                Point offset = new Point(20, 20); // Default offset
                 
                 _dragAdorner = new DragAdorner(_control, visual, offset, _selectionService.SelectionCount);
                 _adornerLayer.Add(_dragAdorner);
@@ -338,42 +369,9 @@ namespace ExplorerPro.UI.FileTree.Services
             }
         }
         
-        private Visual FindItemVisual(DependencyObject element)
-        {
-            // Walk up the visual tree to find the TreeViewItem
-            var current = element;
-            while (current != null && !(current is TreeViewItem))
-            {
-                current = VisualTreeHelper.GetParent(current);
-            }
-            
-            if (current is TreeViewItem treeViewItem)
-            {
-                // Find the content presenter
-                return FindVisualChild<ContentPresenter>(treeViewItem);
-            }
-            
-            return element as Visual;
-        }
-        
-        private T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
-        {
-            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-            {
-                var child = VisualTreeHelper.GetChild(parent, i);
-                if (child is T result)
-                    return result;
-                    
-                var childResult = FindVisualChild<T>(child);
-                if (childResult != null)
-                    return childResult;
-            }
-            return null;
-        }
-        
         private Visual CreateDragVisual()
         {
-            // Create a more sophisticated visual with icon
+            // Create a visual based on SelectionService's selected items
             var panel = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
@@ -381,28 +379,25 @@ namespace ExplorerPro.UI.FileTree.Services
                 Margin = new Thickness(2)
             };
             
-            // Add icon
-            if (_selectionService.SelectedItems.Count > 0)
+            // Add icon from first selected item
+            var firstItem = _selectionService.FirstSelectedItem;
+            if (firstItem?.Icon != null)
             {
-                var firstItem = _selectionService.SelectedItems[0];
-                if (firstItem.Icon != null)
+                var icon = new Image
                 {
-                    var icon = new Image
-                    {
-                        Source = firstItem.Icon,
-                        Width = 16,
-                        Height = 16,
-                        Margin = new Thickness(4, 2, 2, 2)
-                    };
-                    panel.Children.Add(icon);
-                }
+                    Source = firstItem.Icon,
+                    Width = 16,
+                    Height = 16,
+                    Margin = new Thickness(4, 2, 2, 2)
+                };
+                panel.Children.Add(icon);
             }
             
             // Add text
             var textBlock = new TextBlock
             {
                 Text = _selectionService.SelectionCount == 1 
-                    ? Path.GetFileName(_selectionService.SelectedPaths.First())
+                    ? Path.GetFileName(_selectionService.FirstSelectedPath ?? "")
                     : $"{_selectionService.SelectionCount} items",
                 Padding = new Thickness(4, 2, 4, 2),
                 VerticalAlignment = VerticalAlignment.Center
@@ -749,7 +744,7 @@ namespace ExplorerPro.UI.FileTree.Services
                 return false;
             
             // Can't drop on selected items
-            if (_selectionService.SelectedPaths.Contains(target.Path))
+            if (_selectionService.IsItemSelected(target))
                 return false;
             
             // Can't drop parent on child
@@ -776,7 +771,8 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             _isDragging = false;
             _dragStartPoint = null;
-            _dragStartElement = null;
+            _potentialDragItem = null;
+            _isMouseDown = false;
             
             if (_dragAdorner != null && _adornerLayer != null)
             {

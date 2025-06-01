@@ -341,14 +341,15 @@ namespace ExplorerPro.UI.FileTree
             fileTreeView.MouseDoubleClick += FileTreeView_MouseDoubleClick;
             fileTreeView.ContextMenuOpening += FileTreeView_ContextMenuOpening;
             fileTreeView.AddHandler(TreeViewItem.ExpandedEvent, new RoutedEventHandler(TreeViewItem_Expanded));
+            
+            // Mouse events for selection - these happen BEFORE drag/drop service sees them
             fileTreeView.PreviewMouseLeftButtonDown += FileTreeView_PreviewMouseLeftButtonDown;
             fileTreeView.PreviewMouseLeftButtonUp += FileTreeView_PreviewMouseLeftButtonUp;
             fileTreeView.PreviewMouseMove += FileTreeView_PreviewMouseMove;
 
             fileTreeView.AllowDrop = true;
             
-            // Enhanced drag/drop service handles these internally now
-            // We just need to handle keyboard events
+            // Keyboard events
             fileTreeView.PreviewKeyDown += FileTreeView_PreviewKeyDown;
         }
 
@@ -1181,8 +1182,12 @@ namespace ExplorerPro.UI.FileTree
                 if (checkbox == null)
                 {
                     // Handle normal item selection
+                    // This will update the SelectionService, which the drag/drop service monitors
                     _selectionService.HandleSelection(item, Keyboard.Modifiers, _rootItems);
                     UpdateTreeViewSelection();
+                    
+                    // Don't mark as handled - let drag/drop service also see this event
+                    // The drag/drop service will check if the clicked item is selected before starting drag
                 }
                 // If checkbox clicked, let the checkbox handler deal with it
             }
@@ -1197,6 +1202,8 @@ namespace ExplorerPro.UI.FileTree
             }
             
             _isSelectionRectangleMode = false;
+            
+            // Don't mark as handled - let drag/drop service also see this event
         }
 
         private void FileTreeView_PreviewMouseMove(object sender, MouseEventArgs e)
@@ -1225,8 +1232,13 @@ namespace ExplorerPro.UI.FileTree
                         _selectionAdorner.UpdateEndPoint(currentPoint);
                         UpdateSelectionRectangleItems();
                     }
+                    
+                    // Mark as handled to prevent drag/drop when doing selection rectangle
+                    e.Handled = true;
                 }
             }
+            
+            // If not doing selection rectangle, let drag/drop service handle mouse move
         }
 
         private void FileTreeView_PreviewKeyDown(object sender, KeyEventArgs e)

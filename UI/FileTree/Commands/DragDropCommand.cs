@@ -1,4 +1,4 @@
-// UI/FileTree/Commands/DragDropCommand.cs
+// UI/FileTree/Commands/DragDropCommand.cs - Updated for new selection system
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,6 +11,7 @@ namespace ExplorerPro.UI.FileTree.Commands
 {
     /// <summary>
     /// Command for undoable drag and drop operations
+    /// Updated to work with the new selection system
     /// </summary>
     public class DragDropCommand : Command
     {
@@ -74,6 +75,8 @@ namespace ExplorerPro.UI.FileTree.Commands
                             ExecuteLink(op);
                             break;
                     }
+                    
+                    op.Success = true;
                 }
                 catch (Exception ex)
                 {
@@ -84,8 +87,16 @@ namespace ExplorerPro.UI.FileTree.Commands
             
             if (errors.Any())
             {
-                string errorMessage = "Some operations failed:\n" + string.Join("\n", errors);
-                MessageBox.Show(errorMessage, "Drag/Drop Errors", MessageBoxButton.OK, MessageBoxImage.Warning);
+                string errorMessage = errors.Count == 1 
+                    ? $"Failed to {_effect.ToString().ToLower()} file:\n{errors[0]}"
+                    : $"Failed to {_effect.ToString().ToLower()} some files:\n" + string.Join("\n", errors.Take(5));
+                    
+                if (errors.Count > 5)
+                {
+                    errorMessage += $"\n... and {errors.Count - 5} more errors";
+                }
+                
+                MessageBox.Show(errorMessage, "Drag/Drop Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
         
@@ -124,6 +135,13 @@ namespace ExplorerPro.UI.FileTree.Commands
         
         private void ExecuteMove(DragDropOperation op)
         {
+            // Check if source and target are the same
+            if (string.Equals(Path.GetDirectoryName(op.SourcePath), op.TargetDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                // No need to move if already in target directory
+                return;
+            }
+            
             // Check for conflicts
             if (File.Exists(op.TargetPath) || Directory.Exists(op.TargetPath))
             {
@@ -145,8 +163,6 @@ namespace ExplorerPro.UI.FileTree.Commands
             {
                 throw new FileNotFoundException($"Source not found: {op.SourcePath}");
             }
-            
-            op.Success = true;
         }
         
         private void UndoMove(DragDropOperation op)
@@ -184,8 +200,6 @@ namespace ExplorerPro.UI.FileTree.Commands
             {
                 throw new FileNotFoundException($"Source not found: {op.SourcePath}");
             }
-            
-            op.Success = true;
         }
         
         private void UndoCopy(DragDropOperation op)
@@ -217,7 +231,6 @@ namespace ExplorerPro.UI.FileTree.Commands
             
             op.TargetPath = linkPath;
             CreateShortcut(op.SourcePath, linkPath);
-            op.Success = true;
         }
         
         private void UndoLink(DragDropOperation op)
@@ -259,11 +272,21 @@ namespace ExplorerPro.UI.FileTree.Commands
         {
             Directory.CreateDirectory(targetPath);
             
+            // Copy file attributes
+            var sourceInfo = new DirectoryInfo(sourcePath);
+            var targetInfo = new DirectoryInfo(targetPath);
+            targetInfo.Attributes = sourceInfo.Attributes;
+            
             // Copy files
             foreach (string file in Directory.GetFiles(sourcePath))
             {
                 string destFile = Path.Combine(targetPath, Path.GetFileName(file));
                 File.Copy(file, destFile, false);
+                
+                // Copy file attributes
+                File.SetAttributes(destFile, File.GetAttributes(file));
+                File.SetCreationTime(destFile, File.GetCreationTime(file));
+                File.SetLastWriteTime(destFile, File.GetLastWriteTime(file));
             }
             
             // Copy subdirectories
@@ -276,17 +299,33 @@ namespace ExplorerPro.UI.FileTree.Commands
         
         private void CreateShortcut(string targetPath, string shortcutPath)
         {
-            // Use Windows Script Host to create shortcut
-            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
-            dynamic shell = Activator.CreateInstance(shellType);
-            dynamic shortcut = shell.CreateShortcut(shortcutPath);
-            
-            shortcut.TargetPath = targetPath;
-            shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
-            shortcut.Save();
-            
-            System.Runtime.InteropServices.Marshal.ReleaseComObject(shortcut);
-            System.Runtime.InteropServices.Marshal.ReleaseComObject(shell);
+            try
+            {
+                // Use Windows Script Host to create shortcut
+                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (shellType != null)
+                {
+                    dynamic shell = Activator.CreateInstance(shellType);
+                    dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                    
+                    shortcut.TargetPath = targetPath;
+                    shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
+                    shortcut.IconLocation = targetPath;
+                    shortcut.Description = $"Shortcut to {Path.GetFileName(targetPath)}";
+                    shortcut.Save();
+                    
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(shortcut);
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(shell);
+                }
+                else
+                {
+                    throw new InvalidOperationException("Cannot create shortcut - WScript.Shell not available");
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to create shortcut: {ex.Message}", ex);
+            }
         }
         
         #endregion

@@ -1,4 +1,4 @@
-// UI/FileTree/DragDrop/DragAdorner.cs - Fixed with proper offset handling
+// UI/FileTree/DragDrop/DragAdorner.cs - Updated for better visual feedback
 using System;
 using System.Windows;
 using System.Windows.Controls;
@@ -20,6 +20,7 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         private readonly int _itemCount;
         private DragDropEffects _effects;
         private readonly Size _visualSize;
+        private double _opacity = 0.8;
         
         public DragAdorner(UIElement adornedElement, Visual draggedElement, Point offset, int itemCount = 1, DragDropEffects effects = DragDropEffects.None) 
             : base(adornedElement)
@@ -33,6 +34,8 @@ namespace ExplorerPro.UI.FileTree.DragDrop
             if (draggedElement is FrameworkElement fe)
             {
                 _visualSize = new Size(fe.ActualWidth, fe.ActualHeight);
+                if (_visualSize.Width == 0) _visualSize.Width = 100;
+                if (_visualSize.Height == 0) _visualSize.Height = 20;
             }
             else
             {
@@ -58,6 +61,12 @@ namespace ExplorerPro.UI.FileTree.DragDrop
             InvalidateVisual();
         }
         
+        public void UpdateOpacity(double opacity)
+        {
+            _opacity = Math.Max(0.1, Math.Min(1.0, opacity));
+            InvalidateVisual();
+        }
+        
         protected override void OnRender(DrawingContext drawingContext)
         {
             // Calculate position adjusted by offset
@@ -67,10 +76,13 @@ namespace ExplorerPro.UI.FileTree.DragDrop
             var drawingGroup = new DrawingGroup();
             using (var groupContext = drawingGroup.Open())
             {
+                // Draw shadow first
+                DrawShadow(groupContext, point);
+                
                 // Draw the main visual
                 var visualBrush = new VisualBrush(_draggedVisual)
                 {
-                    Opacity = 0.7,
+                    Opacity = 1.0,
                     Stretch = Stretch.None,
                     AlignmentX = AlignmentX.Left,
                     AlignmentY = AlignmentY.Top
@@ -90,41 +102,57 @@ namespace ExplorerPro.UI.FileTree.DragDrop
             }
             
             // Apply opacity to the entire group
-            drawingGroup.Opacity = 0.8;
+            drawingGroup.Opacity = _opacity;
             drawingContext.DrawDrawing(drawingGroup);
+        }
+        
+        private void DrawShadow(DrawingContext context, Point basePoint)
+        {
+            // Draw a soft shadow behind the visual
+            var shadowBrush = new SolidColorBrush(Color.FromArgb(50, 0, 0, 0));
+            var shadowRect = new Rect(
+                basePoint.X + 3,
+                basePoint.Y + 3,
+                _visualSize.Width,
+                _visualSize.Height);
+            
+            context.DrawRoundedRectangle(shadowBrush, null, shadowRect, 2, 2);
         }
         
         private void DrawCountBadge(DrawingContext context, Point basePoint)
         {
-            var badgeSize = 24.0;
+            var badgeSize = 22.0;
             var badgeCenter = new Point(
-                basePoint.X + _visualSize.Width - badgeSize / 2 - 4,
-                basePoint.Y + badgeSize / 2 + 4
+                basePoint.X + _visualSize.Width - badgeSize / 2 - 2,
+                basePoint.Y + badgeSize / 2 + 2
             );
             
             // Badge background with gradient
             var gradientBrush = new RadialGradientBrush(
-                Color.FromRgb(0, 140, 232),
-                Color.FromRgb(0, 100, 192));
+                Color.FromRgb(0, 120, 215),  // Windows 10/11 blue
+                Color.FromRgb(0, 90, 158));
             gradientBrush.Center = new Point(0.3, 0.3);
             gradientBrush.RadiusX = 0.7;
             gradientBrush.RadiusY = 0.7;
             
+            // Draw badge background
             context.DrawEllipse(gradientBrush, null, badgeCenter, badgeSize / 2, badgeSize / 2);
             
             // Badge border
-            var borderPen = new Pen(Brushes.White, 2);
+            var borderPen = new Pen(new SolidColorBrush(Colors.White), 1.5);
             context.DrawEllipse(null, borderPen, badgeCenter, badgeSize / 2, badgeSize / 2);
             
             // Count text
             var formattedText = new FormattedText(
-                _itemCount.ToString(),
+                _itemCount > 99 ? "99+" : _itemCount.ToString(),
                 System.Globalization.CultureInfo.InvariantCulture,
                 FlowDirection.LeftToRight,
                 new Typeface("Segoe UI"),
-                12,
+                11,
                 Brushes.White,
                 96);
+            
+            formattedText.SetFontWeight(FontWeights.SemiBold);
             
             var textPoint = new Point(
                 badgeCenter.X - formattedText.Width / 2,
@@ -141,55 +169,52 @@ namespace ExplorerPro.UI.FileTree.DragDrop
             
             Geometry icon = null;
             Brush iconBrush = Brushes.White;
+            Brush backgroundBrush = Brushes.White;
             
             switch (_effects)
             {
                 case DragDropEffects.Copy:
                     // Plus sign for copy
                     icon = CreatePlusIcon(iconPoint, iconSize);
-                    iconBrush = new SolidColorBrush(Color.FromRgb(0, 150, 0));
+                    iconBrush = Brushes.White;
+                    backgroundBrush = new SolidColorBrush(Color.FromRgb(0, 150, 0));
                     break;
                     
                 case DragDropEffects.Move:
                     // Arrow for move
                     icon = CreateArrowIcon(iconPoint, iconSize);
-                    iconBrush = new SolidColorBrush(Color.FromRgb(0, 120, 212));
+                    iconBrush = Brushes.White;
+                    backgroundBrush = new SolidColorBrush(Color.FromRgb(0, 120, 212));
                     break;
                     
                 case DragDropEffects.Link:
                     // Link chain icon
                     icon = CreateLinkIcon(iconPoint, iconSize);
-                    iconBrush = new SolidColorBrush(Color.FromRgb(150, 150, 0));
+                    iconBrush = Brushes.White;
+                    backgroundBrush = new SolidColorBrush(Color.FromRgb(128, 128, 0));
                     break;
                     
                 case DragDropEffects.None:
                     // No drop icon
                     icon = CreateNoDropIcon(iconPoint, iconSize);
-                    iconBrush = new SolidColorBrush(Color.FromRgb(200, 0, 0));
+                    iconBrush = Brushes.White;
+                    backgroundBrush = new SolidColorBrush(Color.FromRgb(200, 0, 0));
                     break;
             }
             
             if (icon != null)
             {
-                // Background circle with shadow effect
-                var shadowBrush = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
-                context.DrawEllipse(
-                    shadowBrush,
-                    null,
-                    new Point(iconPoint.X + iconSize / 2 + 1, iconPoint.Y + iconSize / 2 + 1),
-                    iconSize / 2 + 3,
-                    iconSize / 2 + 3);
-                
                 // Background circle
+                var bgCenter = new Point(iconPoint.X + iconSize / 2, iconPoint.Y + iconSize / 2);
                 context.DrawEllipse(
-                    new SolidColorBrush(Color.FromArgb(240, 255, 255, 255)),
-                    new Pen(iconBrush, 1),
-                    new Point(iconPoint.X + iconSize / 2, iconPoint.Y + iconSize / 2),
+                    backgroundBrush,
+                    null,
+                    bgCenter,
                     iconSize / 2 + 2,
                     iconSize / 2 + 2);
                 
                 // Icon
-                context.DrawGeometry(iconBrush, new Pen(iconBrush, 1), icon);
+                context.DrawGeometry(iconBrush, null, icon);
             }
         }
         
@@ -199,11 +224,11 @@ namespace ExplorerPro.UI.FileTree.DragDrop
             
             // Horizontal line
             group.Children.Add(new RectangleGeometry(
-                new Rect(origin.X + size * 0.15, origin.Y + size * 0.425, size * 0.7, size * 0.15)));
+                new Rect(origin.X + size * 0.2, origin.Y + size * 0.425, size * 0.6, size * 0.15)));
             
             // Vertical line
             group.Children.Add(new RectangleGeometry(
-                new Rect(origin.X + size * 0.425, origin.Y + size * 0.15, size * 0.15, size * 0.7)));
+                new Rect(origin.X + size * 0.425, origin.Y + size * 0.2, size * 0.15, size * 0.6)));
             
             return group;
         }
@@ -217,53 +242,58 @@ namespace ExplorerPro.UI.FileTree.DragDrop
                 IsFilled = false
             };
             
-            figure.Segments.Add(new LineSegment(new Point(origin.X + size * 0.7, origin.Y + size * 0.5), true));
-            figure.Segments.Add(new LineSegment(new Point(origin.X + size * 0.5, origin.Y + size * 0.3), true));
-            figure.Segments.Add(new LineSegment(new Point(origin.X + size * 0.7, origin.Y + size * 0.5), true));
-            figure.Segments.Add(new LineSegment(new Point(origin.X + size * 0.5, origin.Y + size * 0.7), true));
+            figure.Segments.Add(new LineSegment(new Point(origin.X + size * 0.65, origin.Y + size * 0.5), true));
+            figure.Segments.Add(new LineSegment(new Point(origin.X + size * 0.45, origin.Y + size * 0.3), true));
+            figure.Segments.Add(new LineSegment(new Point(origin.X + size * 0.65, origin.Y + size * 0.5), true));
+            figure.Segments.Add(new LineSegment(new Point(origin.X + size * 0.45, origin.Y + size * 0.7), true));
             
             var path = new PathGeometry(new[] { figure });
             path.Transform = new TranslateTransform(0, 0);
-            return path;
+            
+            // Create a pen with thicker stroke
+            var pen = new Pen(Brushes.White, 2);
+            pen.StartLineCap = PenLineCap.Round;
+            pen.EndLineCap = PenLineCap.Round;
+            
+            return path.GetWidenedPathGeometry(pen);
         }
         
         private Geometry CreateLinkIcon(Point origin, double size)
         {
             var group = new GeometryGroup();
             
-            // Create chain link shape
-            var link1 = new PathFigure
+            // Create chain link shape - simplified version
+            var path = new PathGeometry();
+            var figure = new PathFigure
             {
-                StartPoint = new Point(origin.X + size * 0.35, origin.Y + size * 0.35)
+                StartPoint = new Point(origin.X + size * 0.3, origin.Y + size * 0.5)
             };
-            link1.Segments.Add(new ArcSegment(
-                new Point(origin.X + size * 0.35, origin.Y + size * 0.65),
-                new Size(size * 0.15, size * 0.15), 0, true, SweepDirection.Clockwise, true));
-            link1.Segments.Add(new LineSegment(new Point(origin.X + size * 0.5, origin.Y + size * 0.65), true));
-            link1.Segments.Add(new ArcSegment(
-                new Point(origin.X + size * 0.5, origin.Y + size * 0.35),
-                new Size(size * 0.15, size * 0.15), 0, true, SweepDirection.Clockwise, true));
-            link1.IsClosed = true;
             
-            var link2 = new PathFigure
-            {
-                StartPoint = new Point(origin.X + size * 0.5, origin.Y + size * 0.35)
-            };
-            link2.Segments.Add(new ArcSegment(
-                new Point(origin.X + size * 0.5, origin.Y + size * 0.65),
-                new Size(size * 0.15, size * 0.15), 0, true, SweepDirection.Clockwise, true));
-            link2.Segments.Add(new LineSegment(new Point(origin.X + size * 0.65, origin.Y + size * 0.65), true));
-            link2.Segments.Add(new ArcSegment(
-                new Point(origin.X + size * 0.65, origin.Y + size * 0.35),
-                new Size(size * 0.15, size * 0.15), 0, true, SweepDirection.Clockwise, true));
-            link2.IsClosed = true;
+            // Left link
+            figure.Segments.Add(new ArcSegment(
+                new Point(origin.X + size * 0.3, origin.Y + size * 0.5),
+                new Size(size * 0.2, size * 0.3), 
+                0, true, 
+                SweepDirection.Clockwise, 
+                true));
             
-            var pathGeo = new PathGeometry();
-            pathGeo.Figures.Add(link1);
-            pathGeo.Figures.Add(link2);
+            // Connection
+            figure.Segments.Add(new LineSegment(
+                new Point(origin.X + size * 0.7, origin.Y + size * 0.5), 
+                true));
             
-            group.Children.Add(pathGeo);
-            return group;
+            // Right link
+            figure.Segments.Add(new ArcSegment(
+                new Point(origin.X + size * 0.7, origin.Y + size * 0.5),
+                new Size(size * 0.2, size * 0.3), 
+                0, true, 
+                SweepDirection.Clockwise, 
+                true));
+            
+            path.Figures.Add(figure);
+            
+            var pen = new Pen(Brushes.White, 2);
+            return path.GetWidenedPathGeometry(pen);
         }
         
         private Geometry CreateNoDropIcon(Point origin, double size)
@@ -271,28 +301,32 @@ namespace ExplorerPro.UI.FileTree.DragDrop
             var group = new GeometryGroup();
             
             // Circle
-            group.Children.Add(new EllipseGeometry(
+            var circle = new EllipseGeometry(
                 new Point(origin.X + size / 2, origin.Y + size / 2),
-                size * 0.4, size * 0.4));
+                size * 0.4, size * 0.4);
+            
+            var pen = new Pen(Brushes.White, 2);
+            group.Children.Add(circle.GetWidenedPathGeometry(pen));
             
             // Diagonal line
             var line = new LineGeometry(
                 new Point(origin.X + size * 0.25, origin.Y + size * 0.25),
                 new Point(origin.X + size * 0.75, origin.Y + size * 0.75));
             
-            group.Children.Add(line);
+            group.Children.Add(line.GetWidenedPathGeometry(pen));
             
             return group;
         }
         
         protected override Size MeasureOverride(Size constraint)
         {
-            return _visualSize;
+            // Return a size that includes the visual plus any badges/indicators
+            return new Size(_visualSize.Width + 30, _visualSize.Height + 30);
         }
         
         protected override Size ArrangeOverride(Size finalSize)
         {
-            return _visualSize;
+            return finalSize;
         }
         
         protected override Visual GetVisualChild(int index)

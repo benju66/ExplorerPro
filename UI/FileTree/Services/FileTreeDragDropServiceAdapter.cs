@@ -1,4 +1,4 @@
-// UI/FileTree/Services/FileTreeDragDropServiceAdapter.cs - Fixed version
+// UI/FileTree/Services/FileTreeDragDropServiceAdapter.cs - Updated for new selection system
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,6 +9,7 @@ namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
     /// Adapter to bridge between IFileTreeDragDropService interface and the enhanced FileTreeDragDropService
+    /// Updated to work with the new selection system
     /// </summary>
     public class FileTreeDragDropServiceAdapter : IFileTreeDragDropService
     {
@@ -52,6 +53,8 @@ namespace ExplorerPro.UI.FileTree.Services
         
         public void StartDrag(DependencyObject source, IEnumerable<string> selectedPaths)
         {
+            // The enhanced service now uses SelectionService internally
+            // Just trigger the drag operation
             _enhancedService.StartDrag(source, selectedPaths);
         }
         
@@ -86,6 +89,22 @@ namespace ExplorerPro.UI.FileTree.Services
         public void SetGetItemFromPointFunction(Func<Point, FileTreeItem> getItemFromPoint)
         {
             _enhancedService.SetGetItemFromPointFunction(getItemFromPoint);
+        }
+        
+        /// <summary>
+        /// Attaches the service to a control with the proper function
+        /// </summary>
+        public void AttachToControl(System.Windows.Controls.Control control, Func<Point, FileTreeItem> getItemFromPoint)
+        {
+            _enhancedService.AttachToControl(control, getItemFromPoint);
+        }
+        
+        /// <summary>
+        /// Detaches the service from the control
+        /// </summary>
+        public void DetachFromControl()
+        {
+            _enhancedService.DetachFromControl();
         }
     }
 }
