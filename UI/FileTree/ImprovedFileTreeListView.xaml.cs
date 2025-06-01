@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Updated with single source of truth for selection
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Fixed with proper selection synchronization
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -26,7 +26,7 @@ using Path = System.IO.Path;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedFileTreeListView.xaml with single source of truth for selection
+    /// Interaction logic for ImprovedFileTreeListView.xaml with fixed selection synchronization
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -151,6 +151,9 @@ namespace ExplorerPro.UI.FileTree
         
         // Track whether we're processing selection changes
         private bool _isProcessingSelection = false;
+        
+        // Track if we're in the middle of a visual update
+        private bool _isUpdatingVisualSelection = false;
         
         #endregion
 
@@ -1047,7 +1050,7 @@ namespace ExplorerPro.UI.FileTree
         private void FileTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             // Don't process if we're already handling selection changes
-            if (_isProcessingSelection)
+            if (_isProcessingSelection || _isUpdatingVisualSelection)
                 return;
                 
             // Don't process selection changes during double-click
@@ -1060,8 +1063,14 @@ namespace ExplorerPro.UI.FileTree
                 // Get the newly selected item
                 if (e.NewValue is FileTreeItem item)
                 {
-                    // Update selection service - single selection mode
-                    _selectionService.SelectSingle(item);
+                    // Only update selection if it's not already in sync
+                    if (!_selectionService.StickyMultiSelectMode && 
+                        _selectionService.SelectionCount <= 1 &&
+                        _selectionService.FirstSelectedItem != item)
+                    {
+                        // Single selection mode - update selection service
+                        _selectionService.SelectSingle(item);
+                    }
                     
                     // Add a small delay to distinguish between single and double clicks
                     Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
@@ -1241,51 +1250,128 @@ namespace ExplorerPro.UI.FileTree
             if (fileTreeView.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
             {
                 TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
+                
+                // Also ensure visual selection is updated
+                if (!_isUpdatingVisualSelection)
+                {
+                    UpdateTreeViewSelection();
+                }
             }
         }
         
         #endregion
 
-        #region Selection Synchronization
+        #region Selection Synchronization - FIXED
 
         /// <summary>
         /// Updates TreeViewItem selection to match SelectionService state
-        /// Note: This only manages TreeView visual selection, NOT FileTreeItem.IsSelected
+        /// FIXED: Now properly highlights ALL selected items, not just the first
         /// </summary>
         private void UpdateTreeViewSelection()
         {
+            if (_isUpdatingVisualSelection) return;
+            
+            _isUpdatingVisualSelection = true;
             _isProcessingSelection = true;
+            
             try
             {
-                // Clear all TreeViewItem selections (visual state only)
-                foreach (var tvi in GetAllTreeViewItems())
+                // Use dispatcher to ensure UI thread updates
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                 {
-                    tvi.IsSelected = false;
-                }
-                
-                // Select the first item in SelectionService if any
-                if (_selectionService.FirstSelectedItem != null)
-                {
-                    var treeViewItem = FindTreeViewItemForData(fileTreeView, _selectionService.FirstSelectedItem);
-                    if (treeViewItem != null)
+                    try
                     {
-                        treeViewItem.IsSelected = true;
-                        treeViewItem.BringIntoView();
+                        // First pass: Clear all TreeViewItem selections
+                        foreach (var tvi in GetAllTreeViewItems())
+                        {
+                            if (tvi.IsSelected)
+                            {
+                                tvi.IsSelected = false;
+                            }
+                        }
+                        
+                        // Second pass: Set IsSelected for all items in SelectionService
+                        // In multi-select mode, we rely on the DataTrigger in the style to show selection
+                        // based on FileTreeItem.IsSelected property
+                        
+                        // For single selection mode or when we need TreeViewItem.IsSelected
+                        if (!_selectionService.IsMultiSelectMode && _selectionService.FirstSelectedItem != null)
+                        {
+                            var treeViewItem = FindTreeViewItemForData(fileTreeView, _selectionService.FirstSelectedItem);
+                            if (treeViewItem != null)
+                            {
+                                treeViewItem.IsSelected = true;
+                                treeViewItem.BringIntoView();
+                            }
+                        }
+                        else if (_selectionService.HasSelection)
+                        {
+                            // In multi-select mode, still set the first item as selected for keyboard navigation
+                            var firstItem = _selectionService.FirstSelectedItem;
+                            if (firstItem != null)
+                            {
+                                var treeViewItem = FindTreeViewItemForData(fileTreeView, firstItem);
+                                if (treeViewItem != null)
+                                {
+                                    treeViewItem.IsSelected = true;
+                                    treeViewItem.BringIntoView();
+                                }
+                            }
+                        }
+                        
+                        // Force visual update
+                        fileTreeView.UpdateLayout();
                     }
-                }
+                    finally
+                    {
+                        _isUpdatingVisualSelection = false;
+                        _isProcessingSelection = false;
+                    }
+                }));
             }
-            finally
+            catch
             {
+                _isUpdatingVisualSelection = false;
                 _isProcessingSelection = false;
             }
         }
 
         /// <summary>
-        /// Gets all TreeViewItems in the tree
+        /// Gets all TreeViewItems in the tree - improved version
         /// </summary>
         private IEnumerable<TreeViewItem> GetAllTreeViewItems()
         {
-            return FindVisualChildren<TreeViewItem>(fileTreeView);
+            return GetExpandedTreeViewItems(fileTreeView);
+        }
+        
+        /// <summary>
+        /// Gets all expanded TreeViewItems recursively
+        /// </summary>
+        private IEnumerable<TreeViewItem> GetExpandedTreeViewItems(ItemsControl parent)
+        {
+            if (parent == null) yield break;
+            
+            // Ensure containers are generated
+            parent.UpdateLayout();
+            parent.ItemContainerGenerator.GenerateNext();
+            
+            for (int i = 0; i < parent.Items.Count; i++)
+            {
+                var container = parent.ItemContainerGenerator.ContainerFromIndex(i) as TreeViewItem;
+                if (container != null)
+                {
+                    yield return container;
+                    
+                    // Only recurse if expanded
+                    if (container.IsExpanded)
+                    {
+                        foreach (var child in GetExpandedTreeViewItems(container))
+                        {
+                            yield return child;
+                        }
+                    }
+                }
+            }
         }
 
         #endregion
@@ -1461,7 +1547,7 @@ namespace ExplorerPro.UI.FileTree
             }
             
             // Update TreeView selection if needed
-            if (!_isProcessingSelection)
+            if (!_isProcessingSelection && !_isUpdatingVisualSelection)
             {
                 UpdateTreeViewSelection();
             }
@@ -2005,6 +2091,10 @@ namespace ExplorerPro.UI.FileTree
         {
             if (container == null || item == null)
                 return null;
+                
+            // Ensure containers are generated
+            container.UpdateLayout();
+            container.ItemContainerGenerator.GenerateNext();
                 
             if (container.ItemContainerGenerator.ContainerFromItem(item) is TreeViewItem tvi)
                 return tvi;

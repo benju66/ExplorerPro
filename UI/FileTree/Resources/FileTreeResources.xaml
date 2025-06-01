@@ -287,7 +287,6 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Padding" Value="1,0,0,0"/>
-        <!-- Removed IsSelected binding to prevent dual state issues -->
         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -345,7 +344,14 @@
                             <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed"/>
                         </Trigger>
                         
-                        <!-- Selected State -->
+                        <!-- IMPORTANT: Selection based on data model IsSelected for multi-selection -->
+                        <DataTrigger Binding="{Binding IsSelected}" Value="true">
+                            <Setter TargetName="SelectionBorder" Property="Background" Value="{DynamicResource MultiSelectionBackgroundColor}"/>
+                            <Setter TargetName="SelectionBorder" Property="BorderBrush" Value="{DynamicResource SelectionBorderColor}"/>
+                            <Setter TargetName="SelectionBorder" Property="BorderThickness" Value="1"/>
+                        </DataTrigger>
+                        
+                        <!-- TreeViewItem.IsSelected State (for single selection) -->
                         <Trigger Property="IsSelected" Value="true">
                             <Setter TargetName="SelectionBorder" Property="Background" Value="{DynamicResource SelectionBackgroundColor}"/>
                             <Setter TargetName="SelectionBorder" Property="BorderBrush" Value="{DynamicResource SelectionBorderColor}"/>

@@ -163,7 +163,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             
-                            <!-- Multi-selection checkbox - OneWay binding to prevent conflicts -->
+                            <!-- Multi-selection checkbox - Use OneWay binding with proper event handling -->
                             <CheckBox Grid.Column="0" 
                                       x:Name="ItemCheckBox"
                                       Margin="4,0,4,0"
@@ -281,6 +281,17 @@
                                       Foreground="{Binding Foreground}"
                                       FontWeight="{Binding FontWeight}"/>
                         </Grid>
+                        
+                        <!-- Triggers for visual feedback when selection changes -->
+                        <HierarchicalDataTemplate.Triggers>
+                            <!-- Ensure checkbox state updates when IsSelected changes -->
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter TargetName="ItemCheckBox" Property="IsChecked" Value="True"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="False">
+                                <Setter TargetName="ItemCheckBox" Property="IsChecked" Value="False"/>
+                            </DataTrigger>
+                        </HierarchicalDataTemplate.Triggers>
                     </HierarchicalDataTemplate>
                 </TreeView.ItemTemplate>
             </TreeView>
