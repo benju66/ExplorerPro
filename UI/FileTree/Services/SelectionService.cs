@@ -349,13 +349,21 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             foreach (var item in _selectedItems)
             {
-                item.IsSelected = false;
+                item.SetSelectionState(false);
             }
             
             _selectedItems.Clear();
             _selectedPaths.Clear();
             AreAllItemsSelected = false;
             OnPropertyChanged(nameof(AreAllItemsSelected));
+        }
+        
+        /// <summary>
+        /// Checks if an item is selected
+        /// </summary>
+        public bool IsItemSelected(FileTreeItem item)
+        {
+            return item != null && _selectedPaths.Contains(item.Path);
         }
         
         /// <summary>
@@ -559,26 +567,28 @@ namespace ExplorerPro.UI.FileTree.Services
         
         /// <summary>
         /// Adds an item to the selection.
-        /// This is the only method that should set IsSelected to true.
+        /// This is the only method that should set selection state.
+        /// Uses the internal SetSelectionState method to maintain encapsulation.
         /// </summary>
         private void AddToSelection(FileTreeItem item)
         {
             if (item == null || _selectedPaths.Contains(item.Path)) return;
             
-            item.IsSelected = true;
+            item.SetSelectionState(true);
             _selectedItems.Add(item);
             _selectedPaths.Add(item.Path);
         }
         
         /// <summary>
         /// Removes an item from the selection.
-        /// This is the only method that should set IsSelected to false.
+        /// This is the only method that should clear selection state.
+        /// Uses the internal SetSelectionState method to maintain encapsulation.
         /// </summary>
         private void RemoveFromSelection(FileTreeItem item)
         {
             if (item == null || !_selectedPaths.Contains(item.Path)) return;
             
-            item.IsSelected = false;
+            item.SetSelectionState(false);
             _selectedItems.Remove(item);
             _selectedPaths.Remove(item.Path);
         }

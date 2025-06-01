@@ -189,14 +189,14 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Gets or sets whether this item is selected.
-        /// This single property is used for both regular and multi-select modes.
-        /// Only SelectionService should modify this property.
+        /// Gets whether this item is selected.
+        /// This property can only be set by SelectionService through SetSelectionState method.
+        /// This ensures SelectionService remains the single source of truth for selection.
         /// </summary>
         public bool IsSelected
         {
             get => _isSelected;
-            set
+            private set
             {
                 if (_isSelected != value)
                 {
@@ -212,11 +212,7 @@ namespace ExplorerPro.UI.FileTree
         /// Gets whether this item is selected in multi-select mode.
         /// This is now just an alias for IsSelected for binding compatibility.
         /// </summary>
-        public bool IsSelectedInMulti
-        {
-            get => _isSelected;
-            set => IsSelected = value;
-        }
+        public bool IsSelectedInMulti => _isSelected;
 
         /// <summary>
         /// Gets or sets the text color
@@ -384,6 +380,20 @@ namespace ExplorerPro.UI.FileTree
             }
 
             return item;
+        }
+
+        #endregion
+
+        #region Selection Management
+
+        /// <summary>
+        /// Sets the selection state of this item.
+        /// This method should only be called by SelectionService to maintain single source of truth.
+        /// </summary>
+        /// <param name="selected">The new selection state</param>
+        internal void SetSelectionState(bool selected)
+        {
+            IsSelected = selected;
         }
 
         #endregion

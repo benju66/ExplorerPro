@@ -1250,13 +1250,14 @@ namespace ExplorerPro.UI.FileTree
 
         /// <summary>
         /// Updates TreeViewItem selection to match SelectionService state
+        /// Note: This only manages TreeView visual selection, NOT FileTreeItem.IsSelected
         /// </summary>
         private void UpdateTreeViewSelection()
         {
             _isProcessingSelection = true;
             try
             {
-                // Clear all TreeViewItem selections
+                // Clear all TreeViewItem selections (visual state only)
                 foreach (var tvi in GetAllTreeViewItems())
                 {
                     tvi.IsSelected = false;
