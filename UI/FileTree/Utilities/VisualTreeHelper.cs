@@ -241,8 +241,18 @@ namespace ExplorerPro.UI.FileTree.Utilities
             
             if (element is ItemsControl itemsControl)
             {
+                // Force update layout to ensure containers are generated
                 itemsControl.UpdateLayout();
-                itemsControl.ItemContainerGenerator.GenerateNext();
+                
+                // If containers still aren't generated, we can request generation
+                // by accessing the ItemContainerGenerator status
+                if (itemsControl.ItemContainerGenerator.Status != GeneratorStatus.ContainersGenerated)
+                {
+                    // Force a measure/arrange pass which will trigger container generation
+                    itemsControl.InvalidateMeasure();
+                    itemsControl.InvalidateArrange();
+                    itemsControl.UpdateLayout();
+                }
             }
         }
     }
