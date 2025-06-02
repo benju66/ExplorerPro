@@ -13,6 +13,7 @@ namespace ExplorerPro.UI.FileTree.Services
     /// <summary>
     /// Manages multi-selection state for the file tree with UI mode support.
     /// This is the single source of truth for all selection state.
+    /// Implements proper memory management to prevent leaks.
     /// </summary>
     public class SelectionService : IDisposable, INotifyPropertyChanged
     {
@@ -32,6 +33,9 @@ namespace ExplorerPro.UI.FileTree.Services
         
         // Pattern selection
         private string _lastPattern;
+        
+        // Disposal flag
+        private bool _disposed;
         
         #endregion
         
@@ -162,6 +166,9 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public void HandleSelection(FileTreeItem item, ModifierKeys modifiers, IEnumerable<FileTreeItem> allItems)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(SelectionService));
+                
             if (item == null) return;
             
             _isSelecting = true;
@@ -226,6 +233,9 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public void HandleCheckboxSelection(FileTreeItem item)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(SelectionService));
+                
             if (item == null) return;
             
             _isSelecting = true;
@@ -268,6 +278,9 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public void SelectSingle(FileTreeItem item)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(SelectionService));
+                
             if (item == null) return;
             
             ClearSelection();
@@ -280,6 +293,9 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public void ToggleSelection(FileTreeItem item)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(SelectionService));
+                
             if (item == null) return;
             
             if (_selectedPaths.Contains(item.Path))
@@ -297,6 +313,9 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public void SelectRange(FileTreeItem from, FileTreeItem to, IEnumerable<FileTreeItem> allItems)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(SelectionService));
+                
             if (from == null || to == null || allItems == null) return;
             
             var flatList = GetFlattenedTree(allItems);
@@ -321,6 +340,9 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public void SelectAll(IEnumerable<FileTreeItem> allItems)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(SelectionService));
+                
             if (allItems == null) return;
             
             ClearSelection();
@@ -347,6 +369,8 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public void ClearSelection()
         {
+            if (_disposed) return;
+            
             foreach (var item in _selectedItems)
             {
                 item.SetSelectionState(false);
@@ -363,6 +387,7 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public bool IsItemSelected(FileTreeItem item)
         {
+            if (_disposed) return false;
             return item != null && _selectedPaths.Contains(item.Path);
         }
         
@@ -371,6 +396,9 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public bool HandleKeyboardShortcut(Key key, ModifierKeys modifiers, IEnumerable<FileTreeItem> allItems)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(SelectionService));
+                
             if (key == Key.A && modifiers == ModifierKeys.Control)
             {
                 // Ctrl+A - Select all
@@ -468,6 +496,9 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public void SelectByPattern(string pattern, IEnumerable<FileTreeItem> allItems, bool addToSelection = false)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(SelectionService));
+                
             if (string.IsNullOrEmpty(pattern) || allItems == null) return;
             
             _lastPattern = pattern;
@@ -507,6 +538,9 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public void InvertSelection(IEnumerable<FileTreeItem> allItems)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(SelectionService));
+                
             if (allItems == null) return;
             
             var currentlySelected = _selectedPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -529,6 +563,9 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public void SelectChildrenOfSelectedFolders(IEnumerable<FileTreeItem> allItems)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(SelectionService));
+                
             var foldersToProcess = _selectedItems.Where(i => i.IsDirectory).ToList();
             
             foreach (var folder in foldersToProcess)
@@ -544,7 +581,7 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public void RestoreSelection(IEnumerable<FileTreeItem> allItems)
         {
-            if (!_selectedPaths.Any()) return;
+            if (_disposed || !_selectedPaths.Any()) return;
             
             var pathsToRestore = _selectedPaths.ToList();
             ClearSelection();
@@ -680,17 +717,20 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         private void OnSelectionChanged()
         {
-            SelectionChanged?.Invoke(this, new FileTreeSelectionChangedEventArgs(
-                _selectedItems.ToList(),
-                _selectedPaths.ToList()
-            ));
-            
-            // Notify property changes for data binding
-            OnPropertyChanged(nameof(HasSelection));
-            OnPropertyChanged(nameof(HasMultipleSelection));
-            OnPropertyChanged(nameof(SelectionCount));
-            OnPropertyChanged(nameof(FirstSelectedItem));
-            OnPropertyChanged(nameof(FirstSelectedPath));
+            if (!_disposed)
+            {
+                SelectionChanged?.Invoke(this, new FileTreeSelectionChangedEventArgs(
+                    _selectedItems.ToList(),
+                    _selectedPaths.ToList()
+                ));
+                
+                // Notify property changes for data binding
+                OnPropertyChanged(nameof(HasSelection));
+                OnPropertyChanged(nameof(HasMultipleSelection));
+                OnPropertyChanged(nameof(SelectionCount));
+                OnPropertyChanged(nameof(FirstSelectedItem));
+                OnPropertyChanged(nameof(FirstSelectedPath));
+            }
         }
         
         /// <summary>
@@ -698,7 +738,10 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            if (!_disposed)
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            }
         }
         
         #endregion
@@ -707,10 +750,41 @@ namespace ExplorerPro.UI.FileTree.Services
         
         public void Dispose()
         {
-            ClearSelection();
-            _selectedItems.Clear();
-            _selectedPaths.Clear();
-            _flatTreeCache.Clear();
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    // Clear selection first
+                    ClearSelection();
+                    
+                    // Clear all collections
+                    _selectedItems?.Clear();
+                    _selectedPaths?.Clear();
+                    _flatTreeCache?.Clear();
+                    
+                    // Null out references
+                    _lastSelectedItem = null;
+                    _anchorItem = null;
+                    _lastPattern = null;
+                    
+                    // Clear event handlers to prevent memory leaks
+                    SelectionChanged = null;
+                    PropertyChanged = null;
+                }
+                
+                _disposed = true;
+            }
+        }
+        
+        ~SelectionService()
+        {
+            Dispose(false);
         }
         
         #endregion

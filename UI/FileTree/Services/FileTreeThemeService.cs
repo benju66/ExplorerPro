@@ -15,6 +15,7 @@ namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
     /// Service responsible for managing theme-related functionality for the file tree view
+    /// with proper memory leak prevention
     /// </summary>
     public class FileTreeThemeService : IDisposable
     {
@@ -24,7 +25,12 @@ namespace ExplorerPro.UI.FileTree.Services
         private readonly Grid _mainGrid;
         private readonly Dictionary<UIElement, MouseEventHandler> _mouseEnterHandlers;
         private readonly Dictionary<UIElement, MouseEventHandler> _mouseLeaveHandlers;
+        private readonly List<WeakReference> _themedElements;
         private bool _disposed;
+
+        // Event handler delegates stored to ensure proper unsubscription
+        private EventHandler<AppTheme> _themeChangedHandler;
+        private EventHandler<AppTheme> _themeRefreshedHandler;
 
         #endregion
 
@@ -41,10 +47,15 @@ namespace ExplorerPro.UI.FileTree.Services
             _mainGrid = mainGrid;
             _mouseEnterHandlers = new Dictionary<UIElement, MouseEventHandler>();
             _mouseLeaveHandlers = new Dictionary<UIElement, MouseEventHandler>();
+            _themedElements = new List<WeakReference>();
+
+            // Create and store event handlers
+            _themeChangedHandler = OnThemeChanged;
+            _themeRefreshedHandler = OnThemeRefreshed;
 
             // Subscribe to theme change events
-            ThemeManager.Instance.ThemeChanged += OnThemeChanged;
-            ThemeManager.Instance.ThemeRefreshed += OnThemeRefreshed;
+            ThemeManager.Instance.ThemeChanged += _themeChangedHandler;
+            ThemeManager.Instance.ThemeRefreshed += _themeRefreshedHandler;
         }
 
         #endregion
@@ -56,6 +67,9 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public void RefreshThemeElements()
         {
+            if (_disposed)
+                return;
+
             try
             {
                 bool isDarkMode = ThemeManager.Instance.IsDarkMode;
@@ -80,6 +94,9 @@ namespace ExplorerPro.UI.FileTree.Services
                 // Refresh dynamic resources in DataTemplates
                 RefreshDataTemplateResources();
                 
+                // Clean up dead weak references
+                CleanupDeadReferences();
+                
                 Console.WriteLine("FileTree theme elements refreshed successfully");
             }
             catch (Exception ex)
@@ -95,13 +112,16 @@ namespace ExplorerPro.UI.FileTree.Services
         /// <param name="treeViewItem">The TreeViewItem to theme</param>
         public void ApplyThemeToTreeViewItem(TreeViewItem treeViewItem)
         {
-            if (treeViewItem == null) return;
+            if (_disposed || treeViewItem == null) return;
 
             var textColor = GetResource<SolidColorBrush>("TextColor");
             var treeLine = GetResource<SolidColorBrush>("TreeLineColor");
 
             // Apply theme to the TreeViewItem
             treeViewItem.Foreground = textColor;
+            
+            // Track the themed element with weak reference
+            _themedElements.Add(new WeakReference(treeViewItem));
             
             // Find and update all TextBlocks within the item
             foreach (var textBlock in VisualTreeHelperEx.FindVisualChildren<TextBlock>(treeViewItem))
@@ -144,10 +164,16 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public void ForceThemeRefresh()
         {
+            if (_disposed)
+                return;
+
             // Schedule the refresh on the dispatcher with lower priority
-            _treeView.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            _treeView?.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
             {
-                RefreshThemeElements();
+                if (!_disposed)
+                {
+                    RefreshThemeElements();
+                }
             }));
         }
 
@@ -160,6 +186,9 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         private void RefreshTreeViewItems()
         {
+            if (_disposed || _treeView == null)
+                return;
+
             try
             {
                 // Get theme colors for tree lines and text
@@ -184,15 +213,11 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         private void SetupTreeLineMouseHandlers(UIElement parent)
         {
+            if (_disposed || parent == null)
+                return;
+
             // Remove existing handlers if any
-            if (_mouseEnterHandlers.TryGetValue(parent, out var existingEnterHandler))
-            {
-                parent.MouseEnter -= existingEnterHandler;
-            }
-            if (_mouseLeaveHandlers.TryGetValue(parent, out var existingLeaveHandler))
-            {
-                parent.MouseLeave -= existingLeaveHandler;
-            }
+            RemoveMouseHandlers(parent);
 
             // Create new handlers
             MouseEventHandler enterHandler = (s, e) => TreeLine_MouseEnter(s, e);
@@ -207,10 +232,33 @@ namespace ExplorerPro.UI.FileTree.Services
         }
 
         /// <summary>
+        /// Removes mouse event handlers from an element
+        /// </summary>
+        private void RemoveMouseHandlers(UIElement element)
+        {
+            if (element == null) return;
+
+            if (_mouseEnterHandlers.TryGetValue(element, out var enterHandler))
+            {
+                element.MouseEnter -= enterHandler;
+                _mouseEnterHandlers.Remove(element);
+            }
+            
+            if (_mouseLeaveHandlers.TryGetValue(element, out var leaveHandler))
+            {
+                element.MouseLeave -= leaveHandler;
+                _mouseLeaveHandlers.Remove(element);
+            }
+        }
+
+        /// <summary>
         /// Refreshes a TreeView toggle button (expander) with theme-appropriate styling
         /// </summary>
         private void RefreshTreeViewToggleButton(ToggleButton toggle)
         {
+            if (_disposed || toggle == null)
+                return;
+
             try
             {
                 // Set background to transparent to let hover effect work
@@ -224,14 +272,7 @@ namespace ExplorerPro.UI.FileTree.Services
                     pathElement.Fill = GetResource<SolidColorBrush>("TextColor");
                     
                     // Remove existing handlers
-                    if (_mouseEnterHandlers.TryGetValue(toggle, out var existingEnterHandler))
-                    {
-                        toggle.MouseEnter -= existingEnterHandler;
-                    }
-                    if (_mouseLeaveHandlers.TryGetValue(toggle, out var existingLeaveHandler))
-                    {
-                        toggle.MouseLeave -= existingLeaveHandler;
-                    }
+                    RemoveMouseHandlers(toggle);
 
                     // Create new handlers
                     MouseEventHandler enterHandler = (s, e) => ToggleButton_MouseEnter(s, e);
@@ -256,6 +297,8 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         private void TreeLine_MouseEnter(object sender, MouseEventArgs e)
         {
+            if (_disposed) return;
+
             try
             {
                 foreach (var line in VisualTreeHelperEx.FindVisualChildren<System.Windows.Shapes.Line>(sender as DependencyObject))
@@ -271,6 +314,8 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         private void TreeLine_MouseLeave(object sender, MouseEventArgs e)
         {
+            if (_disposed) return;
+
             try
             {
                 foreach (var line in VisualTreeHelperEx.FindVisualChildren<System.Windows.Shapes.Line>(sender as DependencyObject))
@@ -286,6 +331,8 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         private void ToggleButton_MouseEnter(object sender, MouseEventArgs e)
         {
+            if (_disposed) return;
+
             try
             {
                 if (sender is ToggleButton toggle)
@@ -306,6 +353,8 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         private void ToggleButton_MouseLeave(object sender, MouseEventArgs e)
         {
+            if (_disposed) return;
+
             try
             {
                 if (sender is ToggleButton toggle)
@@ -326,6 +375,9 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         private void RefreshDataTemplateResources()
         {
+            if (_disposed || _treeView == null)
+                return;
+
             try
             {
                 // Force a refresh of all item containers
@@ -362,7 +414,7 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             try
             {
-                if (Application.Current.Resources[resourceKey] is T resource)
+                if (Application.Current?.Resources[resourceKey] is T resource)
                 {
                     return resource;
                 }
@@ -393,6 +445,17 @@ namespace ExplorerPro.UI.FileTree.Services
             return default;
         }
 
+        /// <summary>
+        /// Cleans up dead weak references from the themed elements list
+        /// </summary>
+        private void CleanupDeadReferences()
+        {
+            if (_themedElements == null || _themedElements.Count == 0)
+                return;
+
+            _themedElements.RemoveAll(wr => !wr.IsAlive);
+        }
+
         #endregion
 
         #region Event Handlers
@@ -402,7 +465,10 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         private void OnThemeChanged(object sender, AppTheme newTheme)
         {
-            ForceThemeRefresh();
+            if (!_disposed)
+            {
+                ForceThemeRefresh();
+            }
         }
 
         /// <summary>
@@ -410,7 +476,10 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         private void OnThemeRefreshed(object sender, AppTheme currentTheme)
         {
-            ForceThemeRefresh();
+            if (!_disposed)
+            {
+                ForceThemeRefresh();
+            }
         }
 
         #endregion
@@ -429,26 +498,41 @@ namespace ExplorerPro.UI.FileTree.Services
             {
                 if (disposing)
                 {
-                    // Unsubscribe from ThemeManager events
-                    ThemeManager.Instance.ThemeChanged -= OnThemeChanged;
-                    ThemeManager.Instance.ThemeRefreshed -= OnThemeRefreshed;
-
-                    // Clean up all event handlers
-                    foreach (var kvp in _mouseEnterHandlers)
+                    // Unsubscribe from ThemeManager events using stored handlers
+                    if (_themeChangedHandler != null)
                     {
-                        kvp.Key.MouseEnter -= kvp.Value;
-                    }
-                    foreach (var kvp in _mouseLeaveHandlers)
-                    {
-                        kvp.Key.MouseLeave -= kvp.Value;
+                        ThemeManager.Instance.ThemeChanged -= _themeChangedHandler;
+                        _themeChangedHandler = null;
                     }
                     
-                    _mouseEnterHandlers.Clear();
-                    _mouseLeaveHandlers.Clear();
+                    if (_themeRefreshedHandler != null)
+                    {
+                        ThemeManager.Instance.ThemeRefreshed -= _themeRefreshedHandler;
+                        _themeRefreshedHandler = null;
+                    }
+
+                    // Clean up all event handlers
+                    var allHandledElements = _mouseEnterHandlers.Keys.ToList();
+                    foreach (var element in allHandledElements)
+                    {
+                        RemoveMouseHandlers(element);
+                    }
+                    
+                    // Clear dictionaries
+                    _mouseEnterHandlers?.Clear();
+                    _mouseLeaveHandlers?.Clear();
+                    
+                    // Clear themed elements list
+                    _themedElements?.Clear();
                 }
                 
                 _disposed = true;
             }
+        }
+
+        ~FileTreeThemeService()
+        {
+            Dispose(false);
         }
 
         #endregion

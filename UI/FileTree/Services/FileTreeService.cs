@@ -12,12 +12,13 @@ using ExplorerPro.FileOperations;
 namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
-    /// Service for file tree operations
+    /// Service for file tree operations with proper memory management
     /// </summary>
-    public class FileTreeService : IFileTreeService
+    public class FileTreeService : IFileTreeService, IDisposable
     {
         private readonly MetadataManager _metadataManager;
         private readonly FileIconProvider _iconProvider;
+        private bool _disposed;
 
         public event EventHandler<string> ErrorOccurred;
 
@@ -29,6 +30,9 @@ namespace ExplorerPro.UI.FileTree.Services
 
         public async Task<IEnumerable<FileTreeItem>> LoadDirectoryAsync(string directoryPath, bool showHiddenFiles = false, int level = 0)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(FileTreeService));
+
             if (string.IsNullOrEmpty(directoryPath) || !Directory.Exists(directoryPath))
             {
                 OnErrorOccurred($"Invalid directory path: {directoryPath}");
@@ -134,6 +138,9 @@ namespace ExplorerPro.UI.FileTree.Services
 
         public FileTreeItem CreateFileTreeItem(string path, int level = 0)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(FileTreeService));
+
             try
             {
                 var item = FileTreeItem.FromPath(path);
@@ -174,6 +181,9 @@ namespace ExplorerPro.UI.FileTree.Services
 
         public bool DirectoryHasAccessibleChildren(string directoryPath, bool showHiddenFiles = false)
         {
+            if (_disposed)
+                return false;
+
             try
             {
                 // Quick check - just see if we can enumerate anything
@@ -201,6 +211,9 @@ namespace ExplorerPro.UI.FileTree.Services
 
         public bool IsHidden(string path)
         {
+            if (_disposed)
+                return false;
+
             try
             {
                 var attributes = File.GetAttributes(path);
@@ -214,6 +227,9 @@ namespace ExplorerPro.UI.FileTree.Services
 
         public void ApplyMetadataStyling(FileTreeItem item)
         {
+            if (_disposed || item == null)
+                return;
+
             try
             {
                 // Apply text color if set in metadata
@@ -246,7 +262,7 @@ namespace ExplorerPro.UI.FileTree.Services
 
         public FileTreeItem FindItemByPath(IEnumerable<FileTreeItem> items, string path)
         {
-            if (string.IsNullOrEmpty(path) || items == null)
+            if (_disposed || string.IsNullOrEmpty(path) || items == null)
                 return null;
 
             foreach (var item in items)
@@ -267,6 +283,9 @@ namespace ExplorerPro.UI.FileTree.Services
 
         public FileTreeItem FindItemByPathRecursive(FileTreeItem parent, string path)
         {
+            if (_disposed || parent == null || string.IsNullOrEmpty(path))
+                return null;
+
             if (parent.Path == path)
                 return parent;
 
@@ -288,7 +307,45 @@ namespace ExplorerPro.UI.FileTree.Services
 
         protected virtual void OnErrorOccurred(string error)
         {
-            ErrorOccurred?.Invoke(this, error);
+            if (!_disposed)
+            {
+                ErrorOccurred?.Invoke(this, error);
+            }
         }
+
+        #region IDisposable Implementation
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    // Clear event handlers to prevent memory leaks
+                    ErrorOccurred = null;
+
+                    // Dispose icon provider if it implements IDisposable
+                    (_iconProvider as IDisposable)?.Dispose();
+
+                    // Note: We don't dispose MetadataManager as it's likely shared
+                    // and managed at application level
+                }
+
+                _disposed = true;
+            }
+        }
+
+        ~FileTreeService()
+        {
+            Dispose(false);
+        }
+
+        #endregion
     }
 }
