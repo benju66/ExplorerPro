@@ -1,6 +1,7 @@
-// UI/FileTree/Utilities/VisualTreeHelper.cs
+// UI/FileTree/Utilities/VisualTreeHelper.cs - Performance Optimized Version
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -10,9 +11,168 @@ namespace ExplorerPro.UI.FileTree.Utilities
 {
     /// <summary>
     /// Provides utility methods for traversing and searching the WPF visual tree
+    /// Performance optimized version with caching and efficient lookups
     /// </summary>
     public static class VisualTreeHelperEx
     {
+        #region Caching Infrastructure
+        
+        // ConditionalWeakTable automatically removes entries when keys are garbage collected
+        private static readonly ConditionalWeakTable<ItemsControl, TreeViewItemCache> _itemCaches = 
+            new ConditionalWeakTable<ItemsControl, TreeViewItemCache>();
+        
+        /// <summary>
+        /// Cache for TreeViewItem lookups to avoid repeated visual tree traversal
+        /// </summary>
+        private class TreeViewItemCache
+        {
+            private readonly Dictionary<object, WeakReference> _cache = new Dictionary<object, WeakReference>();
+            private DateTime _lastCleanup = DateTime.Now;
+            private const int CleanupIntervalSeconds = 30;
+            
+            public TreeViewItem GetCachedItem(object dataItem)
+            {
+                if (dataItem == null) return null;
+                
+                // Periodic cleanup of dead references
+                if ((DateTime.Now - _lastCleanup).TotalSeconds > CleanupIntervalSeconds)
+                {
+                    CleanupDeadReferences();
+                }
+                
+                if (_cache.TryGetValue(dataItem, out WeakReference weakRef) && 
+                    weakRef.Target is TreeViewItem tvi && 
+                    tvi.DataContext == dataItem)
+                {
+                    return tvi;
+                }
+                
+                return null;
+            }
+            
+            public void SetCachedItem(object dataItem, TreeViewItem treeViewItem)
+            {
+                if (dataItem != null && treeViewItem != null)
+                {
+                    _cache[dataItem] = new WeakReference(treeViewItem);
+                }
+            }
+            
+            public void Clear()
+            {
+                _cache.Clear();
+            }
+            
+            private void CleanupDeadReferences()
+            {
+                var deadKeys = new List<object>();
+                
+                foreach (var kvp in _cache)
+                {
+                    if (!kvp.Value.IsAlive)
+                    {
+                        deadKeys.Add(kvp.Key);
+                    }
+                }
+                
+                foreach (var key in deadKeys)
+                {
+                    _cache.Remove(key);
+                }
+                
+                _lastCleanup = DateTime.Now;
+            }
+        }
+        
+        /// <summary>
+        /// Clears all caches - should be called when major UI changes occur
+        /// </summary>
+        public static void ClearAllCaches()
+        {
+            // ConditionalWeakTable doesn't have a Clear method, but entries will be 
+            // garbage collected when the ItemsControl keys are collected
+        }
+        
+        #endregion
+        
+        #region Optimized Search Methods
+        
+        /// <summary>
+        /// Finds a TreeViewItem for data with caching - O(1) for cached items
+        /// </summary>
+        public static TreeViewItem FindTreeViewItemOptimized(ItemsControl container, object dataItem)
+        {
+            if (container == null || dataItem == null)
+                return null;
+            
+            // Get or create cache for this container
+            var cache = _itemCaches.GetOrCreateValue(container);
+            
+            // Check cache first
+            var cachedItem = cache.GetCachedItem(dataItem);
+            if (cachedItem != null)
+                return cachedItem;
+            
+            // Not in cache, search for it
+            var item = FindTreeViewItemInternal(container, dataItem, cache);
+            return item;
+        }
+        
+        /// <summary>
+        /// Internal recursive search with cache population
+        /// </summary>
+        private static TreeViewItem FindTreeViewItemInternal(ItemsControl container, object dataItem, TreeViewItemCache cache)
+        {
+            // Ensure containers are generated
+            container.UpdateLayout();
+            
+            if (container.ItemContainerGenerator.Status != GeneratorStatus.ContainersGenerated)
+            {
+                container.UpdateLayout();
+                container.ApplyTemplate();
+            }
+            
+            // Direct lookup first
+            var directContainer = container.ItemContainerGenerator.ContainerFromItem(dataItem) as TreeViewItem;
+            if (directContainer != null)
+            {
+                cache.SetCachedItem(dataItem, directContainer);
+                return directContainer;
+            }
+            
+            // Search in visible items only (optimization for large trees)
+            for (int i = 0; i < container.Items.Count; i++)
+            {
+                var childContainer = container.ItemContainerGenerator.ContainerFromIndex(i) as TreeViewItem;
+                if (childContainer == null) continue;
+                
+                // Cache this item
+                var childData = childContainer.DataContext;
+                if (childData != null)
+                {
+                    cache.SetCachedItem(childData, childContainer);
+                }
+                
+                // Check if this is what we're looking for
+                if (childData == dataItem)
+                    return childContainer;
+                
+                // Only search expanded items
+                if (childContainer.IsExpanded)
+                {
+                    var result = FindTreeViewItemInternal(childContainer, dataItem, cache);
+                    if (result != null)
+                        return result;
+                }
+            }
+            
+            return null;
+        }
+        
+        #endregion
+        
+        #region Original Methods (Kept for Compatibility)
+        
         /// <summary>
         /// Finds all visual children of a specific type in the visual tree
         /// </summary>
@@ -88,69 +248,131 @@ namespace ExplorerPro.UI.FileTree.Utilities
         
         /// <summary>
         /// Finds a TreeViewItem in the visual tree that contains the specified data item
+        /// Uses the optimized method internally
         /// </summary>
-        /// <param name="container">The container to search in</param>
-        /// <param name="item">The data item to find</param>
-        /// <returns>The TreeViewItem containing the data, or null if not found</returns>
         public static TreeViewItem FindTreeViewItemForData(ItemsControl container, object item)
         {
-            if (container == null || item == null)
-                return null;
-                
-            // Ensure containers are generated
-            container.UpdateLayout();
-            
-            // Force container generation if needed
-            if (container.ItemContainerGenerator.Status != GeneratorStatus.ContainersGenerated)
-            {
-                container.UpdateLayout();
-                container.ApplyTemplate();
-            }
-                
-            if (container.ItemContainerGenerator.ContainerFromItem(item) is TreeViewItem tvi)
-                return tvi;
-                
-            for (int i = 0; i < container.Items.Count; i++)
-            {
-                var childContainer = container.ItemContainerGenerator.ContainerFromIndex(i) as TreeViewItem;
-                if (childContainer != null)
-                {
-                    var result = FindTreeViewItemForData(childContainer, item);
-                    if (result != null)
-                        return result;
-                }
-            }
-            
-            return null;
+            return FindTreeViewItemOptimized(container, item);
         }
         
         /// <summary>
         /// Finds a TreeViewItem in the visual tree that contains the specified data item (recursive)
+        /// Uses the optimized method internally
         /// </summary>
-        /// <param name="container">The container to search in</param>
-        /// <param name="data">The data item to find</param>
-        /// <returns>The TreeViewItem containing the data, or null if not found</returns>
         public static TreeViewItem FindTreeViewItem(ItemsControl container, object data)
         {
-            if (container == null) return null;
+            return FindTreeViewItemOptimized(container, data);
+        }
+        
+        #endregion
+        
+        #region Performance Optimized Methods
+        
+        /// <summary>
+        /// Gets visible TreeViewItems efficiently by limiting depth of search
+        /// </summary>
+        public static IEnumerable<TreeViewItem> GetVisibleTreeViewItems(TreeView treeView)
+        {
+            if (treeView == null) yield break;
             
-            if (container.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
+            var scrollViewer = FindScrollViewer(treeView);
+            if (scrollViewer == null)
             {
-                var item = container.ItemContainerGenerator.ContainerFromItem(data) as TreeViewItem;
-                if (item != null) return item;
-                
-                foreach (var childData in container.Items)
+                // Fallback to all items if no scroll viewer
+                foreach (var item in FindVisualChildren<TreeViewItem>(treeView))
+                    yield return item;
+                yield break;
+            }
+            
+            // Calculate visible bounds
+            var visibleBounds = new Rect(0, scrollViewer.VerticalOffset, 
+                                       scrollViewer.ViewportWidth, 
+                                       scrollViewer.ViewportHeight);
+            
+            // Only return items that intersect with visible bounds
+            foreach (var item in FindVisualChildren<TreeViewItem>(treeView))
+            {
+                var itemBounds = GetBounds(item, treeView);
+                if (visibleBounds.IntersectsWith(itemBounds))
                 {
-                    var childContainer = container.ItemContainerGenerator.ContainerFromItem(childData) as TreeViewItem;
-                    if (childContainer != null)
-                    {
-                        var result = FindTreeViewItem(childContainer, data);
-                        if (result != null) return result;
-                    }
+                    yield return item;
                 }
             }
-            return null;
         }
+        
+        /// <summary>
+        /// Batch finds multiple TreeViewItems efficiently
+        /// </summary>
+        public static Dictionary<object, TreeViewItem> FindMultipleTreeViewItems(ItemsControl container, IEnumerable<object> dataItems)
+        {
+            var result = new Dictionary<object, TreeViewItem>();
+            if (container == null || dataItems == null) return result;
+            
+            var cache = _itemCaches.GetOrCreateValue(container);
+            var itemsToFind = new HashSet<object>(dataItems);
+            
+            // Check cache first
+            var uncachedItems = new HashSet<object>();
+            foreach (var dataItem in itemsToFind)
+            {
+                var cached = cache.GetCachedItem(dataItem);
+                if (cached != null)
+                {
+                    result[dataItem] = cached;
+                }
+                else
+                {
+                    uncachedItems.Add(dataItem);
+                }
+            }
+            
+            // If all found in cache, return early
+            if (uncachedItems.Count == 0)
+                return result;
+            
+            // Single traversal to find all uncached items
+            FindMultipleItemsRecursive(container, uncachedItems, result, cache);
+            
+            return result;
+        }
+        
+        private static void FindMultipleItemsRecursive(ItemsControl container, HashSet<object> itemsToFind, 
+            Dictionary<object, TreeViewItem> result, TreeViewItemCache cache)
+        {
+            if (itemsToFind.Count == 0) return; // All found
+            
+            container.UpdateLayout();
+            
+            for (int i = 0; i < container.Items.Count && itemsToFind.Count > 0; i++)
+            {
+                var childContainer = container.ItemContainerGenerator.ContainerFromIndex(i) as TreeViewItem;
+                if (childContainer == null) continue;
+                
+                var childData = childContainer.DataContext;
+                if (childData != null)
+                {
+                    // Cache this item
+                    cache.SetCachedItem(childData, childContainer);
+                    
+                    // Check if it's one we're looking for
+                    if (itemsToFind.Contains(childData))
+                    {
+                        result[childData] = childContainer;
+                        itemsToFind.Remove(childData);
+                    }
+                }
+                
+                // Only search expanded items
+                if (childContainer.IsExpanded && itemsToFind.Count > 0)
+                {
+                    FindMultipleItemsRecursive(childContainer, itemsToFind, result, cache);
+                }
+            }
+        }
+        
+        #endregion
+        
+        #region Utility Methods
         
         /// <summary>
         /// Finds the ScrollViewer in a control's visual tree
@@ -255,5 +477,36 @@ namespace ExplorerPro.UI.FileTree.Utilities
                 }
             }
         }
+        
+        /// <summary>
+        /// Efficiently counts visible TreeViewItems
+        /// </summary>
+        public static int CountVisibleTreeViewItems(TreeView treeView)
+        {
+            if (treeView == null) return 0;
+            
+            int count = 0;
+            CountVisibleItemsRecursive(treeView, ref count);
+            return count;
+        }
+        
+        private static void CountVisibleItemsRecursive(ItemsControl container, ref int count)
+        {
+            for (int i = 0; i < container.Items.Count; i++)
+            {
+                var childContainer = container.ItemContainerGenerator.ContainerFromIndex(i) as TreeViewItem;
+                if (childContainer != null && childContainer.IsVisible)
+                {
+                    count++;
+                    
+                    if (childContainer.IsExpanded)
+                    {
+                        CountVisibleItemsRecursive(childContainer, ref count);
+                    }
+                }
+            }
+        }
+        
+        #endregion
     }
 }

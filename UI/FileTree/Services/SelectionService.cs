@@ -1,4 +1,4 @@
-// UI/FileTree/Services/SelectionService.cs
+// UI/FileTree/Services/SelectionService.cs - Performance Optimized Version
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -7,13 +7,14 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
     /// Manages multi-selection state for the file tree with UI mode support.
     /// This is the single source of truth for all selection state.
-    /// Implements proper memory management to prevent leaks.
+    /// Performance optimized version with event debouncing and efficient lookups.
     /// </summary>
     public class SelectionService : IDisposable, INotifyPropertyChanged
     {
@@ -21,6 +22,7 @@ namespace ExplorerPro.UI.FileTree.Services
         
         private readonly ObservableCollection<FileTreeItem> _selectedItems;
         private readonly HashSet<string> _selectedPaths;
+        private readonly Dictionary<string, FileTreeItem> _pathToItemMap; // Fast lookup cache
         private FileTreeItem _lastSelectedItem;
         private FileTreeItem _anchorItem;
         private bool _isSelecting;
@@ -34,6 +36,17 @@ namespace ExplorerPro.UI.FileTree.Services
         // Pattern selection
         private string _lastPattern;
         
+        // Event debouncing
+        private readonly DispatcherTimer _eventDebounceTimer;
+        private bool _pendingSelectionEvent;
+        private List<FileTreeItem> _pendingAddedItems;
+        private List<FileTreeItem> _pendingRemovedItems;
+        private const int DEBOUNCE_DELAY_MS = 50;
+        
+        // Performance tracking
+        private DateTime _lastEventTime = DateTime.MinValue;
+        private int _eventCount = 0;
+        
         // Disposal flag
         private bool _disposed;
         
@@ -42,7 +55,7 @@ namespace ExplorerPro.UI.FileTree.Services
         #region Events
         
         /// <summary>
-        /// Raised when the selection changes
+        /// Raised when the selection changes (debounced)
         /// </summary>
         public event EventHandler<FileTreeSelectionChangedEventArgs> SelectionChanged;
         
@@ -154,7 +167,17 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             _selectedItems = new ObservableCollection<FileTreeItem>();
             _selectedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _pathToItemMap = new Dictionary<string, FileTreeItem>(StringComparer.OrdinalIgnoreCase);
             _flatTreeCache = new List<FileTreeItem>();
+            _pendingAddedItems = new List<FileTreeItem>();
+            _pendingRemovedItems = new List<FileTreeItem>();
+            
+            // Initialize debounce timer
+            _eventDebounceTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(DEBOUNCE_DELAY_MS)
+            };
+            _eventDebounceTimer.Tick += OnDebounceTimerTick;
         }
         
         #endregion
@@ -215,11 +238,8 @@ namespace ExplorerPro.UI.FileTree.Services
                 
                 _lastSelectedItem = item;
                 
-                // Raise event if selection changed
-                if (!AreSelectionsEqual(previousSelection, _selectedItems))
-                {
-                    OnSelectionChanged();
-                }
+                // Schedule debounced event
+                ScheduleSelectionChangedEvent();
             }
             finally
             {
@@ -265,7 +285,7 @@ namespace ExplorerPro.UI.FileTree.Services
                     }
                 }
                 
-                OnSelectionChanged();
+                ScheduleSelectionChangedEvent();
             }
             finally
             {
@@ -283,9 +303,12 @@ namespace ExplorerPro.UI.FileTree.Services
                 
             if (item == null) return;
             
-            ClearSelection();
+            // Batch clear for performance
+            BatchClearSelection();
             AddToSelection(item);
             _anchorItem = item;
+            
+            ScheduleSelectionChangedEvent();
         }
         
         /// <summary>
@@ -306,6 +329,8 @@ namespace ExplorerPro.UI.FileTree.Services
             {
                 AddToSelection(item);
             }
+            
+            ScheduleSelectionChangedEvent();
         }
         
         /// <summary>
@@ -327,12 +352,17 @@ namespace ExplorerPro.UI.FileTree.Services
             var startIndex = Math.Min(fromIndex, toIndex);
             var endIndex = Math.Max(fromIndex, toIndex);
             
-            ClearSelection();
+            // Batch operations for performance
+            BatchClearSelection();
             
+            var itemsToAdd = new List<FileTreeItem>();
             for (int i = startIndex; i <= endIndex; i++)
             {
-                AddToSelection(flatList[i]);
+                itemsToAdd.Add(flatList[i]);
             }
+            
+            BatchAddToSelection(itemsToAdd);
+            ScheduleSelectionChangedEvent();
         }
         
         /// <summary>
@@ -345,13 +375,11 @@ namespace ExplorerPro.UI.FileTree.Services
                 
             if (allItems == null) return;
             
-            ClearSelection();
+            // Clear and batch add for performance
+            BatchClearSelection();
             
             var flatList = GetFlattenedTree(allItems);
-            foreach (var item in flatList)
-            {
-                AddToSelection(item);
-            }
+            BatchAddToSelection(flatList);
             
             // Enable multi-select mode when selecting all (unless sticky)
             if (!_stickyMultiSelectMode && HasMultipleSelection)
@@ -361,7 +389,7 @@ namespace ExplorerPro.UI.FileTree.Services
             
             // Update select all state
             UpdateSelectAllState(allItems);
-            OnSelectionChanged();
+            ScheduleSelectionChangedEvent();
         }
         
         /// <summary>
@@ -371,24 +399,34 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             if (_disposed) return;
             
-            foreach (var item in _selectedItems)
-            {
-                item.SetSelectionState(false);
-            }
-            
-            _selectedItems.Clear();
-            _selectedPaths.Clear();
+            BatchClearSelection();
             AreAllItemsSelected = false;
             OnPropertyChanged(nameof(AreAllItemsSelected));
+            ScheduleSelectionChangedEvent();
         }
         
         /// <summary>
-        /// Checks if an item is selected
+        /// Checks if an item is selected - O(1) lookup
         /// </summary>
         public bool IsItemSelected(FileTreeItem item)
         {
             if (_disposed) return false;
             return item != null && _selectedPaths.Contains(item.Path);
+        }
+        
+        /// <summary>
+        /// Gets selected item by path - O(1) lookup
+        /// </summary>
+        public FileTreeItem GetSelectedItemByPath(string path)
+        {
+            if (_disposed || string.IsNullOrEmpty(path)) return null;
+            
+            if (_pathToItemMap.TryGetValue(path, out FileTreeItem item))
+            {
+                return item;
+            }
+            
+            return null;
         }
         
         /// <summary>
@@ -481,6 +519,7 @@ namespace ExplorerPro.UI.FileTree.Services
                     else
                     {
                         AddToSelection(newItem);
+                        ScheduleSelectionChangedEvent();
                     }
                 }
                 
@@ -512,16 +551,23 @@ namespace ExplorerPro.UI.FileTree.Services
             
             if (!addToSelection)
             {
-                ClearSelection();
+                BatchClearSelection();
             }
             
             var flatList = GetFlattenedTree(allItems);
+            var itemsToAdd = new List<FileTreeItem>();
+            
             foreach (var item in flatList)
             {
                 if (regex.IsMatch(item.Name))
                 {
-                    AddToSelection(item);
+                    itemsToAdd.Add(item);
                 }
+            }
+            
+            if (itemsToAdd.Count > 0)
+            {
+                BatchAddToSelection(itemsToAdd);
             }
             
             // Enable multi-select mode if needed
@@ -530,7 +576,7 @@ namespace ExplorerPro.UI.FileTree.Services
                 IsMultiSelectMode = true;
             }
             
-            OnSelectionChanged();
+            ScheduleSelectionChangedEvent();
         }
         
         /// <summary>
@@ -544,18 +590,25 @@ namespace ExplorerPro.UI.FileTree.Services
             if (allItems == null) return;
             
             var currentlySelected = _selectedPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            ClearSelection();
+            BatchClearSelection();
             
             var flatList = GetFlattenedTree(allItems);
+            var itemsToAdd = new List<FileTreeItem>();
+            
             foreach (var item in flatList)
             {
                 if (!currentlySelected.Contains(item.Path))
                 {
-                    AddToSelection(item);
+                    itemsToAdd.Add(item);
                 }
             }
             
-            OnSelectionChanged();
+            if (itemsToAdd.Count > 0)
+            {
+                BatchAddToSelection(itemsToAdd);
+            }
+            
+            ScheduleSelectionChangedEvent();
         }
         
         /// <summary>
@@ -567,13 +620,18 @@ namespace ExplorerPro.UI.FileTree.Services
                 throw new ObjectDisposedException(nameof(SelectionService));
                 
             var foldersToProcess = _selectedItems.Where(i => i.IsDirectory).ToList();
+            var itemsToAdd = new List<FileTreeItem>();
             
             foreach (var folder in foldersToProcess)
             {
-                SelectAllDescendants(folder);
+                CollectAllDescendants(folder, itemsToAdd);
             }
             
-            OnSelectionChanged();
+            if (itemsToAdd.Count > 0)
+            {
+                BatchAddToSelection(itemsToAdd);
+                ScheduleSelectionChangedEvent();
+            }
         }
         
         /// <summary>
@@ -584,23 +642,72 @@ namespace ExplorerPro.UI.FileTree.Services
             if (_disposed || !_selectedPaths.Any()) return;
             
             var pathsToRestore = _selectedPaths.ToList();
-            ClearSelection();
+            BatchClearSelection();
             
             var flatList = GetFlattenedTree(allItems);
+            var itemsToAdd = new List<FileTreeItem>();
+            
             foreach (var item in flatList)
             {
                 if (pathsToRestore.Contains(item.Path))
                 {
-                    AddToSelection(item);
+                    itemsToAdd.Add(item);
                 }
             }
             
+            if (itemsToAdd.Count > 0)
+            {
+                BatchAddToSelection(itemsToAdd);
+            }
+            
             UpdateSelectAllState(allItems);
+            ScheduleSelectionChangedEvent();
         }
         
         #endregion
         
-        #region Private Methods
+        #region Private Methods - Performance Optimized
+        
+        /// <summary>
+        /// Batch adds items to selection for better performance
+        /// </summary>
+        private void BatchAddToSelection(List<FileTreeItem> items)
+        {
+            if (items == null || items.Count == 0) return;
+            
+            foreach (var item in items)
+            {
+                if (item != null && !_selectedPaths.Contains(item.Path))
+                {
+                    item.SetSelectionState(true);
+                    _selectedItems.Add(item);
+                    _selectedPaths.Add(item.Path);
+                    _pathToItemMap[item.Path] = item;
+                    
+                    // Track for event
+                    _pendingAddedItems.Add(item);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Batch clears selection for better performance
+        /// </summary>
+        private void BatchClearSelection()
+        {
+            // Track removed items for event
+            _pendingRemovedItems.AddRange(_selectedItems);
+            
+            // Clear selection state
+            foreach (var item in _selectedItems)
+            {
+                item.SetSelectionState(false);
+            }
+            
+            _selectedItems.Clear();
+            _selectedPaths.Clear();
+            _pathToItemMap.Clear();
+        }
         
         /// <summary>
         /// Adds an item to the selection.
@@ -614,6 +721,10 @@ namespace ExplorerPro.UI.FileTree.Services
             item.SetSelectionState(true);
             _selectedItems.Add(item);
             _selectedPaths.Add(item.Path);
+            _pathToItemMap[item.Path] = item;
+            
+            // Track for event
+            _pendingAddedItems.Add(item);
         }
         
         /// <summary>
@@ -628,21 +739,25 @@ namespace ExplorerPro.UI.FileTree.Services
             item.SetSelectionState(false);
             _selectedItems.Remove(item);
             _selectedPaths.Remove(item.Path);
+            _pathToItemMap.Remove(item.Path);
+            
+            // Track for event
+            _pendingRemovedItems.Add(item);
         }
         
         /// <summary>
-        /// Selects all descendants of an item
+        /// Collects all descendants of an item
         /// </summary>
-        private void SelectAllDescendants(FileTreeItem item)
+        private void CollectAllDescendants(FileTreeItem item, List<FileTreeItem> result)
         {
             if (item == null) return;
             
             foreach (var child in item.Children)
             {
-                AddToSelection(child);
+                result.Add(child);
                 if (child.IsDirectory)
                 {
-                    SelectAllDescendants(child);
+                    CollectAllDescendants(child, result);
                 }
             }
         }
@@ -700,37 +815,73 @@ namespace ExplorerPro.UI.FileTree.Services
         }
         
         /// <summary>
-        /// Checks if two selections are equal
+        /// Schedules a debounced selection changed event
         /// </summary>
-        private bool AreSelectionsEqual(IList<FileTreeItem> selection1, IList<FileTreeItem> selection2)
+        private void ScheduleSelectionChangedEvent()
         {
-            if (selection1.Count != selection2.Count) return false;
+            _pendingSelectionEvent = true;
             
-            var paths1 = selection1.Select(i => i.Path).OrderBy(p => p);
-            var paths2 = selection2.Select(i => i.Path).OrderBy(p => p);
-            
-            return paths1.SequenceEqual(paths2);
+            if (!_eventDebounceTimer.IsEnabled)
+            {
+                _eventDebounceTimer.Start();
+            }
         }
         
         /// <summary>
-        /// Raises the SelectionChanged event
+        /// Handles the debounce timer tick
         /// </summary>
-        private void OnSelectionChanged()
+        private void OnDebounceTimerTick(object sender, EventArgs e)
         {
-            if (!_disposed)
+            _eventDebounceTimer.Stop();
+            
+            if (_pendingSelectionEvent && !_disposed)
             {
-                SelectionChanged?.Invoke(this, new FileTreeSelectionChangedEventArgs(
-                    _selectedItems.ToList(),
-                    _selectedPaths.ToList()
-                ));
-                
-                // Notify property changes for data binding
-                OnPropertyChanged(nameof(HasSelection));
-                OnPropertyChanged(nameof(HasMultipleSelection));
-                OnPropertyChanged(nameof(SelectionCount));
-                OnPropertyChanged(nameof(FirstSelectedItem));
-                OnPropertyChanged(nameof(FirstSelectedPath));
+                _pendingSelectionEvent = false;
+                FireSelectionChangedEvent();
             }
+        }
+        
+        /// <summary>
+        /// Fires the selection changed event with accumulated changes
+        /// </summary>
+        private void FireSelectionChangedEvent()
+        {
+            if (_disposed) return;
+            
+            // Track performance
+            _eventCount++;
+            var now = DateTime.Now;
+            if ((now - _lastEventTime).TotalSeconds > 1)
+            {
+                if (_eventCount > 10)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[PERF] SelectionService: {_eventCount} events in the last second");
+                }
+                _eventCount = 0;
+                _lastEventTime = now;
+            }
+            
+            // Create event args with accumulated changes
+            var args = new FileTreeSelectionChangedEventArgs(
+                _selectedItems.ToList(),
+                _selectedPaths.ToList(),
+                _pendingAddedItems.ToList(),
+                _pendingRemovedItems.ToList()
+            );
+            
+            // Clear pending lists
+            _pendingAddedItems.Clear();
+            _pendingRemovedItems.Clear();
+            
+            // Raise event
+            SelectionChanged?.Invoke(this, args);
+            
+            // Notify property changes for data binding
+            OnPropertyChanged(nameof(HasSelection));
+            OnPropertyChanged(nameof(HasMultipleSelection));
+            OnPropertyChanged(nameof(SelectionCount));
+            OnPropertyChanged(nameof(FirstSelectedItem));
+            OnPropertyChanged(nameof(FirstSelectedPath));
         }
         
         /// <summary>
@@ -760,13 +911,23 @@ namespace ExplorerPro.UI.FileTree.Services
             {
                 if (disposing)
                 {
+                    // Stop and dispose timer
+                    if (_eventDebounceTimer != null)
+                    {
+                        _eventDebounceTimer.Stop();
+                        _eventDebounceTimer.Tick -= OnDebounceTimerTick;
+                    }
+                    
                     // Clear selection first
                     ClearSelection();
                     
                     // Clear all collections
                     _selectedItems?.Clear();
                     _selectedPaths?.Clear();
+                    _pathToItemMap?.Clear();
                     _flatTreeCache?.Clear();
+                    _pendingAddedItems?.Clear();
+                    _pendingRemovedItems?.Clear();
                     
                     // Null out references
                     _lastSelectedItem = null;
@@ -791,17 +952,25 @@ namespace ExplorerPro.UI.FileTree.Services
     }
     
     /// <summary>
-    /// Event arguments for file tree selection changes
+    /// Event arguments for file tree selection changes - Enhanced version
     /// </summary>
     public class FileTreeSelectionChangedEventArgs : EventArgs
     {
         public IReadOnlyList<FileTreeItem> SelectedItems { get; }
         public IReadOnlyList<string> SelectedPaths { get; }
+        public IReadOnlyList<FileTreeItem> AddedItems { get; }
+        public IReadOnlyList<FileTreeItem> RemovedItems { get; }
         
-        public FileTreeSelectionChangedEventArgs(IReadOnlyList<FileTreeItem> selectedItems, IReadOnlyList<string> selectedPaths)
+        public FileTreeSelectionChangedEventArgs(
+            IReadOnlyList<FileTreeItem> selectedItems, 
+            IReadOnlyList<string> selectedPaths,
+            IReadOnlyList<FileTreeItem> addedItems = null,
+            IReadOnlyList<FileTreeItem> removedItems = null)
         {
             SelectedItems = selectedItems;
             SelectedPaths = selectedPaths;
+            AddedItems = addedItems ?? new List<FileTreeItem>();
+            RemovedItems = removedItems ?? new List<FileTreeItem>();
         }
     }
 }

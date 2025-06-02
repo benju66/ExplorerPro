@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Fixed version with LoadChildren memory leak resolved
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Performance Optimized Version
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -29,7 +29,7 @@ namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
     /// Interaction logic for ImprovedFileTreeListView.xaml with enhanced context menu support
-    /// Fixed version with comprehensive memory management and disposal
+    /// Performance optimized version with O(n) selection complexity
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -56,6 +56,24 @@ namespace ExplorerPro.UI.FileTree
         // Enhanced drag & drop service
         private FileTreeDragDropService _enhancedDragDropService;
 
+        #endregion
+
+        #region Performance Optimization Fields
+        
+        // Cache for TreeViewItem lookups to avoid repeated visual tree traversal
+        private readonly Dictionary<FileTreeItem, WeakReference> _treeViewItemCache = new Dictionary<FileTreeItem, WeakReference>();
+        
+        // Track currently visible TreeViewItems for efficient updates
+        private readonly HashSet<TreeViewItem> _visibleTreeViewItems = new HashSet<TreeViewItem>();
+        
+        // Debounce timer for selection updates
+        private DispatcherTimer _selectionUpdateTimer;
+        private bool _pendingSelectionUpdate = false;
+        
+        // Performance metrics
+        private DateTime _lastSelectionUpdateTime = DateTime.MinValue;
+        private int _selectionUpdateCount = 0;
+        
         #endregion
 
         #region LoadChildren Event Management
@@ -190,6 +208,7 @@ namespace ExplorerPro.UI.FileTree
                 _fileOperations = new FileOperations.FileOperations();
                 InitializeManagersAndModel();
                 InitializeServices();
+                InitializePerformanceOptimizations();
 
                 // Set the TreeView ItemsSource
                 fileTreeView.ItemsSource = _rootItems;
@@ -304,6 +323,23 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
+        private void InitializePerformanceOptimizations()
+        {
+            // Initialize selection update debounce timer
+            _selectionUpdateTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(50) // 50ms debounce
+            };
+            _selectionUpdateTimer.Tick += SelectionUpdateTimer_Tick;
+            
+            // Subscribe to tree view scrolling to track visible items
+            var scrollViewer = VisualTreeHelperEx.FindScrollViewer(fileTreeView);
+            if (scrollViewer != null)
+            {
+                scrollViewer.ScrollChanged += ScrollViewer_ScrollChanged;
+            }
+        }
+
         private void InitializeColumns()
         {
             try
@@ -388,6 +424,9 @@ namespace ExplorerPro.UI.FileTree
                 // Apply theme settings on load
                 RefreshThemeElements();
                 
+                // Update visible items cache
+                UpdateVisibleItemsCache();
+                
                 System.Diagnostics.Debug.WriteLine("[DEBUG] FileTreeListView loaded and initialized");
             }
         }
@@ -399,6 +438,137 @@ namespace ExplorerPro.UI.FileTree
             
             // Cancel any active operations
             CancelActiveOperations();
+            
+            // Clear caches
+            ClearTreeViewItemCache();
+        }
+        
+        #endregion
+
+        #region Performance Optimization Methods
+        
+        /// <summary>
+        /// Updates the cache of visible TreeViewItems for efficient selection updates
+        /// </summary>
+        private void UpdateVisibleItemsCache()
+        {
+            _visibleTreeViewItems.Clear();
+            
+            var scrollViewer = VisualTreeHelperEx.FindScrollViewer(fileTreeView);
+            if (scrollViewer == null) return;
+            
+            // Get visible bounds
+            var visibleBounds = new Rect(0, scrollViewer.VerticalOffset, 
+                                       scrollViewer.ViewportWidth, 
+                                       scrollViewer.ViewportHeight);
+            
+            // Find visible TreeViewItems
+            foreach (var item in GetAllTreeViewItemsFast())
+            {
+                var bounds = VisualTreeHelperEx.GetBounds(item, fileTreeView);
+                if (visibleBounds.IntersectsWith(bounds))
+                {
+                    _visibleTreeViewItems.Add(item);
+                }
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"[PERF] Visible items cache updated: {_visibleTreeViewItems.Count} items");
+        }
+        
+        /// <summary>
+        /// Gets a TreeViewItem from cache or finds it efficiently
+        /// </summary>
+        private TreeViewItem GetTreeViewItemCached(FileTreeItem dataItem)
+        {
+            if (dataItem == null) return null;
+            
+            // Check cache first
+            if (_treeViewItemCache.TryGetValue(dataItem, out WeakReference weakRef) && 
+                weakRef.Target is TreeViewItem cachedItem && 
+                cachedItem.DataContext == dataItem)
+            {
+                return cachedItem;
+            }
+            
+            // Not in cache or stale, find it
+            var treeViewItem = VisualTreeHelperEx.FindTreeViewItemOptimized(fileTreeView, dataItem);
+            
+            // Update cache
+            if (treeViewItem != null)
+            {
+                _treeViewItemCache[dataItem] = new WeakReference(treeViewItem);
+            }
+            
+            return treeViewItem;
+        }
+        
+        /// <summary>
+        /// Clears the TreeViewItem cache
+        /// </summary>
+        private void ClearTreeViewItemCache()
+        {
+            _treeViewItemCache.Clear();
+            _visibleTreeViewItems.Clear();
+        }
+        
+        /// <summary>
+        /// Gets all TreeViewItems efficiently using cached visible items when possible
+        /// </summary>
+        private IEnumerable<TreeViewItem> GetAllTreeViewItemsFast()
+        {
+            // If we have a reasonable number of visible items, use those
+            if (_visibleTreeViewItems.Count > 0 && _visibleTreeViewItems.Count < 100)
+            {
+                return _visibleTreeViewItems.ToList();
+            }
+            
+            // Otherwise fall back to tree traversal
+            return GetExpandedTreeViewItems(fileTreeView);
+        }
+        
+        /// <summary>
+        /// Schedules a debounced selection update
+        /// </summary>
+        private void ScheduleSelectionUpdate()
+        {
+            _pendingSelectionUpdate = true;
+            
+            if (!_selectionUpdateTimer.IsEnabled)
+            {
+                _selectionUpdateTimer.Start();
+            }
+        }
+        
+        /// <summary>
+        /// Handles the debounced selection update timer
+        /// </summary>
+        private void SelectionUpdateTimer_Tick(object sender, EventArgs e)
+        {
+            _selectionUpdateTimer.Stop();
+            
+            if (_pendingSelectionUpdate && !_disposed)
+            {
+                _pendingSelectionUpdate = false;
+                UpdateTreeViewSelectionOptimized();
+            }
+        }
+        
+        /// <summary>
+        /// Handles scroll changes to update visible items cache
+        /// </summary>
+        private void ScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            if (e.VerticalChange != 0 || e.ViewportHeightChange != 0)
+            {
+                // Defer cache update to avoid performance impact during scrolling
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                {
+                    if (!_disposed)
+                    {
+                        UpdateVisibleItemsCache();
+                    }
+                }));
+            }
         }
         
         #endregion
@@ -578,25 +748,25 @@ namespace ExplorerPro.UI.FileTree
                 }
             }
             
-            UpdateTreeViewSelection();
+            ScheduleSelectionUpdate();
         }
         
         public void SelectAll()
         {
             _selectionService.SelectAll(_rootItems);
-            UpdateTreeViewSelection();
+            ScheduleSelectionUpdate();
         }
         
         public void InvertSelection()
         {
             _selectionService.InvertSelection(_rootItems);
-            UpdateTreeViewSelection();
+            ScheduleSelectionUpdate();
         }
         
         public void SelectByPattern(string pattern, bool addToSelection = false)
         {
             _selectionService.SelectByPattern(pattern, _rootItems, addToSelection);
-            UpdateTreeViewSelection();
+            ScheduleSelectionUpdate();
         }
         
         public void ToggleMultiSelectMode()
@@ -721,6 +891,7 @@ namespace ExplorerPro.UI.FileTree
                 _rootItems.Clear();
                 _fileTreeCache.Clear();
                 _selectionService?.ClearSelection();
+                ClearTreeViewItemCache();
                 
                 // Unsubscribe from all LoadChildren events before clearing
                 UnsubscribeAllLoadChildren();
@@ -753,6 +924,9 @@ namespace ExplorerPro.UI.FileTree
                         // Initialize tree view item levels
                         TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
                         fileTreeView.UpdateLayout();
+                        
+                        // Update visible items cache
+                        UpdateVisibleItemsCache();
                         
                         // Ensure the root item is visible
                         if (_rootItems.Count > 0)
@@ -823,7 +997,7 @@ namespace ExplorerPro.UI.FileTree
                 // Bring the item into view
                 Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                 {
-                    var treeViewItem = VisualTreeHelperEx.FindTreeViewItem(fileTreeView, item);
+                    var treeViewItem = GetTreeViewItemCached(item);
                     treeViewItem?.BringIntoView();
                 }));
             }
@@ -982,10 +1156,16 @@ namespace ExplorerPro.UI.FileTree
                 
                 if (!_disposed)
                 {
+                    // Clear cache for expanded items as container generation changes
+                    ClearTreeViewItemCache();
+                    
                     Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
                         if (_disposed) return;
                         
                         TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
+                        
+                        // Update visible items cache after expansion
+                        UpdateVisibleItemsCache();
                         
                         // Apply theme to newly expanded items
                         foreach (var childTreeViewItem in VisualTreeHelperEx.FindVisualChildren<TreeViewItem>(treeViewItem))
@@ -1087,7 +1267,7 @@ namespace ExplorerPro.UI.FileTree
                 if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
                 {
                     _selectionService.ClearSelection();
-                    UpdateTreeViewSelection();
+                    ScheduleSelectionUpdate();
                 }
                 
                 // Prepare for selection rectangle
@@ -1105,7 +1285,7 @@ namespace ExplorerPro.UI.FileTree
                     // Handle normal item selection
                     // This will update the SelectionService, which the drag/drop service monitors
                     _selectionService.HandleSelection(item, Keyboard.Modifiers, _rootItems);
-                    UpdateTreeViewSelection();
+                    ScheduleSelectionUpdate();
                     
                     // Don't mark as handled - let drag/drop service also see this event
                     // The drag/drop service will check if the clicked item is selected before starting drag
@@ -1173,7 +1353,7 @@ namespace ExplorerPro.UI.FileTree
             // Delegate keyboard shortcuts to selection service
             if (_selectionService.HandleKeyboardShortcut(e.Key, Keyboard.Modifiers, _rootItems))
             {
-                UpdateTreeViewSelection();
+                ScheduleSelectionUpdate();
                 e.Handled = true;
             }
             else if (e.Key == Key.A && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
@@ -1192,10 +1372,16 @@ namespace ExplorerPro.UI.FileTree
             {
                 TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
                 
+                // Clear cache when containers are regenerated
+                ClearTreeViewItemCache();
+                
+                // Update visible items
+                UpdateVisibleItemsCache();
+                
                 // Also ensure visual selection is updated
-                if (!_isUpdatingVisualSelection)
+                if (!_isUpdatingVisualSelection && _pendingSelectionUpdate)
                 {
-                    UpdateTreeViewSelection();
+                    ScheduleSelectionUpdate();
                 }
                 
                 // Apply theme to new containers
@@ -1243,76 +1429,79 @@ namespace ExplorerPro.UI.FileTree
 
         #endregion
 
-        #region Selection Synchronization
+        #region Selection Synchronization - PERFORMANCE OPTIMIZED
 
         /// <summary>
         /// Updates TreeViewItem selection to match SelectionService state
         /// </summary>
         private void UpdateTreeViewSelection()
         {
+            // Use debounced update for better performance
+            ScheduleSelectionUpdate();
+        }
+        
+        /// <summary>
+        /// Optimized selection update with O(n) complexity
+        /// </summary>
+        private void UpdateTreeViewSelectionOptimized()
+        {
             if (_isUpdatingVisualSelection || _disposed) return;
             
             _isUpdatingVisualSelection = true;
             _isProcessingSelection = true;
             
+            var startTime = DateTime.Now;
+            
             try
             {
-                // Use dispatcher to ensure UI thread updates
-                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                // Track selection changes for logging
+                _selectionUpdateCount++;
+                
+                // Get selected items from SelectionService (already O(1) lookup)
+                var selectedPaths = new HashSet<string>(_selectionService.SelectedPaths, StringComparer.OrdinalIgnoreCase);
+                var processedCount = 0;
+                
+                // Single pass through visible items only - O(n) where n is visible items
+                foreach (var treeViewItem in _visibleTreeViewItems)
                 {
-                    if (_disposed) return;
+                    if (_disposed) break;
                     
-                    try
+                    if (treeViewItem.DataContext is FileTreeItem dataItem)
                     {
-                        // First pass: Clear all TreeViewItem selections
-                        foreach (var tvi in GetAllTreeViewItems())
+                        var shouldBeSelected = selectedPaths.Contains(dataItem.Path);
+                        
+                        // Only update if state changed
+                        if (treeViewItem.IsSelected != shouldBeSelected)
                         {
-                            if (tvi.IsSelected)
-                            {
-                                tvi.IsSelected = false;
-                            }
+                            treeViewItem.IsSelected = shouldBeSelected;
                         }
                         
-                        // Second pass: Set IsSelected for all items in SelectionService
-                        // In multi-select mode, we rely on the DataTrigger in the style to show selection
-                        // based on FileTreeItem.IsSelected property
-                        
-                        // For single selection mode or when we need TreeViewItem.IsSelected
-                        if (!_selectionService.IsMultiSelectMode && _selectionService.FirstSelectedItem != null)
-                        {
-                            var treeViewItem = VisualTreeHelperEx.FindTreeViewItem(fileTreeView, _selectionService.FirstSelectedItem);
-                            if (treeViewItem != null)
-                            {
-                                treeViewItem.IsSelected = true;
-                                treeViewItem.BringIntoView();
-                            }
-                        }
-                        else if (_selectionService.HasSelection)
-                        {
-                            // In multi-select mode, still set the first item as selected for keyboard navigation
-                            var firstItem = _selectionService.FirstSelectedItem;
-                            if (firstItem != null)
-                            {
-                                var treeViewItem = VisualTreeHelperEx.FindTreeViewItem(fileTreeView, firstItem);
-                                if (treeViewItem != null)
-                                {
-                                    treeViewItem.IsSelected = true;
-                                    treeViewItem.BringIntoView();
-                                }
-                            }
-                        }
-                        
-                        // Force visual update
-                        fileTreeView.UpdateLayout();
+                        processedCount++;
                     }
-                    finally
+                }
+                
+                // If multi-select mode is off and we have a selection, ensure one item is focused
+                if (!_selectionService.IsMultiSelectMode && _selectionService.FirstSelectedItem != null)
+                {
+                    var focusItem = GetTreeViewItemCached(_selectionService.FirstSelectedItem);
+                    if (focusItem != null && !focusItem.IsSelected)
                     {
-                        _isUpdatingVisualSelection = false;
-                        _isProcessingSelection = false;
+                        focusItem.IsSelected = true;
+                        focusItem.BringIntoView();
                     }
-                }));
+                }
+                
+                // Performance logging
+                var elapsed = (DateTime.Now - startTime).TotalMilliseconds;
+                if (elapsed > 50) // Log if taking more than 50ms
+                {
+                    System.Diagnostics.Debug.WriteLine($"[PERF] Selection update took {elapsed:F1}ms for {processedCount} items");
+                }
+                
+                // Track performance metrics
+                _lastSelectionUpdateTime = DateTime.Now;
             }
-            catch
+            finally
             {
                 _isUpdatingVisualSelection = false;
                 _isProcessingSelection = false;
@@ -1396,7 +1585,7 @@ namespace ExplorerPro.UI.FileTree
                 }
             }
             
-            UpdateTreeViewSelection();
+            ScheduleSelectionUpdate();
         }
 
         private void CompleteSelectionRectangle()
@@ -1447,7 +1636,7 @@ namespace ExplorerPro.UI.FileTree
                     dialog.IncludeSubfolders ? _rootItems : GetVisibleItems(),
                     dialog.AddToSelection);
                     
-                UpdateTreeViewSelection();
+                ScheduleSelectionUpdate();
             }
         }
 
@@ -1548,7 +1737,7 @@ namespace ExplorerPro.UI.FileTree
             // Update TreeView selection if needed
             if (!_isProcessingSelection && !_isUpdatingVisualSelection)
             {
-                UpdateTreeViewSelection();
+                ScheduleSelectionUpdate();
             }
         }
 
@@ -1592,7 +1781,7 @@ namespace ExplorerPro.UI.FileTree
                     _selectionService.ClearSelection();
                 }
                 
-                UpdateTreeViewSelection();
+                ScheduleSelectionUpdate();
                 e.Handled = true;
             }
         }
@@ -1718,6 +1907,9 @@ namespace ExplorerPro.UI.FileTree
                         item.IsExpanded = true;
                     }
                     
+                    // Clear cache after refresh
+                    ClearTreeViewItemCache();
+                    
                     System.Diagnostics.Debug.WriteLine($"[DEBUG] Directory refreshed: {directoryPath}, Children: {item.Children.Count}");
                 }
                 else if (_rootItems.Count > 0 && string.Equals(_rootItems[0].Path, directoryPath, StringComparison.OrdinalIgnoreCase))
@@ -1734,6 +1926,7 @@ namespace ExplorerPro.UI.FileTree
                     Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                     {
                         OnPropertyChanged(nameof(_rootItems));
+                        UpdateVisibleItemsCache();
                     }));
                 }
             }
@@ -1781,12 +1974,12 @@ namespace ExplorerPro.UI.FileTree
             if (item != null)
             {
                 _selectionService.SelectSingle(item);
-                UpdateTreeViewSelection();
+                ScheduleSelectionUpdate();
                 
                 Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
                     if (_disposed) return;
                     
-                    var treeViewItem = VisualTreeHelperEx.FindTreeViewItem(fileTreeView, item);
+                    var treeViewItem = GetTreeViewItemCached(item);
                     treeViewItem?.BringIntoView();
                 }));
             }
@@ -1871,6 +2064,17 @@ namespace ExplorerPro.UI.FileTree
                     // Unsubscribe from all LoadChildren events
                     UnsubscribeAllLoadChildren();
                     
+                    // Stop and dispose the selection update timer
+                    if (_selectionUpdateTimer != null)
+                    {
+                        _selectionUpdateTimer.Stop();
+                        _selectionUpdateTimer.Tick -= SelectionUpdateTimer_Tick;
+                        _selectionUpdateTimer = null;
+                    }
+                    
+                    // Clear performance optimization caches
+                    ClearTreeViewItemCache();
+                    
                     // Save settings before disposal
                     try
                     {
@@ -1898,6 +2102,13 @@ namespace ExplorerPro.UI.FileTree
                         if (fileTreeView.ItemContainerGenerator != null)
                         {
                             fileTreeView.ItemContainerGenerator.StatusChanged -= ItemContainerGenerator_StatusChanged;
+                        }
+                        
+                        // Unsubscribe from scroll viewer events
+                        var scrollViewer = VisualTreeHelperEx.FindScrollViewer(fileTreeView);
+                        if (scrollViewer != null)
+                        {
+                            scrollViewer.ScrollChanged -= ScrollViewer_ScrollChanged;
                         }
                         
                         // Clear item source
