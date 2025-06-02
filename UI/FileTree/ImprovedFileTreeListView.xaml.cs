@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Refactored with FileOperationHandler
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Complete Updated Version
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -28,7 +28,7 @@ using Path = System.IO.Path;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedFileTreeListView.xaml with FileOperationHandler
+    /// Interaction logic for ImprovedFileTreeListView.xaml with enhanced context menu support
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -724,7 +724,7 @@ namespace ExplorerPro.UI.FileTree
                 // Bring the item into view
                 Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                 {
-                    var treeViewItem = VisualTreeHelperEx.FindTreeViewItemForData(fileTreeView, item);
+                    var treeViewItem = VisualTreeHelperEx.FindTreeViewItem(fileTreeView, item);
                     treeViewItem?.BringIntoView();
                 }));
             }
@@ -915,17 +915,46 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
+            _treeContextMenu.Items.Clear();
+            
+            // Create context menu provider with all dependencies
+            var contextMenuProvider = new ContextMenuProvider(
+                _metadataManager, 
+                _undoManager, 
+                _fileOperationHandler,
+                this);
+            
+            ContextMenu menu;
+            
             if (_selectionService?.HasSelection == true)
             {
-                BuildContextMenuForSelection(_selectionService.SelectedPaths);
+                if (_selectionService.SelectionCount > 1)
+                {
+                    // Multi-select menu
+                    menu = contextMenuProvider.BuildMultiSelectContextMenu(_selectionService.SelectedPaths);
+                }
+                else
+                {
+                    // Single selection from SelectionService
+                    menu = contextMenuProvider.BuildContextMenu(_selectionService.FirstSelectedPath);
+                }
             }
             else if (fileTreeView.SelectedItem is FileTreeItem item)
             {
-                BuildContextMenu(item.Path);
+                // Fallback to TreeView selection
+                menu = contextMenuProvider.BuildContextMenu(item.Path);
             }
             else
             {
+                // No selection - could show a background context menu here
                 e.Handled = true;
+                return;
+            }
+            
+            // Copy items to our context menu
+            foreach (var item in menu.Items)
+            {
+                _treeContextMenu.Items.Add(item);
             }
         }
 
@@ -1118,7 +1147,7 @@ namespace ExplorerPro.UI.FileTree
                         // For single selection mode or when we need TreeViewItem.IsSelected
                         if (!_selectionService.IsMultiSelectMode && _selectionService.FirstSelectedItem != null)
                         {
-                            var treeViewItem = VisualTreeHelperEx.FindTreeViewItemForData(fileTreeView, _selectionService.FirstSelectedItem);
+                            var treeViewItem = VisualTreeHelperEx.FindTreeViewItem(fileTreeView, _selectionService.FirstSelectedItem);
                             if (treeViewItem != null)
                             {
                                 treeViewItem.IsSelected = true;
@@ -1131,7 +1160,7 @@ namespace ExplorerPro.UI.FileTree
                             var firstItem = _selectionService.FirstSelectedItem;
                             if (firstItem != null)
                             {
-                                var treeViewItem = VisualTreeHelperEx.FindTreeViewItemForData(fileTreeView, firstItem);
+                                var treeViewItem = VisualTreeHelperEx.FindTreeViewItem(fileTreeView, firstItem);
                                 if (treeViewItem != null)
                                 {
                                     treeViewItem.IsSelected = true;
@@ -1367,12 +1396,6 @@ namespace ExplorerPro.UI.FileTree
             OnPropertyChanged(nameof(HasSelection));
             OnPropertyChanged(nameof(SelectionCount));
             
-            // Update context menu based on selection
-            if (e.SelectedItems.Count > 0)
-            {
-                BuildContextMenuForSelection(e.SelectedPaths);
-            }
-            
             // Update TreeView selection if needed
             if (!_isProcessingSelection && !_isUpdatingVisualSelection)
             {
@@ -1434,7 +1457,7 @@ namespace ExplorerPro.UI.FileTree
 
         #endregion
 
-        #region Navigation and Context Menu
+        #region Navigation
 
         private void HandleDoubleClick(string path)
         {
@@ -1479,75 +1502,6 @@ namespace ExplorerPro.UI.FileTree
 
             LocationChanged?.Invoke(this, path);
             FileTreeClicked?.Invoke(this, EventArgs.Empty);
-        }
-
-        private void BuildContextMenu(string selectedPath)
-        {
-            try 
-            {
-                _treeContextMenu.Items.Clear();
-    
-                var contextMenuProvider = new ContextMenuProvider(_metadataManager, _undoManager);
-                ContextMenu menu = contextMenuProvider.BuildContextMenu(selectedPath, 
-                    (action, path) => ContextMenuActionTriggered?.Invoke(this, new Tuple<string, string>(action, path)));
-                
-                foreach (var item in menu.Items)
-                {
-                    _treeContextMenu.Items.Add(item);
-                }
-            }
-            catch (Exception ex) 
-            {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to build context menu: {ex.Message}");
-                _treeContextMenu.Items.Clear();
-                var menuItem = new MenuItem { Header = "Refresh" };
-                menuItem.Click += (s, e) => RefreshView();
-                _treeContextMenu.Items.Add(menuItem);
-            }
-        }
-
-        private void BuildContextMenuForSelection(IReadOnlyList<string> selectedPaths)
-        {
-            _treeContextMenu.Items.Clear();
-            
-            if (selectedPaths.Count == 1)
-            {
-                // Single selection - use existing context menu
-                BuildContextMenu(selectedPaths[0]);
-            }
-            else if (selectedPaths.Count > 1)
-            {
-                // Multi-selection context menu
-                var menuItem = new MenuItem { Header = $"Delete {selectedPaths.Count} items" };
-                menuItem.Click += (s, e) => _fileOperationHandler.DeleteMultipleItemsAsync(selectedPaths, this).ConfigureAwait(false);
-                _treeContextMenu.Items.Add(menuItem);
-                
-                menuItem = new MenuItem { Header = $"Copy {selectedPaths.Count} items" };
-                menuItem.Click += (s, e) => _fileOperationHandler.CopyMultipleItems(selectedPaths);
-                _treeContextMenu.Items.Add(menuItem);
-                
-                _treeContextMenu.Items.Add(new Separator());
-                
-                menuItem = new MenuItem { Header = "Select by Pattern..." };
-                menuItem.Click += (s, e) => ShowSelectByPatternDialog();
-                _treeContextMenu.Items.Add(menuItem);
-                
-                menuItem = new MenuItem { Header = "Invert Selection" };
-                menuItem.Click += (s, e) => {
-                    _selectionService.InvertSelection(_rootItems);
-                    UpdateTreeViewSelection();
-                };
-                _treeContextMenu.Items.Add(menuItem);
-                
-                _treeContextMenu.Items.Add(new Separator());
-                
-                menuItem = new MenuItem { Header = "Clear Selection" };
-                menuItem.Click += (s, e) => {
-                    _selectionService.ClearSelection();
-                    UpdateTreeViewSelection();
-                };
-                _treeContextMenu.Items.Add(menuItem);
-            }
         }
         
         #endregion
@@ -1654,7 +1608,7 @@ namespace ExplorerPro.UI.FileTree
                 UpdateTreeViewSelection();
                 
                 Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
-                    var treeViewItem = VisualTreeHelperEx.FindTreeViewItemForData(fileTreeView, item);
+                    var treeViewItem = VisualTreeHelperEx.FindTreeViewItem(fileTreeView, item);
                     treeViewItem?.BringIntoView();
                 }));
             }

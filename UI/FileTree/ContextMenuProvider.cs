@@ -1,258 +1,319 @@
-// UI/FileTree/ContextMenuProvider.cs - Updated to work with FileOperationHandler
-
+// UI/FileTree/ContextMenuProvider.cs - Refactored version
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using ExplorerPro.Models;
 using ExplorerPro.UI.FileTree.Commands;
+using ExplorerPro.UI.Dialogs;
+using Microsoft.Win32;
 
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Provides context menu functionality for the FileTreeView
-    /// Updated to optionally work with FileOperationHandler for cleaner separation
+    /// Provides comprehensive context menu functionality for the FileTreeView
     /// </summary>
     public class ContextMenuProvider
     {
-        private readonly MetadataManager metadataManager;
-        private readonly UndoManager undoManager;
-        private readonly FileOperationHandler fileOperationHandler;
-        private readonly IFileTree fileTree;
+        private readonly MetadataManager _metadataManager;
+        private readonly UndoManager _undoManager;
+        private readonly FileOperationHandler _fileOperationHandler;
+        private readonly IFileTree _fileTree;
         
-        /// <summary>
-        /// Creates a new ContextMenuProvider with FileOperationHandler support
-        /// </summary>
-        /// <param name="metadataManager">Metadata manager for tags and colors</param>
-        /// <param name="undoManager">Undo manager for operations</param>
-        /// <param name="fileOperationHandler">Optional file operation handler for direct operations</param>
-        /// <param name="fileTree">Optional file tree reference for operations</param>
         public ContextMenuProvider(
             MetadataManager metadataManager, 
             UndoManager undoManager,
-            FileOperationHandler fileOperationHandler = null,
-            IFileTree fileTree = null)
+            FileOperationHandler fileOperationHandler,
+            IFileTree fileTree)
         {
-            this.metadataManager = metadataManager ?? throw new ArgumentNullException(nameof(metadataManager));
-            this.undoManager = undoManager ?? throw new ArgumentNullException(nameof(undoManager));
-            this.fileOperationHandler = fileOperationHandler;
-            this.fileTree = fileTree;
-        }
-        
-        /// <summary>
-        /// Legacy constructor for backward compatibility
-        /// </summary>
-        public ContextMenuProvider(MetadataManager metadataManager, UndoManager undoManager)
-            : this(metadataManager, undoManager, null, null)
-        {
+            _metadataManager = metadataManager ?? throw new ArgumentNullException(nameof(metadataManager));
+            _undoManager = undoManager ?? throw new ArgumentNullException(nameof(undoManager));
+            _fileOperationHandler = fileOperationHandler ?? throw new ArgumentNullException(nameof(fileOperationHandler));
+            _fileTree = fileTree ?? throw new ArgumentNullException(nameof(fileTree));
         }
 
         /// <summary>
-        /// Builds a context menu for the given file path
+        /// Builds a comprehensive context menu for single item selection
         /// </summary>
-        /// <param name="selectedPath">The path of the selected item</param>
-        /// <param name="actionHandler">Handler for menu actions (used when FileOperationHandler is not available)</param>
-        /// <returns>A configured context menu</returns>
-        public ContextMenu BuildContextMenu(string selectedPath, Action<string, string> actionHandler = null)
+        public ContextMenu BuildContextMenu(string selectedPath)
         {
             var contextMenu = new ContextMenu();
-            bool isFolder = Directory.Exists(selectedPath);
-            string iconPath = "Assets/Icons";
+            bool isDirectory = Directory.Exists(selectedPath);
+            string iconPath = "Assets/Icons/";
 
-            // File & Folder Actions
-            AddMenuItem(contextMenu, "Open", iconPath + "/folder-open.png", 
-                () => HandleAction("open", selectedPath, actionHandler));
+            // Open operations
+            AddMenuItem(contextMenu, "_Open", iconPath + "folder-open.png", 
+                () => OpenItem(selectedPath), Key.Enter);
             
-            AddMenuItem(contextMenu, "Show Metadata", iconPath + "/info.png", 
-                () => HandleAction("show_metadata", selectedPath, actionHandler));
-            
-            AddMenuItem(contextMenu, "Show in File Explorer", iconPath + "/folder.png", 
-                () => HandleAction("show_in_explorer", selectedPath, actionHandler));
-
-            contextMenu.Items.Add(new Separator());
-
-            // Editing Actions - Use FileOperationHandler when available
-            if (fileOperationHandler != null && fileTree != null)
+            if (!isDirectory)
             {
-                AddMenuItem(contextMenu, "Rename", iconPath + "/folder-pen.png", 
-                    () => HandleRename(selectedPath));
-                
-                AddMenuItem(contextMenu, "Delete", iconPath + "/delete.png", 
-                    () => HandleDelete(selectedPath));
+                AddMenuItem(contextMenu, "Open _with...", iconPath + "app-window.png", 
+                    () => OpenWith(selectedPath));
+                    
+                // Add "Open with" submenu for common programs
+                var openWithMenu = AddSubMenu(contextMenu, "Open with", iconPath + "apps.png");
+                AddOpenWithOptions(openWithMenu, selectedPath);
             }
-            else
+            
+            if (isDirectory)
             {
-                AddMenuItem(contextMenu, "Rename", iconPath + "/folder-pen.png", 
-                    () => HandleAction("rename", selectedPath, actionHandler));
-                
-                AddMenuItem(contextMenu, "Delete", iconPath + "/delete.png", 
-                    () => HandleAction("delete", selectedPath, actionHandler));
+                AddMenuItem(contextMenu, "Open in New _Tab", iconPath + "tab-plus.png", 
+                    () => OpenInNewTab(selectedPath), Key.T, ModifierKeys.Control);
+                    
+                AddMenuItem(contextMenu, "Open in New _Window", iconPath + "window-plus.png", 
+                    () => OpenInNewWindow(selectedPath), Key.N, ModifierKeys.Control | ModifierKeys.Shift);
+                    
+                AddMenuItem(contextMenu, "Open in Windows Explorer", iconPath + "folder.png", 
+                    () => ShowInExplorer(selectedPath));
             }
 
             contextMenu.Items.Add(new Separator());
 
-            // Pin & Tag - These use MetadataManager directly
-            bool isPinned = metadataManager.GetPinnedItems().Contains(selectedPath);
-            AddMenuItem(contextMenu, isPinned ? "Unpin Item" : "Pin Item", iconPath + "/pin.png", 
-                () => HandlePinToggle(selectedPath, actionHandler));
+            // Clipboard operations
+            AddMenuItem(contextMenu, "Cu_t", iconPath + "cut.png", 
+                () => CutItem(selectedPath), Key.X, ModifierKeys.Control);
+                
+            AddMenuItem(contextMenu, "_Copy", iconPath + "copy.png", 
+                () => CopyItem(selectedPath), Key.C, ModifierKeys.Control);
+                
+            AddMenuItem(contextMenu, "_Paste", iconPath + "paste.png", 
+                () => PasteItems(selectedPath), Key.V, ModifierKeys.Control,
+                isEnabled: Clipboard.ContainsFileDropList());
+                
+            AddMenuItem(contextMenu, "_Duplicate", iconPath + "copy-plus.png", 
+                () => DuplicateItem(selectedPath), Key.D, ModifierKeys.Control);
+
+            contextMenu.Items.Add(new Separator());
+
+            // Create operations
+            if (isDirectory)
+            {
+                var newMenu = AddSubMenu(contextMenu, "_New", iconPath + "plus.png");
+                
+                AddMenuItem(newMenu, "_Folder", iconPath + "folder-plus.png", 
+                    () => _fileOperationHandler.CreateNewFolder(selectedPath, _fileTree));
+                    
+                AddMenuItem(newMenu, "_Text Document", iconPath + "file-text.png", 
+                    () => _fileOperationHandler.CreateNewFile(selectedPath, _fileTree, "New Text Document.txt"));
+                    
+                newMenu.Items.Add(new Separator());
+                
+                // Add more file types
+                AddMenuItem(newMenu, "_Word Document", iconPath + "file-word.png", 
+                    () => _fileOperationHandler.CreateNewFile(selectedPath, _fileTree, "New Document.docx"));
+                    
+                AddMenuItem(newMenu, "_Excel Workbook", iconPath + "file-excel.png", 
+                    () => _fileOperationHandler.CreateNewFile(selectedPath, _fileTree, "New Workbook.xlsx"));
+                    
+                AddMenuItem(newMenu, "_PowerPoint Presentation", iconPath + "file-powerpoint.png", 
+                    () => _fileOperationHandler.CreateNewFile(selectedPath, _fileTree, "New Presentation.pptx"));
+            }
+
+            contextMenu.Items.Add(new Separator());
+
+            // File operations
+            AddMenuItem(contextMenu, "_Delete", iconPath + "delete.png", 
+                () => _fileOperationHandler.DeleteItem(selectedPath, _fileTree), Key.Delete);
+                
+            AddMenuItem(contextMenu, "Rena_me", iconPath + "edit.png", 
+                () => RenameItem(selectedPath), Key.F2);
+
+            contextMenu.Items.Add(new Separator());
+
+            // Organization
+            var organizeMenu = AddSubMenu(contextMenu, "Organize", iconPath + "folder-cog.png");
             
-            AddMenuItem(contextMenu, "Add Tag", iconPath + "/tag.png", 
-                () => HandleAction("add_tag", selectedPath, actionHandler));
+            bool isPinned = _metadataManager.GetPinnedItems().Contains(selectedPath);
+            AddMenuItem(organizeMenu, isPinned ? "Unpin from Quick Access" : "Pin to Quick Access", 
+                iconPath + "pin.png", () => TogglePin(selectedPath));
             
-            var tags = metadataManager.GetTags(selectedPath);
+            organizeMenu.Items.Add(new Separator());
+            
+            AddMenuItem(organizeMenu, "Add _Tag...", iconPath + "tag.png", 
+                () => ShowAddTagDialog(selectedPath));
+            
+            var tags = _metadataManager.GetTags(selectedPath);
             if (tags.Count > 0)
             {
-                AddMenuItem(contextMenu, "Remove Tag", string.Empty, 
-                    () => HandleAction("remove_tag", selectedPath, actionHandler));
+                var removeTagMenu = AddSubMenu(organizeMenu, "Remove Tag", iconPath + "tag-remove.png");
+                foreach (var tag in tags)
+                {
+                    AddMenuItem(removeTagMenu, tag, null, () => RemoveTag(selectedPath, tag));
+                }
             }
-
-            contextMenu.Items.Add(new Separator());
-
-            // Copy/Paste - Use FileOperationHandler when available
-            if (fileOperationHandler != null)
-            {
-                AddMenuItem(contextMenu, "Copy", iconPath + "/copy.png", 
-                    () => HandleCopy(selectedPath));
-                
-                AddMenuItem(contextMenu, "Paste", iconPath + "/clipboard-paste.png", 
-                    () => HandlePaste(selectedPath));
-                
-                AddMenuItem(contextMenu, "Duplicate", iconPath + "/copy-plus.png", 
-                    () => HandleDuplicate(selectedPath));
-            }
-            else
-            {
-                AddMenuItem(contextMenu, "Copy", iconPath + "/copy.png", 
-                    () => HandleAction("copy", selectedPath, actionHandler));
-                
-                AddMenuItem(contextMenu, "Paste", iconPath + "/clipboard-paste.png", 
-                    () => HandleAction("paste", selectedPath, actionHandler));
-                
-                AddMenuItem(contextMenu, "Duplicate", iconPath + "/copy-plus.png", 
-                    () => HandleAction("duplicate", selectedPath, actionHandler));
-            }
-
-            contextMenu.Items.Add(new Separator());
-
-            // File/Folder Creation - Use FileOperationHandler when available
-            if (fileOperationHandler != null && fileTree != null && isFolder)
-            {
-                AddMenuItem(contextMenu, "Add New File", iconPath + "/file-plus.png", 
-                    () => fileOperationHandler.CreateNewFile(selectedPath, fileTree));
-                
-                AddMenuItem(contextMenu, "Add New Folder", iconPath + "/folder-plus.png", 
-                    () => fileOperationHandler.CreateNewFolder(selectedPath, fileTree));
-            }
-            else
-            {
-                AddMenuItem(contextMenu, "Add New File", iconPath + "/file-plus.png", 
-                    () => HandleAction("new_file", selectedPath, actionHandler));
-                
-                AddMenuItem(contextMenu, "Add New Folder", iconPath + "/folder-plus.png", 
-                    () => HandleAction("new_folder", selectedPath, actionHandler));
-            }
-
-            contextMenu.Items.Add(new Separator());
-
-            // Tree Navigation
-            AddMenuItem(contextMenu, "Collapse All", iconPath + "/list-collapse.png", 
-                () => HandleAction("collapse_all", selectedPath, actionHandler));
             
-            AddMenuItem(contextMenu, "Expand All", iconPath + "/expand.png", 
-                () => HandleAction("expand_all", selectedPath, actionHandler));
-
-            // Folder-specific actions
-            if (isFolder)
+            organizeMenu.Items.Add(new Separator());
+            
+            var colorMenu = AddSubMenu(organizeMenu, "Set Color", iconPath + "palette.png");
+            AddColorOptions(colorMenu, selectedPath);
+            
+            // Archive operations (if applicable)
+            string extension = Path.GetExtension(selectedPath).ToLower();
+            if (IsArchive(extension))
             {
                 contextMenu.Items.Add(new Separator());
-
-                AddMenuItem(contextMenu, "Open in New Tab", iconPath + "/app-window.png", 
-                    () => HandleAction("open_in_new_tab", selectedPath, actionHandler));
-                
-                AddMenuItem(contextMenu, "Open in New Window", iconPath + "/app-window.png", 
-                    () => HandleAction("open_in_new_window", selectedPath, actionHandler));
-                
-                AddMenuItem(contextMenu, "Toggle Split View", iconPath + "/square-split-horizontal.png", 
-                    () => HandleAction("toggle_split_view", selectedPath, actionHandler));
+                AddMenuItem(contextMenu, "E_xtract Here", iconPath + "archive-extract.png", 
+                    () => ExtractArchive(selectedPath, Path.GetDirectoryName(selectedPath)));
+                    
+                AddMenuItem(contextMenu, "Extract to...", iconPath + "archive-extract.png", 
+                    () => ExtractArchiveTo(selectedPath));
             }
-
-            // File-specific actions
-            if (File.Exists(selectedPath))
+            else if (!isDirectory || Directory.GetFiles(selectedPath).Any() || Directory.GetDirectories(selectedPath).Any())
             {
-                string extension = Path.GetExtension(selectedPath).ToLower();
-                
-                if (extension == ".pdf")
-                {
-                    AddMenuItem(contextMenu, "Preview PDF", iconPath + "/pdf-preview.png", 
-                        () => HandleAction("preview_pdf", selectedPath, actionHandler));
-                }
-                
-                List<string> supportedImages = new List<string> { ".jpg", ".jpeg", ".png", ".svg", ".heic", ".gif", ".bmp" };
-                if (supportedImages.Contains(extension))
-                {
-                    AddMenuItem(contextMenu, "Preview Image", iconPath + "/image-preview.png", 
-                        () => HandleAction("preview_image", selectedPath, actionHandler));
-                }
+                contextMenu.Items.Add(new Separator());
+                AddMenuItem(contextMenu, "Add to archive...", iconPath + "archive-add.png", 
+                    () => CompressToArchive(selectedPath));
             }
 
-            // Text Color
-            AddMenuItem(contextMenu, "Change Text Color", string.Empty, 
-                () => HandleAction("change_text_color", selectedPath, actionHandler));
+            // Send to submenu
+            contextMenu.Items.Add(new Separator());
+            var sendToMenu = AddSubMenu(contextMenu, "Send to", iconPath + "send.png");
+            AddSendToOptions(sendToMenu, selectedPath);
+
+            contextMenu.Items.Add(new Separator());
+
+            // Properties
+            AddMenuItem(contextMenu, "P_roperties", iconPath + "info.png", 
+                () => ShowProperties(selectedPath), Key.Enter, ModifierKeys.Alt);
 
             return contextMenu;
         }
 
         /// <summary>
-        /// Builds a context menu for multiple selected items
+        /// Builds context menu for multiple selection
         /// </summary>
-        /// <param name="selectedPaths">Collection of selected paths</param>
-        /// <param name="actionHandler">Handler for menu actions</param>
-        /// <returns>A configured context menu</returns>
-        public ContextMenu BuildMultiSelectContextMenu(IReadOnlyList<string> selectedPaths, Action<string, string> actionHandler = null)
+        public ContextMenu BuildMultiSelectContextMenu(IReadOnlyList<string> selectedPaths)
         {
             var contextMenu = new ContextMenu();
-            string iconPath = "Assets/Icons";
+            string iconPath = "Assets/Icons/";
+            
+            bool allDirectories = selectedPaths.All(p => Directory.Exists(p));
+            bool allFiles = selectedPaths.All(p => File.Exists(p));
+            bool hasArchives = selectedPaths.Any(p => File.Exists(p) && IsArchive(Path.GetExtension(p)));
 
-            // Multi-select operations
-            if (fileOperationHandler != null && fileTree != null)
+            // Open operations
+            if (selectedPaths.Count <= 10) // Limit to prevent too many windows
             {
-                AddMenuItem(contextMenu, $"Delete {selectedPaths.Count} items", iconPath + "/delete.png",
-                    () => fileOperationHandler.DeleteMultipleItemsAsync(selectedPaths, fileTree).ConfigureAwait(false));
-                
-                AddMenuItem(contextMenu, $"Copy {selectedPaths.Count} items", iconPath + "/copy.png",
-                    () => fileOperationHandler.CopyMultipleItems(selectedPaths));
+                AddMenuItem(contextMenu, "_Open All", iconPath + "folder-open.png", 
+                    () => OpenMultipleItems(selectedPaths));
             }
-            else
-            {
-                AddMenuItem(contextMenu, $"Delete {selectedPaths.Count} items", iconPath + "/delete.png",
-                    () => HandleAction("delete_multiple", string.Join("|", selectedPaths), actionHandler));
+
+            contextMenu.Items.Add(new Separator());
+
+            // Clipboard operations
+            AddMenuItem(contextMenu, "Cu_t", iconPath + "cut.png", 
+                () => CutMultipleItems(selectedPaths), Key.X, ModifierKeys.Control);
                 
-                AddMenuItem(contextMenu, $"Copy {selectedPaths.Count} items", iconPath + "/copy.png",
-                    () => HandleAction("copy_multiple", string.Join("|", selectedPaths), actionHandler));
+            AddMenuItem(contextMenu, "_Copy", iconPath + "copy.png", 
+                () => _fileOperationHandler.CopyMultipleItems(selectedPaths), Key.C, ModifierKeys.Control);
+
+            contextMenu.Items.Add(new Separator());
+
+            // Delete
+            AddMenuItem(contextMenu, $"_Delete ({selectedPaths.Count} items)", iconPath + "delete.png", 
+                () => _fileOperationHandler.DeleteMultipleItemsAsync(selectedPaths, _fileTree).ConfigureAwait(false), 
+                Key.Delete);
+
+            contextMenu.Items.Add(new Separator());
+
+            // Organization
+            var organizeMenu = AddSubMenu(contextMenu, "Organize", iconPath + "folder-cog.png");
+            
+            AddMenuItem(organizeMenu, "Add _Tag to All...", iconPath + "tag.png", 
+                () => ShowAddTagDialogForMultiple(selectedPaths));
+                
+            var colorMenu = AddSubMenu(organizeMenu, "Set Color for All", iconPath + "palette.png");
+            AddColorOptionsForMultiple(colorMenu, selectedPaths);
+
+            // Archive operations
+            if (hasArchives)
+            {
+                contextMenu.Items.Add(new Separator());
+                AddMenuItem(contextMenu, "E_xtract All Here", iconPath + "archive-extract.png", 
+                    () => ExtractMultipleArchives(selectedPaths));
             }
             
             contextMenu.Items.Add(new Separator());
-            
+            AddMenuItem(contextMenu, "Add to archive...", iconPath + "archive-add.png", 
+                () => CompressMultipleToArchive(selectedPaths));
+
             // Selection operations
-            AddMenuItem(contextMenu, "Select by Pattern...", iconPath + "/filter.png",
-                () => HandleAction("select_by_pattern", "", actionHandler));
-            
-            AddMenuItem(contextMenu, "Invert Selection", iconPath + "/selection-inverse.png",
-                () => HandleAction("invert_selection", "", actionHandler));
-            
             contextMenu.Items.Add(new Separator());
             
-            AddMenuItem(contextMenu, "Clear Selection", iconPath + "/selection-none.png",
-                () => HandleAction("clear_selection", "", actionHandler));
-            
+            AddMenuItem(contextMenu, "Select _All", iconPath + "select-all.png", 
+                () => _fileTree.SelectAll(), Key.A, ModifierKeys.Control);
+                
+            AddMenuItem(contextMenu, "_Invert Selection", iconPath + "select-inverse.png", 
+                () => _fileTree.InvertSelection(), Key.I, ModifierKeys.Control);
+                
+            AddMenuItem(contextMenu, "Select by Pattern...", iconPath + "filter.png", 
+                () => ShowSelectByPatternDialog(), Key.P, ModifierKeys.Control);
+
+            contextMenu.Items.Add(new Separator());
+
+            // Properties
+            AddMenuItem(contextMenu, $"P_roperties ({selectedPaths.Count} items)", iconPath + "info.png", 
+                () => ShowMultipleProperties(selectedPaths), Key.Enter, ModifierKeys.Alt);
+
             return contextMenu;
         }
 
-        #region Private Helper Methods
+        #region Menu Item Helpers
 
-        private void AddMenuItem(ContextMenu menu, string header, string iconPath, Action clickHandler)
+        private MenuItem AddMenuItem(ItemsControl parent, string header, string iconPath, 
+            Action clickHandler, Key? gestureKey = null, ModifierKeys? gestureModifiers = null, 
+            bool isEnabled = true)
+        {
+            var menuItem = new MenuItem 
+            { 
+                Header = header,
+                IsEnabled = isEnabled
+            };
+            
+            if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
+            {
+                try
+                {
+                    var image = new Image
+                    {
+                        Source = new BitmapImage(new Uri(Path.GetFullPath(iconPath))),
+                        Width = 16,
+                        Height = 16
+                    };
+                    menuItem.Icon = image;
+                }
+                catch { }
+            }
+            
+            if (gestureKey.HasValue)
+            {
+                var gesture = gestureModifiers.HasValue 
+                    ? new KeyGesture(gestureKey.Value, gestureModifiers.Value)
+                    : new KeyGesture(gestureKey.Value);
+                menuItem.InputGestureText = gesture.GetDisplayStringForCulture(
+                    System.Globalization.CultureInfo.CurrentCulture);
+            }
+            
+            menuItem.Click += (s, e) => 
+            {
+                try { clickHandler(); }
+                catch (Exception ex) 
+                { 
+                    MessageBox.Show($"Error: {ex.Message}", "Operation Failed", 
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            };
+            
+            parent.Items.Add(menuItem);
+            return menuItem;
+        }
+
+        private MenuItem AddSubMenu(ItemsControl parent, string header, string iconPath)
         {
             var menuItem = new MenuItem { Header = header };
             
@@ -262,29 +323,112 @@ namespace ExplorerPro.UI.FileTree
                 {
                     var image = new Image
                     {
-                        Source = new BitmapImage(new Uri(iconPath, UriKind.Relative)),
+                        Source = new BitmapImage(new Uri(Path.GetFullPath(iconPath))),
                         Width = 16,
                         Height = 16
                     };
                     menuItem.Icon = image;
                 }
-                catch
-                {
-                    // Ignore icon loading errors
-                }
+                catch { }
             }
             
-            menuItem.Click += (s, e) => clickHandler();
-            menu.Items.Add(menuItem);
+            parent.Items.Add(menuItem);
+            return menuItem;
         }
 
-        private void HandleAction(string action, string path, Action<string, string> actionHandler)
+        #endregion
+
+        #region Operation Implementations
+
+        private void OpenItem(string path)
         {
-            actionHandler?.Invoke(action, path);
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = path,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to open:\n{ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
-        private void HandleRename(string path)
+        private void OpenWith(string path)
         {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "rundll32.exe",
+                    Arguments = $"shell32.dll,OpenAs_RunDLL {path}",
+                    UseShellExecute = true
+                });
+            }
+            catch { }
+        }
+
+        private void ShowInExplorer(string path)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    Process.Start("explorer.exe", $"/select,\"{path}\"");
+                }
+                else if (Directory.Exists(path))
+                {
+                    Process.Start("explorer.exe", path);
+                }
+            }
+            catch { }
+        }
+
+        private void OpenInNewTab(string path)
+        {
+            // This would need to be implemented based on your tab system
+            var window = Application.Current.MainWindow;
+            // Example: ((MainWindow)window).CreateNewTab(path);
+        }
+
+        private void OpenInNewWindow(string path)
+        {
+            // This would open a new instance of your file explorer
+            // Example: new ExplorerWindow(path).Show();
+        }
+
+        private void CutItem(string path)
+        {
+            _fileOperationHandler.CopyItem(path);
+            // Mark item as "cut" visually (semi-transparent)
+            // This would need to be tracked in your file tree
+        }
+
+        private void CopyItem(string path)
+        {
+            _fileOperationHandler.CopyItem(path);
+        }
+
+        private void PasteItems(string targetPath)
+        {
+            string target = Directory.Exists(targetPath) ? targetPath : Path.GetDirectoryName(targetPath);
+            _fileOperationHandler.PasteItemsAsync(target).ConfigureAwait(false);
+        }
+
+        private void DuplicateItem(string path)
+        {
+            _fileOperationHandler.CopyItem(path);
+            string target = Directory.Exists(path) ? path : Path.GetDirectoryName(path);
+            _fileOperationHandler.PasteItemsAsync(target).ConfigureAwait(false);
+        }
+
+        private void RenameItem(string path)
+        {
+            // This could show an inline rename UI in the tree
+            // For now, use the input dialog
             string currentName = Path.GetFileName(path);
             string newName = Microsoft.VisualBasic.Interaction.InputBox(
                 "Enter new name:", 
@@ -293,55 +437,259 @@ namespace ExplorerPro.UI.FileTree
                 
             if (!string.IsNullOrWhiteSpace(newName) && newName != currentName)
             {
-                fileOperationHandler.RenameItem(path, newName, fileTree);
+                _fileOperationHandler.RenameItem(path, newName, _fileTree);
             }
         }
 
-        private void HandleDelete(string path)
+        private void TogglePin(string path)
         {
-            fileOperationHandler.DeleteItem(path, fileTree);
+            if (_metadataManager.GetPinnedItems().Contains(path))
+                _metadataManager.RemovePinnedItem(path);
+            else
+                _metadataManager.AddPinnedItem(path);
         }
 
-        private void HandleCopy(string path)
+        private void ShowAddTagDialog(string path)
         {
-            fileOperationHandler.CopyItem(path);
-        }
-
-        private void HandlePaste(string path)
-        {
-            string targetPath = Directory.Exists(path) ? path : Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(targetPath))
+            string tag = Microsoft.VisualBasic.Interaction.InputBox(
+                "Enter tag name:", "Add Tag", "");
+                
+            if (!string.IsNullOrWhiteSpace(tag))
             {
-                fileOperationHandler.PasteItemsAsync(targetPath).ConfigureAwait(false);
+                _metadataManager.AddTag(path, tag);
             }
         }
 
-        private void HandleDuplicate(string path)
+        private void RemoveTag(string path, string tag)
         {
-            // Copy the item
-            fileOperationHandler.CopyItem(path);
+            _metadataManager.RemoveTag(path, tag);
+        }
+
+        private bool IsArchive(string extension)
+        {
+            var archiveExtensions = new[] { ".zip", ".rar", ".7z", ".tar", ".gz", ".bz2" };
+            return archiveExtensions.Contains(extension.ToLower());
+        }
+
+        private void ExtractArchive(string archivePath, string targetPath)
+        {
+            // Implement archive extraction
+            MessageBox.Show("Archive extraction not yet implemented", "Coming Soon");
+        }
+
+        private void ExtractArchiveTo(string archivePath)
+        {
+            var dialog = new System.Windows.Forms.FolderBrowserDialog();
+            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                ExtractArchive(archivePath, dialog.SelectedPath);
+            }
+        }
+
+        private void CompressToArchive(string path)
+        {
+            // Implement compression
+            MessageBox.Show("Archive compression not yet implemented", "Coming Soon");
+        }
+
+        private void ShowProperties(string path)
+        {
+            // Show Windows properties dialog
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{path}\"",
+                UseShellExecute = true,
+                Verb = "properties"
+            });
+        }
+
+        private void AddOpenWithOptions(MenuItem parentMenu, string filePath)
+        {
+            // Add common programs based on file type
+            string extension = Path.GetExtension(filePath).ToLower();
             
-            // Then paste it in the same directory
-            string targetPath = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(targetPath))
+            switch (extension)
             {
-                fileOperationHandler.PasteItemsAsync(targetPath).ConfigureAwait(false);
+                case ".txt":
+                case ".log":
+                case ".ini":
+                    AddMenuItem(parentMenu, "Notepad", null, () => OpenWithProgram(filePath, "notepad.exe"));
+                    break;
+                    
+                case ".jpg":
+                case ".jpeg":
+                case ".png":
+                case ".gif":
+                case ".bmp":
+                    AddMenuItem(parentMenu, "Paint", null, () => OpenWithProgram(filePath, "mspaint.exe"));
+                    AddMenuItem(parentMenu, "Photos", null, () => OpenWithProgram(filePath, "ms-photos:"));
+                    break;
             }
+            
+            parentMenu.Items.Add(new Separator());
+            AddMenuItem(parentMenu, "Choose another app...", null, () => OpenWith(filePath));
         }
 
-        private void HandlePinToggle(string path, Action<string, string> actionHandler)
+        private void OpenWithProgram(string filePath, string program)
         {
-            var pinnedItems = metadataManager.GetPinnedItems();
-            if (pinnedItems.Contains(path))
+            try
             {
-                metadataManager.RemovePinnedItem(path);
-                actionHandler?.Invoke("unpin", path);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = program,
+                    Arguments = $"\"{filePath}\"",
+                    UseShellExecute = true
+                });
+            }
+            catch { }
+        }
+
+        private void AddColorOptions(MenuItem parentMenu, string path)
+        {
+            var colors = new[]
+            {
+                ("Red", "#FF0000"),
+                ("Orange", "#FFA500"),
+                ("Yellow", "#FFFF00"),
+                ("Green", "#00FF00"),
+                ("Blue", "#0000FF"),
+                ("Purple", "#800080"),
+                ("Black", "#000000"),
+                ("Gray", "#808080")
+            };
+            
+            foreach (var (name, hex) in colors)
+            {
+                AddMenuItem(parentMenu, name, null, () => SetItemColor(path, hex));
+            }
+            
+            parentMenu.Items.Add(new Separator());
+            AddMenuItem(parentMenu, "Remove Color", null, () => SetItemColor(path, null));
+        }
+
+        private void SetItemColor(string path, string colorHex)
+        {
+            if (colorHex == null)
+            {
+                _metadataManager.SetItemColor(path, string.Empty);
             }
             else
             {
-                metadataManager.AddPinnedItem(path);
-                actionHandler?.Invoke("pin", path);
+                _metadataManager.SetItemColor(path, colorHex);
+                _metadataManager.AddRecentColor(colorHex);
             }
+            _fileTree.RefreshView();
+        }
+
+        private void AddSendToOptions(MenuItem parentMenu, string path)
+        {
+            AddMenuItem(parentMenu, "Desktop (create shortcut)", null, 
+                () => CreateShortcut(path, Environment.GetFolderPath(Environment.SpecialFolder.Desktop)));
+                
+            AddMenuItem(parentMenu, "Documents", null, 
+                () => CopyToFolder(path, Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)));
+                
+            AddMenuItem(parentMenu, "Compressed (zipped) folder", null, 
+                () => CompressToArchive(path));
+        }
+
+        private void CreateShortcut(string targetPath, string shortcutLocation)
+        {
+            // Implement shortcut creation
+            MessageBox.Show("Shortcut creation not yet implemented", "Coming Soon");
+        }
+
+        private void CopyToFolder(string sourcePath, string targetFolder)
+        {
+            _fileOperationHandler.CopyItem(sourcePath);
+            _fileOperationHandler.PasteItemsAsync(targetFolder).ConfigureAwait(false);
+        }
+
+        // Multi-select operations
+        private void OpenMultipleItems(IReadOnlyList<string> paths)
+        {
+            foreach (var path in paths.Take(10)) // Limit to prevent too many windows
+            {
+                OpenItem(path);
+            }
+        }
+
+        private void CutMultipleItems(IReadOnlyList<string> paths)
+        {
+            _fileOperationHandler.CopyMultipleItems(paths);
+            // Mark items as "cut" visually
+        }
+
+        private void ShowAddTagDialogForMultiple(IReadOnlyList<string> paths)
+        {
+            string tag = Microsoft.VisualBasic.Interaction.InputBox(
+                $"Enter tag to add to {paths.Count} items:", "Add Tag", "");
+                
+            if (!string.IsNullOrWhiteSpace(tag))
+            {
+                foreach (var path in paths)
+                {
+                    _metadataManager.AddTag(path, tag);
+                }
+            }
+        }
+
+        private void AddColorOptionsForMultiple(MenuItem parentMenu, IReadOnlyList<string> paths)
+        {
+            var colors = new[]
+            {
+                ("Red", "#FF0000"),
+                ("Orange", "#FFA500"),
+                ("Yellow", "#FFFF00"),
+                ("Green", "#00FF00"),
+                ("Blue", "#0000FF"),
+                ("Purple", "#800080"),
+                ("Black", "#000000"),
+                ("Gray", "#808080")
+            };
+            
+            foreach (var (name, hex) in colors)
+            {
+                AddMenuItem(parentMenu, name, null, () => SetMultipleItemsColor(paths, hex));
+            }
+            
+            parentMenu.Items.Add(new Separator());
+            AddMenuItem(parentMenu, "Remove Color", null, () => SetMultipleItemsColor(paths, null));
+        }
+
+        private void SetMultipleItemsColor(IReadOnlyList<string> paths, string colorHex)
+        {
+            foreach (var path in paths)
+            {
+                SetItemColor(path, colorHex);
+            }
+        }
+
+        private void ExtractMultipleArchives(IReadOnlyList<string> paths)
+        {
+            var archives = paths.Where(p => File.Exists(p) && IsArchive(Path.GetExtension(p)));
+            foreach (var archive in archives)
+            {
+                ExtractArchive(archive, Path.GetDirectoryName(archive));
+            }
+        }
+
+        private void CompressMultipleToArchive(IReadOnlyList<string> paths)
+        {
+            // Implement multiple file compression
+            MessageBox.Show("Multi-file compression not yet implemented", "Coming Soon");
+        }
+
+        private void ShowSelectByPatternDialog()
+        {
+            _fileTree.SelectByPattern("*.*", false);
+        }
+
+        private void ShowMultipleProperties(IReadOnlyList<string> paths)
+        {
+            // Could show a custom properties dialog for multiple items
+            MessageBox.Show($"Properties for {paths.Count} items", "Properties");
         }
 
         #endregion
