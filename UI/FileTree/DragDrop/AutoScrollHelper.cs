@@ -1,4 +1,4 @@
-// UI/FileTree/DragDrop/AutoScrollHelper.cs
+// UI/FileTree/DragDrop/AutoScrollHelper.cs - Fixed version with proper cleanup
 using System;
 using System.Windows;
 using System.Windows.Controls;
@@ -10,6 +10,7 @@ namespace ExplorerPro.UI.FileTree.DragDrop
 {
     /// <summary>
     /// Provides automatic scrolling when dragging near edges of a scrollable control
+    /// Fixed version with proper timer management and disposal
     /// </summary>
     public class AutoScrollHelper : IDisposable
     {
@@ -25,11 +26,14 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         #region Fields
         
         private readonly ScrollViewer _scrollViewer;
-        private readonly DispatcherTimer _scrollTimer;
+        private DispatcherTimer _scrollTimer;
         private Point _currentPosition;
         private bool _isActive;
         private double _verticalScrollSpeed;
         private double _horizontalScrollSpeed;
+        
+        // Store event handler for cleanup
+        private EventHandler _scrollTimerTickHandler;
         
         #endregion
         
@@ -39,11 +43,15 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         {
             _scrollViewer = scrollViewer ?? throw new ArgumentNullException(nameof(scrollViewer));
             
+            // Create event handler
+            _scrollTimerTickHandler = OnScrollTimerTick;
+            
+            // Initialize timer
             _scrollTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromMilliseconds(TIMER_INTERVAL)
             };
-            _scrollTimer.Tick += OnScrollTimerTick;
+            _scrollTimer.Tick += _scrollTimerTickHandler;
         }
         
         #endregion
@@ -55,7 +63,10 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         /// </summary>
         public void Start()
         {
-            if (!_isActive)
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(AutoScrollHelper));
+                
+            if (!_isActive && _scrollTimer != null)
             {
                 _isActive = true;
                 _scrollTimer.Start();
@@ -67,10 +78,12 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         /// </summary>
         public void Stop()
         {
+            if (_disposed) return;
+            
             if (_isActive)
             {
                 _isActive = false;
-                _scrollTimer.Stop();
+                _scrollTimer?.Stop();
                 _verticalScrollSpeed = 0;
                 _horizontalScrollSpeed = 0;
             }
@@ -81,6 +94,9 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         /// </summary>
         public void UpdatePosition(Point position)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(AutoScrollHelper));
+                
             _currentPosition = position;
             CalculateScrollSpeeds();
         }
@@ -90,6 +106,10 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         /// </summary>
         public bool IsInScrollZone(Point position)
         {
+            if (_disposed) return false;
+            
+            if (_scrollViewer == null) return false;
+            
             var bounds = new Rect(0, 0, _scrollViewer.ActualWidth, _scrollViewer.ActualHeight);
             
             if (!bounds.Contains(position))
@@ -107,6 +127,8 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         
         private void CalculateScrollSpeeds()
         {
+            if (_disposed || _scrollViewer == null) return;
+            
             var bounds = new Rect(0, 0, _scrollViewer.ActualWidth, _scrollViewer.ActualHeight);
             
             // Reset speeds
@@ -147,7 +169,7 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         
         private void OnScrollTimerTick(object sender, EventArgs e)
         {
-            if (!_isActive) return;
+            if (_disposed || !_isActive || _scrollViewer == null) return;
             
             bool scrolled = false;
             
@@ -223,12 +245,33 @@ namespace ExplorerPro.UI.FileTree.DragDrop
             {
                 if (disposing)
                 {
+                    // Stop timer first
                     Stop();
-                    _scrollTimer.Tick -= OnScrollTimerTick;
+                    
+                    // Cleanup timer
+                    if (_scrollTimer != null)
+                    {
+                        // Unsubscribe event handler
+                        if (_scrollTimerTickHandler != null)
+                        {
+                            _scrollTimer.Tick -= _scrollTimerTickHandler;
+                        }
+                        
+                        // Clear timer reference
+                        _scrollTimer = null;
+                    }
+                    
+                    // Clear event handler reference
+                    _scrollTimerTickHandler = null;
                 }
                 
                 _disposed = true;
             }
+        }
+        
+        ~AutoScrollHelper()
+        {
+            Dispose(false);
         }
         
         #endregion

@@ -1,4 +1,4 @@
-// UI/FileTree/Services/FileTreeDragDropService.cs - Updated for new selection system
+// UI/FileTree/Services/FileTreeDragDropService.cs - Fixed version with proper cleanup
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -19,7 +19,7 @@ namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
     /// Enhanced drag and drop service with multi-selection, visual feedback, and advanced features
-    /// Updated to work with the new SelectionService as single source of truth
+    /// Fixed version with proper memory management and disposal
     /// </summary>
     public class FileTreeDragDropService : IDisposable
     {
@@ -54,6 +54,11 @@ namespace ExplorerPro.UI.FileTree.Services
         // Store the getItemFromPoint delegate
         private Func<Point, FileTreeItem> _getItemFromPoint;
         
+        // Store event handlers for proper cleanup
+        private EventHandler<FileTreeItem> _springLoadedExpandingHandler;
+        private EventHandler<FileTreeItem> _springLoadedCollapsingHandler;
+        private EventHandler<FileTreeSelectionChangedEventArgs> _selectionChangedHandler;
+        
         #endregion
         
         #region Events
@@ -82,9 +87,17 @@ namespace ExplorerPro.UI.FileTree.Services
             _fileOperations = fileOperations ?? new FileOperations.FileOperations();
             _selectionService = selectionService ?? throw new ArgumentNullException(nameof(selectionService));
             
+            // Initialize helper objects
             _springLoadedHelper = new SpringLoadedFolderHelper();
-            _springLoadedHelper.FolderExpanding += OnSpringLoadedFolderExpanding;
-            _springLoadedHelper.FolderCollapsing += OnSpringLoadedFolderCollapsing;
+            
+            // Create and store event handlers
+            _springLoadedExpandingHandler = OnSpringLoadedFolderExpanding;
+            _springLoadedCollapsingHandler = OnSpringLoadedFolderCollapsing;
+            _selectionChangedHandler = OnSelectionChanged;
+            
+            // Subscribe to events
+            _springLoadedHelper.FolderExpanding += _springLoadedExpandingHandler;
+            _springLoadedHelper.FolderCollapsing += _springLoadedCollapsingHandler;
         }
         
         #endregion
@@ -106,6 +119,8 @@ namespace ExplorerPro.UI.FileTree.Services
             var scrollViewer = VisualTreeHelperEx.FindScrollViewer(_control);
             if (scrollViewer != null)
             {
+                // Dispose old helper if exists
+                _autoScrollHelper?.Dispose();
                 _autoScrollHelper = new AutoScrollHelper(scrollViewer);
             }
             
@@ -123,7 +138,10 @@ namespace ExplorerPro.UI.FileTree.Services
             _control.PreviewMouseLeftButtonUp += OnPreviewMouseLeftButtonUp;
             
             // Subscribe to selection changes to know when to enable dragging
-            _selectionService.SelectionChanged += OnSelectionChanged;
+            if (_selectionService != null)
+            {
+                _selectionService.SelectionChanged += _selectionChangedHandler;
+            }
         }
         
         /// <summary>
@@ -141,6 +159,10 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             if (_control == null) return;
             
+            // Clean up any ongoing drag operation
+            CleanupDrag();
+            
+            // Detach event handlers
             _control.DragEnter -= OnDragEnter;
             _control.DragOver -= OnDragOver;
             _control.DragLeave -= OnDragLeave;
@@ -150,13 +172,20 @@ namespace ExplorerPro.UI.FileTree.Services
             _control.PreviewMouseMove -= OnPreviewMouseMove;
             _control.PreviewMouseLeftButtonUp -= OnPreviewMouseLeftButtonUp;
             
-            if (_selectionService != null)
+            // Unsubscribe from selection service
+            if (_selectionService != null && _selectionChangedHandler != null)
             {
-                _selectionService.SelectionChanged -= OnSelectionChanged;
+                _selectionService.SelectionChanged -= _selectionChangedHandler;
             }
             
-            _autoScrollHelper?.Dispose();
-            _autoScrollHelper = null;
+            // Dispose and null out helper objects
+            if (_autoScrollHelper != null)
+            {
+                _autoScrollHelper.Dispose();
+                _autoScrollHelper = null;
+            }
+            
+            // Clear references
             _control = null;
             _getItemFromPoint = null;
         }
@@ -197,7 +226,7 @@ namespace ExplorerPro.UI.FileTree.Services
         public void StartDrag(DependencyObject source, IEnumerable<string> selectedPaths)
         {
             // Use the selection service's current selection
-            if (_selectionService.HasSelection)
+            if (_selectionService?.HasSelection == true)
             {
                 StartDragOperation();
             }
@@ -249,7 +278,7 @@ namespace ExplorerPro.UI.FileTree.Services
         private void OnSelectionChanged(object sender, FileTreeSelectionChangedEventArgs e)
         {
             // Track when mouse is down and we have a selection
-            if (Mouse.LeftButton == MouseButtonState.Pressed && _selectionService.HasSelection)
+            if (Mouse.LeftButton == MouseButtonState.Pressed && _selectionService?.HasSelection == true)
             {
                 _isMouseDown = true;
                 _dragStartPoint = Mouse.GetPosition(_control);
@@ -276,7 +305,7 @@ namespace ExplorerPro.UI.FileTree.Services
                 return;
             
             // Check if we should start dragging
-            if (_selectionService.HasSelection && _potentialDragItem != null && 
+            if (_selectionService?.HasSelection == true && _potentialDragItem != null && 
                 _selectionService.IsItemSelected(_potentialDragItem))
             {
                 Point currentPosition = e.GetPosition(_control);
@@ -298,7 +327,7 @@ namespace ExplorerPro.UI.FileTree.Services
         
         private void StartDragOperation()
         {
-            if (!_selectionService.HasSelection || _isDragging)
+            if (_selectionService == null || !_selectionService.HasSelection || _isDragging)
                 return;
             
             try
@@ -350,7 +379,7 @@ namespace ExplorerPro.UI.FileTree.Services
         
         private void CreateDragAdorner()
         {
-            if (_control == null || !_selectionService.HasSelection)
+            if (_control == null || _selectionService == null || !_selectionService.HasSelection)
                 return;
             
             _adornerLayer = AdornerLayer.GetAdornerLayer(_control);
@@ -381,7 +410,7 @@ namespace ExplorerPro.UI.FileTree.Services
             };
             
             // Add icon from first selected item
-            var firstItem = _selectionService.FirstSelectedItem;
+            var firstItem = _selectionService?.FirstSelectedItem;
             if (firstItem?.Icon != null)
             {
                 var icon = new Image
@@ -397,9 +426,9 @@ namespace ExplorerPro.UI.FileTree.Services
             // Add text
             var textBlock = new TextBlock
             {
-                Text = _selectionService.SelectionCount == 1 
+                Text = _selectionService?.SelectionCount == 1 
                     ? Path.GetFileName(_selectionService.FirstSelectedPath ?? "")
-                    : $"{_selectionService.SelectionCount} items",
+                    : $"{_selectionService?.SelectionCount ?? 0} items",
                 Padding = new Thickness(4, 2, 4, 2),
                 VerticalAlignment = VerticalAlignment.Center
             };
@@ -497,11 +526,11 @@ namespace ExplorerPro.UI.FileTree.Services
             // Handle spring-loaded folders
             if (_currentDropTarget != null && _currentDropTarget.IsDirectory && !_currentDropTarget.IsExpanded)
             {
-                _springLoadedHelper.StartHover(_currentDropTarget);
+                _springLoadedHelper?.StartHover(_currentDropTarget);
             }
             else if (_currentDropTarget != null)
             {
-                _springLoadedHelper.StopHover(_currentDropTarget);
+                _springLoadedHelper?.StopHover(_currentDropTarget);
             }
         }
         
@@ -723,14 +752,17 @@ namespace ExplorerPro.UI.FileTree.Services
                 return false;
             
             // Can't drop on selected items
-            if (_selectionService.IsItemSelected(target))
+            if (_selectionService?.IsItemSelected(target) == true)
                 return false;
             
             // Can't drop parent on child
-            foreach (var selectedPath in _selectionService.SelectedPaths)
+            if (_selectionService != null)
             {
-                if (target.Path.StartsWith(selectedPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                    return false;
+                foreach (var selectedPath in _selectionService.SelectedPaths)
+                {
+                    if (target.Path.StartsWith(selectedPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                }
             }
             
             return true;
@@ -760,7 +792,7 @@ namespace ExplorerPro.UI.FileTree.Services
             }
             
             _autoScrollHelper?.Stop();
-            _springLoadedHelper?.CollapseAll();
+            _springLoadedHelper?.CancelAll();
             UpdateDropTarget(null);
         }
         
@@ -772,7 +804,7 @@ namespace ExplorerPro.UI.FileTree.Services
         
         private void OnSpringLoadedFolderCollapsing(object sender, FileTreeItem item)
         {
-            if (item != null && _springLoadedHelper.WasAutoExpanded(item))
+            if (item != null && _springLoadedHelper?.WasAutoExpanded(item) == true)
                 item.IsExpanded = false;
         }
         
@@ -818,15 +850,60 @@ namespace ExplorerPro.UI.FileTree.Services
             {
                 if (disposing)
                 {
+                    // Detach from control (which also cleans up event handlers)
                     DetachFromControl();
+                    
+                    // Clean up any ongoing drag
                     CleanupDrag();
                     
-                    _autoScrollHelper?.Dispose();
-                    _springLoadedHelper?.Dispose();
+                    // Dispose helper objects
+                    if (_autoScrollHelper != null)
+                    {
+                        _autoScrollHelper.Dispose();
+                        _autoScrollHelper = null;
+                    }
+                    
+                    // Unsubscribe from spring-loaded helper events
+                    if (_springLoadedHelper != null)
+                    {
+                        if (_springLoadedExpandingHandler != null)
+                        {
+                            _springLoadedHelper.FolderExpanding -= _springLoadedExpandingHandler;
+                        }
+                        if (_springLoadedCollapsingHandler != null)
+                        {
+                            _springLoadedHelper.FolderCollapsing -= _springLoadedCollapsingHandler;
+                        }
+                        _springLoadedHelper.Dispose();
+                        _springLoadedHelper = null;
+                    }
+                    
+                    // Clear event handlers
+                    FilesDropped = null;
+                    FilesMoved = null;
+                    ErrorOccurred = null;
+                    OutlookExtractionCompleted = null;
+                    
+                    // Clear stored delegates
+                    _springLoadedExpandingHandler = null;
+                    _springLoadedCollapsingHandler = null;
+                    _selectionChangedHandler = null;
+                    _getItemFromPoint = null;
+                    
+                    // Clear references
+                    _dragAdorner = null;
+                    _adornerLayer = null;
+                    _currentDropTarget = null;
+                    _potentialDragItem = null;
                 }
                 
                 _disposed = true;
             }
+        }
+        
+        ~FileTreeDragDropService()
+        {
+            Dispose(false);
         }
         
         #endregion

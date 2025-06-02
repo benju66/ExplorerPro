@@ -1,4 +1,4 @@
-// UI/FileTree/DragDrop/SpringLoadedFolderHelper.cs
+// UI/FileTree/DragDrop/SpringLoadedFolderHelper.cs - Fixed version with proper cleanup
 using System;
 using System.Collections.Generic;
 using System.Windows.Threading;
@@ -7,6 +7,7 @@ namespace ExplorerPro.UI.FileTree.DragDrop
 {
     /// <summary>
     /// Manages spring-loaded folder expansion during drag operations
+    /// Fixed version with proper timer management and disposal
     /// </summary>
     public class SpringLoadedFolderHelper : IDisposable
     {
@@ -19,11 +20,15 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         
         #region Fields
         
-        private readonly DispatcherTimer _expandTimer;
-        private readonly DispatcherTimer _collapseTimer;
+        private DispatcherTimer _expandTimer;
+        private DispatcherTimer _collapseTimer;
         private readonly HashSet<FileTreeItem> _autoExpandedItems;
         private FileTreeItem _pendingExpandItem;
         private FileTreeItem _pendingCollapseItem;
+        
+        // Store event handlers for cleanup
+        private EventHandler _expandTimerTickHandler;
+        private EventHandler _collapseTimerTickHandler;
         
         #endregion
         
@@ -47,17 +52,22 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         {
             _autoExpandedItems = new HashSet<FileTreeItem>();
             
+            // Create event handlers
+            _expandTimerTickHandler = OnExpandTimerTick;
+            _collapseTimerTickHandler = OnCollapseTimerTick;
+            
+            // Initialize timers
             _expandTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromMilliseconds(HOVER_DELAY_MS)
             };
-            _expandTimer.Tick += OnExpandTimerTick;
+            _expandTimer.Tick += _expandTimerTickHandler;
             
             _collapseTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromMilliseconds(COLLAPSE_DELAY_MS)
             };
-            _collapseTimer.Tick += OnCollapseTimerTick;
+            _collapseTimer.Tick += _collapseTimerTickHandler;
         }
         
         #endregion
@@ -69,20 +79,23 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         /// </summary>
         public void StartHover(FileTreeItem item)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(SpringLoadedFolderHelper));
+                
             if (item == null || !item.IsDirectory || item.IsExpanded) 
                 return;
             
             // Cancel any pending collapse for this item
             if (_pendingCollapseItem == item)
             {
-                _collapseTimer.Stop();
+                _collapseTimer?.Stop();
                 _pendingCollapseItem = null;
             }
             
             // Start new expand timer
             _pendingExpandItem = item;
-            _expandTimer.Stop();
-            _expandTimer.Start();
+            _expandTimer?.Stop();
+            _expandTimer?.Start();
         }
         
         /// <summary>
@@ -90,12 +103,14 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         /// </summary>
         public void StopHover(FileTreeItem item)
         {
+            if (_disposed) return;
+            
             if (item == null) return;
             
             // Cancel pending expand
             if (_pendingExpandItem == item)
             {
-                _expandTimer.Stop();
+                _expandTimer?.Stop();
                 _pendingExpandItem = null;
             }
             
@@ -103,8 +118,8 @@ namespace ExplorerPro.UI.FileTree.DragDrop
             if (_autoExpandedItems.Contains(item))
             {
                 _pendingCollapseItem = item;
-                _collapseTimer.Stop();
-                _collapseTimer.Start();
+                _collapseTimer?.Stop();
+                _collapseTimer?.Start();
             }
         }
         
@@ -113,8 +128,10 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         /// </summary>
         public void CancelAll()
         {
-            _expandTimer.Stop();
-            _collapseTimer.Stop();
+            if (_disposed) return;
+            
+            _expandTimer?.Stop();
+            _collapseTimer?.Stop();
             _pendingExpandItem = null;
             _pendingCollapseItem = null;
         }
@@ -124,7 +141,12 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         /// </summary>
         public void CollapseAll()
         {
-            foreach (var item in _autoExpandedItems)
+            if (_disposed) return;
+            
+            // Create a copy to avoid modification during iteration
+            var itemsToCollapse = new List<FileTreeItem>(_autoExpandedItems);
+            
+            foreach (var item in itemsToCollapse)
             {
                 FolderCollapsing?.Invoke(this, item);
             }
@@ -138,6 +160,7 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         /// </summary>
         public bool WasAutoExpanded(FileTreeItem item)
         {
+            if (_disposed) return false;
             return item != null && _autoExpandedItems.Contains(item);
         }
         
@@ -147,7 +170,9 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         
         private void OnExpandTimerTick(object sender, EventArgs e)
         {
-            _expandTimer.Stop();
+            if (_disposed) return;
+            
+            _expandTimer?.Stop();
             
             if (_pendingExpandItem != null && !_pendingExpandItem.IsExpanded)
             {
@@ -160,7 +185,9 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         
         private void OnCollapseTimerTick(object sender, EventArgs e)
         {
-            _collapseTimer.Stop();
+            if (_disposed) return;
+            
+            _collapseTimer?.Stop();
             
             if (_pendingCollapseItem != null && _autoExpandedItems.Contains(_pendingCollapseItem))
             {
@@ -189,17 +216,56 @@ namespace ExplorerPro.UI.FileTree.DragDrop
             {
                 if (disposing)
                 {
-                    _expandTimer.Stop();
-                    _expandTimer.Tick -= OnExpandTimerTick;
+                    // Stop timers first
+                    if (_expandTimer != null)
+                    {
+                        _expandTimer.Stop();
+                        
+                        // Unsubscribe event handler
+                        if (_expandTimerTickHandler != null)
+                        {
+                            _expandTimer.Tick -= _expandTimerTickHandler;
+                        }
+                        
+                        // Dispose timer
+                        _expandTimer = null;
+                    }
                     
-                    _collapseTimer.Stop();
-                    _collapseTimer.Tick -= OnCollapseTimerTick;
+                    if (_collapseTimer != null)
+                    {
+                        _collapseTimer.Stop();
+                        
+                        // Unsubscribe event handler
+                        if (_collapseTimerTickHandler != null)
+                        {
+                            _collapseTimer.Tick -= _collapseTimerTickHandler;
+                        }
+                        
+                        // Dispose timer
+                        _collapseTimer = null;
+                    }
                     
-                    _autoExpandedItems.Clear();
+                    // Clear collections
+                    _autoExpandedItems?.Clear();
+                    
+                    // Clear references
+                    _pendingExpandItem = null;
+                    _pendingCollapseItem = null;
+                    
+                    // Clear event handlers
+                    FolderExpanding = null;
+                    FolderCollapsing = null;
+                    _expandTimerTickHandler = null;
+                    _collapseTimerTickHandler = null;
                 }
                 
                 _disposed = true;
             }
+        }
+        
+        ~SpringLoadedFolderHelper()
+        {
+            Dispose(false);
         }
         
         #endregion
