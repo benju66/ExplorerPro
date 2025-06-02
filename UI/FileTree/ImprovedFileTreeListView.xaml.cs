@@ -147,7 +147,6 @@ namespace ExplorerPro.UI.FileTree
         private string _currentFolderPath = string.Empty;
         private bool _showHiddenFiles = false;
         private ObservableCollection<FileTreeItem> _rootItems = new ObservableCollection<FileTreeItem>();
-        private ContextMenu _treeContextMenu;
         private bool _isInitialized = false;
         private bool _isHandlingDoubleClick = false;
         
@@ -180,10 +179,6 @@ namespace ExplorerPro.UI.FileTree
                 _fileOperations = new FileOperations.FileOperations();
                 InitializeManagersAndModel();
                 InitializeServices();
-
-                // Create context menu
-                _treeContextMenu = new ContextMenu();
-                fileTreeView.ContextMenu = _treeContextMenu;
 
                 // Set the TreeView ItemsSource
                 fileTreeView.ItemsSource = _rootItems;
@@ -915,8 +910,6 @@ namespace ExplorerPro.UI.FileTree
 
         private void FileTreeView_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
-            _treeContextMenu.Items.Clear();
-            
             // Create context menu provider with all dependencies
             var contextMenuProvider = new ContextMenuProvider(
                 _metadataManager, 
@@ -951,11 +944,8 @@ namespace ExplorerPro.UI.FileTree
                 return;
             }
             
-            // Copy items to our context menu
-            foreach (var item in menu.Items)
-            {
-                _treeContextMenu.Items.Add(item);
-            }
+            // Option 1: Use the menu directly (Recommended)
+            fileTreeView.ContextMenu = menu;
         }
 
         private void FileTreeView_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
