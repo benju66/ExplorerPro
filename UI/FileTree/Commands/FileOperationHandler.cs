@@ -1,3 +1,4 @@
+// UI/FileTree/Commands/FileOperationHandler.cs - Fixed version with IDisposable
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,8 +13,9 @@ namespace ExplorerPro.UI.FileTree.Commands
 {
     /// <summary>
     /// Handles all file system operations for the file tree, including undo support
+    /// Fixed version with proper memory management and IDisposable implementation
     /// </summary>
-    public class FileOperationHandler
+    public class FileOperationHandler : IDisposable
     {
         #region Fields
         
@@ -21,6 +23,7 @@ namespace ExplorerPro.UI.FileTree.Commands
         private readonly UndoManager _undoManager;
         private readonly MetadataManager _metadataManager;
         private readonly ILogger<FileOperationHandler> _logger;
+        private bool _disposed;
         
         #endregion
         
@@ -71,6 +74,9 @@ namespace ExplorerPro.UI.FileTree.Commands
         /// </summary>
         public bool DeleteItem(string path, IFileTree fileTree, bool confirmDelete = true)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(FileOperationHandler));
+                
             if (!ValidatePathExists(path))
             {
                 ShowError($"'{path}' does not exist.", "Delete Error");
@@ -109,6 +115,9 @@ namespace ExplorerPro.UI.FileTree.Commands
         /// </summary>
         public async Task<bool> DeleteMultipleItemsAsync(IReadOnlyList<string> paths, IFileTree fileTree, bool confirmDelete = true)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(FileOperationHandler));
+                
             if (paths == null || paths.Count == 0)
                 return false;
                 
@@ -136,6 +145,8 @@ namespace ExplorerPro.UI.FileTree.Commands
 
             return await Task.Run(() =>
             {
+                if (_disposed) return false;
+                
                 var successCount = 0;
                 var errors = new List<string>();
                 
@@ -188,6 +199,9 @@ namespace ExplorerPro.UI.FileTree.Commands
         /// </summary>
         public bool CopyItem(string path)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(FileOperationHandler));
+                
             if (!ValidatePathExists(path))
             {
                 ShowError("The selected file or folder does not exist.", "Copy Error");
@@ -215,6 +229,9 @@ namespace ExplorerPro.UI.FileTree.Commands
         /// </summary>
         public bool CopyMultipleItems(IReadOnlyList<string> paths)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(FileOperationHandler));
+                
             if (paths == null || paths.Count == 0)
                 return false;
                 
@@ -259,6 +276,9 @@ namespace ExplorerPro.UI.FileTree.Commands
         /// </summary>
         public async Task<bool> PasteItemsAsync(string targetPath)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(FileOperationHandler));
+                
             if (!Directory.Exists(targetPath))
             {
                 ShowError("You can only paste into a directory.", "Paste Error");
@@ -274,6 +294,8 @@ namespace ExplorerPro.UI.FileTree.Commands
 
             return await Task.Run(() =>
             {
+                if (_disposed) return false;
+                
                 var successCount = 0;
                 var errors = new List<string>();
                 
@@ -336,6 +358,9 @@ namespace ExplorerPro.UI.FileTree.Commands
         /// </summary>
         public bool CreateNewFile(string directoryPath, IFileTree fileTree, string defaultFileName = "")
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(FileOperationHandler));
+                
             if (!ValidateDirectory(directoryPath))
             {
                 ShowError("Cannot create a file outside a folder.", "Invalid Target");
@@ -377,6 +402,9 @@ namespace ExplorerPro.UI.FileTree.Commands
         /// </summary>
         public bool CreateNewFolder(string directoryPath, IFileTree fileTree, string defaultFolderName = "New Folder")
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(FileOperationHandler));
+                
             if (!ValidateDirectory(directoryPath))
             {
                 ShowError("Cannot create a folder outside a directory.", "Invalid Target");
@@ -422,6 +450,9 @@ namespace ExplorerPro.UI.FileTree.Commands
         /// </summary>
         public bool RenameItem(string oldPath, string newName, IFileTree fileTree)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(FileOperationHandler));
+                
             if (!ValidatePathExists(oldPath))
             {
                 ShowError("The item to rename does not exist.", "Rename Error");
@@ -497,12 +528,18 @@ namespace ExplorerPro.UI.FileTree.Commands
         
         private void ShowError(string message, string title)
         {
-            MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+            if (!_disposed)
+            {
+                MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
         
         private void ShowInfo(string message, string title)
         {
-            MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Information);
+            if (!_disposed)
+            {
+                MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Information);
+            }
         }
         
         private void HandleOperationError(string operation, Exception ex)
@@ -547,22 +584,73 @@ namespace ExplorerPro.UI.FileTree.Commands
         
         protected virtual void OnDirectoryRefreshRequested(DirectoryRefreshEventArgs e)
         {
-            DirectoryRefreshRequested?.Invoke(this, e);
+            if (!_disposed)
+            {
+                DirectoryRefreshRequested?.Invoke(this, e);
+            }
         }
         
         protected virtual void OnMultipleDirectoriesRefreshRequested(MultipleDirectoriesRefreshEventArgs e)
         {
-            MultipleDirectoriesRefreshRequested?.Invoke(this, e);
+            if (!_disposed)
+            {
+                MultipleDirectoriesRefreshRequested?.Invoke(this, e);
+            }
         }
         
         protected virtual void OnOperationError(FileOperationErrorEventArgs e)
         {
-            OperationError?.Invoke(this, e);
+            if (!_disposed)
+            {
+                OperationError?.Invoke(this, e);
+            }
         }
         
         protected virtual void OnPasteCompleted(PasteCompletedEventArgs e)
         {
-            PasteCompleted?.Invoke(this, e);
+            if (!_disposed)
+            {
+                PasteCompleted?.Invoke(this, e);
+            }
+        }
+        
+        #endregion
+        
+        #region IDisposable Implementation
+        
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    System.Diagnostics.Debug.WriteLine("[DISPOSE] Disposing FileOperationHandler");
+                    
+                    // Clear all event handlers to prevent memory leaks
+                    DirectoryRefreshRequested = null;
+                    MultipleDirectoriesRefreshRequested = null;
+                    OperationError = null;
+                    PasteCompleted = null;
+                    
+                    // Note: We don't dispose _fileOperations, _undoManager, or _metadataManager
+                    // as they are injected dependencies likely managed elsewhere
+                    
+                    System.Diagnostics.Debug.WriteLine("[DISPOSE] FileOperationHandler disposed");
+                }
+                
+                _disposed = true;
+            }
+        }
+        
+        ~FileOperationHandler()
+        {
+            Dispose(false);
         }
         
         #endregion
