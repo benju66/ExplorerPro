@@ -91,7 +91,7 @@ namespace ExplorerPro.UI.FileTree.Commands
 
             try
             {
-                var command = new DeleteItemCommand(_fileOperations, fileTree, path, _logger);
+                var command = new DeleteItemCommand(_fileOperations, fileTree, path);
                 _undoManager.ExecuteCommand(command);
                 
                 RequestRefreshParentDirectory(path);
@@ -143,7 +143,7 @@ namespace ExplorerPro.UI.FileTree.Commands
                 {
                     try
                     {
-                        var command = new DeleteItemCommand(_fileOperations, fileTree, path, _logger);
+                        var command = new DeleteItemCommand(_fileOperations, fileTree, path);
                         _undoManager.ExecuteCommand(command);
                         successCount++;
                     }
@@ -359,7 +359,7 @@ namespace ExplorerPro.UI.FileTree.Commands
             
             try
             {
-                var command = new CreateFileCommand(_fileOperations, fileTree, directoryPath, newFileName, _logger);
+                var command = new CreateFileCommand(_fileOperations, fileTree, directoryPath, newFileName);
                 _undoManager.ExecuteCommand(command);
                 
                 RequestRefreshDirectory(directoryPath);
@@ -400,7 +400,7 @@ namespace ExplorerPro.UI.FileTree.Commands
             
             try
             {
-                var command = new CreateFolderCommand(_fileOperations, fileTree, directoryPath, newFolderName, _logger);
+                var command = new CreateFolderCommand(_fileOperations, fileTree, directoryPath, newFolderName);
                 _undoManager.ExecuteCommand(command);
                 
                 RequestRefreshDirectory(directoryPath);
@@ -443,7 +443,7 @@ namespace ExplorerPro.UI.FileTree.Commands
             
             try
             {
-                var command = new RenameCommand(_fileOperations, oldPath, newName, _logger);
+                var command = new RenameCommand(_fileOperations, oldPath, newName);
                 _undoManager.ExecuteCommand(command);
                 
                 // Update metadata references
