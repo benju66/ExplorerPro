@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Refactored with extracted theme service
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Refactored with FileOperationHandler
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -20,6 +20,7 @@ using ExplorerPro.Utilities;
 using ExplorerPro.UI.FileTree.Services;
 using ExplorerPro.UI.FileTree.Dialogs;
 using ExplorerPro.UI.FileTree.Utilities;
+using ExplorerPro.UI.FileTree.Commands;
 using ExplorerPro.Themes;
 // Add alias to avoid ambiguity
 using Path = System.IO.Path;
@@ -27,7 +28,7 @@ using Path = System.IO.Path;
 namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
-    /// Interaction logic for ImprovedFileTreeListView.xaml with theme service extraction
+    /// Interaction logic for ImprovedFileTreeListView.xaml with FileOperationHandler
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -41,6 +42,9 @@ namespace ExplorerPro.UI.FileTree
         private UndoManager _undoManager;
         private SettingsManager _settingsManager;
         private readonly IFileOperations _fileOperations;
+        
+        // File operation handler for all file operations
+        private FileOperationHandler _fileOperationHandler;
         
         // Theme service handles all theme-related functionality
         private FileTreeThemeService _themeService;
@@ -257,6 +261,13 @@ namespace ExplorerPro.UI.FileTree
                 _selectionService = new SelectionService();
                 _selectionService.SelectionChanged += OnSelectionChanged;
                 _selectionService.PropertyChanged += SelectionService_PropertyChanged;
+                
+                // Initialize file operation handler
+                _fileOperationHandler = new FileOperationHandler(_fileOperations, _undoManager, _metadataManager);
+                _fileOperationHandler.DirectoryRefreshRequested += OnDirectoryRefreshRequested;
+                _fileOperationHandler.MultipleDirectoriesRefreshRequested += OnMultipleDirectoriesRefreshRequested;
+                _fileOperationHandler.OperationError += OnFileOperationError;
+                _fileOperationHandler.PasteCompleted += OnPasteCompleted;
                 
                 // Initialize enhanced drag/drop service
                 _enhancedDragDropService = new FileTreeDragDropService(_undoManager, _fileOperations, _selectionService);
@@ -505,46 +516,66 @@ namespace ExplorerPro.UI.FileTree
         {
             if (_selectionService?.HasSelection == true)
             {
-                CopyMultipleItems(_selectionService.SelectedPaths);
+                _fileOperationHandler.CopyMultipleItems(_selectionService.SelectedPaths);
             }
             else if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
             {
-                CopyItem(selectedItem.Path);
+                _fileOperationHandler.CopyItem(selectedItem.Path);
             }
         }
 
         public void CutSelected()
         {
+            // Copy items to clipboard
             CopySelected();
+            
+            // Then delete them
             DeleteSelected();
         }
 
         public void Paste()
         {
-            string targetPath = _currentFolderPath;
-            PasteItem(targetPath);
+            string targetPath = GetSelectedFolderPath();
+            if (string.IsNullOrEmpty(targetPath))
+            {
+                targetPath = _currentFolderPath;
+            }
+            
+            _fileOperationHandler.PasteItemsAsync(targetPath).ConfigureAwait(false);
         }
 
         public void DeleteSelected()
         {
             if (_selectionService?.HasSelection == true)
             {
-                DeleteMultipleItems(_selectionService.SelectedPaths);
+                _fileOperationHandler.DeleteMultipleItemsAsync(_selectionService.SelectedPaths, this).ConfigureAwait(false);
             }
             else if (fileTreeView.SelectedItem is FileTreeItem selectedItem)
             {
-                DeleteItemWithUndo(selectedItem.Path);
+                _fileOperationHandler.DeleteItem(selectedItem.Path, this);
             }
         }
 
         public void CreateFolder()
         {
-            CreateNewFolder(_currentFolderPath);
+            string targetPath = GetSelectedFolderPath();
+            if (string.IsNullOrEmpty(targetPath))
+            {
+                targetPath = _currentFolderPath;
+            }
+            
+            _fileOperationHandler.CreateNewFolder(targetPath, this);
         }
 
         public void CreateFile()
         {
-            CreateNewFile(_currentFolderPath);
+            string targetPath = GetSelectedFolderPath();
+            if (string.IsNullOrEmpty(targetPath))
+            {
+                targetPath = _currentFolderPath;
+            }
+            
+            _fileOperationHandler.CreateNewFile(targetPath, this);
         }
 
         public void ToggleShowHidden()
@@ -1022,6 +1053,36 @@ namespace ExplorerPro.UI.FileTree
         
         #endregion
 
+        #region File Operation Event Handlers
+
+        private void OnDirectoryRefreshRequested(object sender, DirectoryRefreshEventArgs e)
+        {
+            Dispatcher.Invoke(() => RefreshDirectory(e.DirectoryPath));
+        }
+
+        private void OnMultipleDirectoriesRefreshRequested(object sender, MultipleDirectoriesRefreshEventArgs e)
+        {
+            Dispatcher.Invoke(() => 
+            {
+                foreach (var dir in e.DirectoryPaths)
+                {
+                    RefreshDirectory(dir);
+                }
+            });
+        }
+
+        private void OnFileOperationError(object sender, FileOperationErrorEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ERROR] File operation error: {e.Operation} - {e.Exception.Message}");
+        }
+
+        private void OnPasteCompleted(object sender, PasteCompletedEventArgs e)
+        {
+            Dispatcher.Invoke(() => RefreshDirectory(e.TargetPath));
+        }
+
+        #endregion
+
         #region Selection Synchronization
 
         /// <summary>
@@ -1458,11 +1519,11 @@ namespace ExplorerPro.UI.FileTree
             {
                 // Multi-selection context menu
                 var menuItem = new MenuItem { Header = $"Delete {selectedPaths.Count} items" };
-                menuItem.Click += (s, e) => DeleteMultipleItems(selectedPaths);
+                menuItem.Click += (s, e) => _fileOperationHandler.DeleteMultipleItemsAsync(selectedPaths, this).ConfigureAwait(false);
                 _treeContextMenu.Items.Add(menuItem);
                 
                 menuItem = new MenuItem { Header = $"Copy {selectedPaths.Count} items" };
-                menuItem.Click += (s, e) => CopyMultipleItems(selectedPaths);
+                menuItem.Click += (s, e) => _fileOperationHandler.CopyMultipleItems(selectedPaths);
                 _treeContextMenu.Items.Add(menuItem);
                 
                 _treeContextMenu.Items.Add(new Separator());
@@ -1489,149 +1550,6 @@ namespace ExplorerPro.UI.FileTree
             }
         }
         
-        #endregion
-
-        #region File Operations
-
-        private void DeleteItemWithUndo(string path)
-        {
-            if (!File.Exists(path) && !Directory.Exists(path))
-            {
-                MessageBox.Show($"'{path}' does not exist.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            if (MessageBox.Show($"Are you sure you want to delete:\n{path}?", 
-                "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
-            {
-                var command = new DeleteItemCommand(_fileOperations, this, path);
-                _undoManager.ExecuteCommand(command);
-                
-                RefreshParentDirectory(path);
-            }
-        }
-
-        private void DeleteMultipleItems(IReadOnlyList<string> paths)
-        {
-            if (MessageBox.Show($"Are you sure you want to delete {paths.Count} items?", 
-                "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
-            {
-                foreach (var path in paths)
-                {
-                    var command = new DeleteItemCommand(_fileOperations, this, path);
-                    _undoManager.ExecuteCommand(command);
-                }
-                
-                // Refresh affected directories
-                var directories = paths.Select(p => Path.GetDirectoryName(p))
-                    .Where(d => !string.IsNullOrEmpty(d))
-                    .Distinct();
-                
-                foreach (var dir in directories)
-                {
-                    RefreshDirectory(dir);
-                }
-            }
-        }
-
-        private void CopyItem(string path)
-        {
-            if (File.Exists(path) || Directory.Exists(path))
-            {
-                var filePaths = new System.Collections.Specialized.StringCollection();
-                filePaths.Add(path);
-                Clipboard.SetFileDropList(filePaths);
-            }
-            else
-            {
-                MessageBox.Show("The selected file or folder does not exist.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
-        private void CopyMultipleItems(IReadOnlyList<string> paths)
-        {
-            var filePaths = new System.Collections.Specialized.StringCollection();
-            filePaths.AddRange(paths.ToArray());
-            Clipboard.SetFileDropList(filePaths);
-        }
-
-        private void PasteItem(string targetPath)
-        {
-            if (!Directory.Exists(targetPath))
-            {
-                MessageBox.Show("You can only paste into a directory.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var files = Clipboard.GetFileDropList();
-            if (files.Count == 0)
-            {
-                MessageBox.Show("No valid file path(s) in clipboard.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            foreach (string sourcePath in files)
-            {
-                if (File.Exists(sourcePath) || Directory.Exists(sourcePath))
-                {
-                    string newPath = _fileOperations.CopyItem(sourcePath, targetPath);
-                    if (string.IsNullOrEmpty(newPath))
-                    {
-                        MessageBox.Show($"Failed to paste item: {sourcePath}", "Error", 
-                            MessageBoxButton.OK, MessageBoxImage.Error);
-                    }
-                }
-            }
-
-            RefreshDirectory(targetPath);
-        }
-
-        private void CreateNewFile(string directoryPath)
-        {
-            if (!Directory.Exists(directoryPath))
-            {
-                MessageBox.Show("Cannot create a file outside a folder.", "Invalid Target", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            string newFileName = Microsoft.VisualBasic.Interaction.InputBox(
-                "Enter file name (e.g., new_file.txt):", "Add New File", "");
-            
-            if (!string.IsNullOrWhiteSpace(newFileName))
-            {
-                var command = new CreateFileCommand(_fileOperations, this, directoryPath, newFileName);
-                _undoManager.ExecuteCommand(command);
-                
-                RefreshDirectory(directoryPath);
-            }
-        }
-
-        private void CreateNewFolder(string directoryPath)
-        {
-            if (!Directory.Exists(directoryPath))
-            {
-                MessageBox.Show("Cannot create a folder outside a directory.", "Invalid Target", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            string newFolderName = Microsoft.VisualBasic.Interaction.InputBox(
-                "Enter folder name:", "Add New Folder", "");
-            
-            if (!string.IsNullOrWhiteSpace(newFolderName))
-            {
-                var command = new CreateFolderCommand(_fileOperations, this, directoryPath, newFolderName);
-                _undoManager.ExecuteCommand(command);
-                
-                RefreshDirectory(directoryPath);
-            }
-        }
-
         #endregion
 
         #region Drag and Drop
@@ -1662,18 +1580,6 @@ namespace ExplorerPro.UI.FileTree
         #endregion
 
         #region Utility Methods
-
-        private void RefreshParentDirectory(string path)
-        {
-            if (string.IsNullOrEmpty(path))
-                return;
-                
-            string parentDir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(parentDir))
-            {
-                RefreshDirectory(parentDir);
-            }
-        }
 
         private async Task RefreshDirectoryAsync(string directoryPath)
         {
@@ -1838,6 +1744,15 @@ namespace ExplorerPro.UI.FileTree
                         _selectionService.SelectionChanged -= OnSelectionChanged;
                         _selectionService.PropertyChanged -= SelectionService_PropertyChanged;
                         _selectionService.Dispose();
+                    }
+                    
+                    // Unsubscribe from file operation handler events
+                    if (_fileOperationHandler != null)
+                    {
+                        _fileOperationHandler.DirectoryRefreshRequested -= OnDirectoryRefreshRequested;
+                        _fileOperationHandler.MultipleDirectoriesRefreshRequested -= OnMultipleDirectoriesRefreshRequested;
+                        _fileOperationHandler.OperationError -= OnFileOperationError;
+                        _fileOperationHandler.PasteCompleted -= OnPasteCompleted;
                     }
                     
                     if (fileTreeView != null)
