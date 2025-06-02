@@ -11,7 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ExplorerPro
 {
     /// <summary>
-    /// Interaction logic for App.xaml
+    /// Interaction logic for App.xaml - Fixed version with proper disposal
     /// </summary>
     public partial class App : Application
     {
@@ -32,6 +32,9 @@ namespace ExplorerPro
 
         // Logger factory for dependency injection
         private static ILoggerFactory? _loggerFactory;
+        
+        // Store event handlers for proper cleanup
+        private EventHandler<AppTheme>? _themeChangedHandler;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -111,8 +114,8 @@ namespace ExplorerPro
                 // Initialize and apply the theme
                 ThemeManager.Instance.Initialize();
                 
-                // Subscribe to theme change events for settings persistence
-                ThemeManager.Instance.ThemeChanged += (s, theme) => {
+                // Create and store the event handler
+                _themeChangedHandler = (s, theme) => {
                     Console.WriteLine($"Theme changed to: {theme}");
                     
                     // Save to settings
@@ -122,6 +125,9 @@ namespace ExplorerPro
                         Settings.UpdateSetting("ui_preferences.Enable Dark Mode", theme == AppTheme.Dark);
                     }
                 };
+                
+                // Subscribe to theme change events
+                ThemeManager.Instance.ThemeChanged += _themeChangedHandler;
                 
                 Console.WriteLine($"Theme system initialized with theme: {savedTheme}");
             }
@@ -602,6 +608,15 @@ namespace ExplorerPro
                 SaveSettingsOnExit();
                 SaveMetadataOnExit();
                 
+                // Dispose all services
+                DisposeServices();
+                
+                // Unsubscribe from theme events
+                UnsubscribeFromThemeEvents();
+                
+                // Dispose logger factory
+                DisposeLoggerFactory();
+                
                 // Log application exit
                 LogApplicationExit();
             }
@@ -641,6 +656,130 @@ namespace ExplorerPro
             catch (Exception ex)
             {
                 Console.WriteLine($"Error saving metadata during exit: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Disposes all global services
+        /// </summary>
+        private void DisposeServices()
+        {
+            Console.WriteLine("Disposing global services...");
+            
+            try
+            {
+                // Dispose MetadataManager - it implements IDisposable
+                if (MetadataManager != null)
+                {
+                    MetadataManager.Dispose();
+                    Console.WriteLine("MetadataManager disposed");
+                    MetadataManager = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing MetadataManager: {ex.Message}");
+            }
+            
+            try
+            {
+                // Clear PinnedManager reference
+                if (PinnedManager != null)
+                {
+                    // PinnedManager is a singleton and may have resources to clean up
+                    // If it implements IDisposable in the future, add disposal here
+                    Console.WriteLine("PinnedManager reference cleared");
+                    PinnedManager = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error clearing PinnedManager: {ex.Message}");
+            }
+            
+            try
+            {
+                // Clear RecurringTaskManager reference
+                if (RecurringTaskManager != null)
+                {
+                    // RecurringTaskManager doesn't implement IDisposable
+                    // Just clear the reference
+                    Console.WriteLine("RecurringTaskManager reference cleared");
+                    RecurringTaskManager = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error clearing RecurringTaskManager: {ex.Message}");
+            }
+            
+            try
+            {
+                // Clear UndoManager reference
+                if (UndoManager != null)
+                {
+                    // Check if UndoManager has a Clear or Reset method
+                    // For now, just clear the reference
+                    Console.WriteLine("UndoManager reference cleared");
+                    UndoManager = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error clearing UndoManager: {ex.Message}");
+            }
+            
+            try
+            {
+                // Clear static references in Settings
+                Settings = null;
+                Console.WriteLine("Settings reference cleared");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error clearing Settings: {ex.Message}");
+            }
+            
+            Console.WriteLine("Global services disposal completed");
+        }
+        
+        /// <summary>
+        /// Unsubscribes from theme manager events
+        /// </summary>
+        private void UnsubscribeFromThemeEvents()
+        {
+            try
+            {
+                if (_themeChangedHandler != null)
+                {
+                    ThemeManager.Instance.ThemeChanged -= _themeChangedHandler;
+                    _themeChangedHandler = null;
+                    Console.WriteLine("Unsubscribed from theme events");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error unsubscribing from theme events: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Disposes the logger factory
+        /// </summary>
+        private void DisposeLoggerFactory()
+        {
+            try
+            {
+                if (_loggerFactory != null)
+                {
+                    _loggerFactory.Dispose();
+                    _loggerFactory = null;
+                    Console.WriteLine("Logger factory disposed");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing logger factory: {ex.Message}");
             }
         }
         
