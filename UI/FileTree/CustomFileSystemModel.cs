@@ -1,4 +1,4 @@
-// UI/FileTree/CustomFileSystemModel.cs
+// UI/FileTree/CustomFileSystemModel.cs - Fixed version with IDisposable
 
 using System;
 using System.IO;
@@ -13,13 +13,15 @@ namespace ExplorerPro.UI.FileTree
     /// <summary>
     /// Custom file system model that provides additional functionality beyond the standard
     /// .NET file system capabilities, including support for custom styling and handling rename operations.
+    /// Fixed version with proper disposal pattern to prevent memory leaks.
     /// </summary>
-    public class CustomFileSystemModel
+    public class CustomFileSystemModel : IDisposable
     {
         private readonly MetadataManager metadataManager;
         private readonly UndoManager undoManager;
         private readonly IFileOperations fileOperations;
         private readonly ILogger<CustomFileSystemModel> logger;
+        private bool _disposed;
 
         public CustomFileSystemModel(MetadataManager metadataManager, UndoManager undoManager, IFileOperations fileOperations, ILogger<CustomFileSystemModel>? logger = null)
         {
@@ -34,6 +36,8 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public Brush GetItemForeground(string path)
         {
+            ThrowIfDisposed();
+            
             string colorHex = metadataManager.GetItemColor(path);
             if (!string.IsNullOrEmpty(colorHex))
             {
@@ -54,6 +58,8 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public FontWeight GetItemFontWeight(string path)
         {
+            ThrowIfDisposed();
+            
             return metadataManager.GetItemBold(path) ? FontWeights.Bold : FontWeights.Normal;
         }
 
@@ -62,6 +68,8 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public bool RenameItem(string oldPath, string newName)
         {
+            ThrowIfDisposed();
+            
             if (string.IsNullOrWhiteSpace(newName) || newName == Path.GetFileName(oldPath))
                 return false;
 
@@ -88,15 +96,87 @@ namespace ExplorerPro.UI.FileTree
                     return false;
                 }
                 
+                // Update metadata references
+                metadataManager.UpdatePathReferences(oldPath, resultPath);
+                
                 logger?.LogInformation($"Renamed '{oldPath}' to '{resultPath}'");
                 return true;
             }
             catch (Exception ex)
             {
+                logger?.LogError(ex, $"Failed to rename: {ex.Message}");
                 MessageBox.Show($"Failed to rename: {ex.Message}", 
                     "Rename Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return false;
             }
         }
+
+        /// <summary>
+        /// Clears cached data and prepares for disposal
+        /// </summary>
+        public void ClearCache()
+        {
+            if (_disposed) return;
+            
+            // Currently no caching in this class, but this method
+            // is here for future use and consistency with other models
+            logger?.LogDebug("CustomFileSystemModel cache cleared");
+        }
+
+        /// <summary>
+        /// Throws if the object has been disposed
+        /// </summary>
+        private void ThrowIfDisposed()
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(CustomFileSystemModel));
+            }
+        }
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes resources used by the CustomFileSystemModel
+        /// </summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Protected implementation of Dispose pattern
+        /// </summary>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    logger?.LogDebug("Disposing CustomFileSystemModel");
+                    
+                    // Clear any caches
+                    ClearCache();
+                    
+                    // Note: We don't dispose the injected dependencies (metadataManager, undoManager, fileOperations)
+                    // as they are managed externally and may be used by other components
+                    
+                    logger?.LogDebug("CustomFileSystemModel disposed");
+                }
+                
+                _disposed = true;
+            }
+        }
+
+        /// <summary>
+        /// Finalizer
+        /// </summary>
+        ~CustomFileSystemModel()
+        {
+            Dispose(false);
+        }
+
+        #endregion
     }
 }

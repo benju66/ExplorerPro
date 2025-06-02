@@ -1,8 +1,10 @@
-// UI/FileTree/FileTreeItem.cs
+// UI/FileTree/FileTreeItem.cs - Fixed version with proper memory management
 using System;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Media;
 using ExplorerPro.Utilities;
@@ -11,8 +13,9 @@ namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
     /// Represents an item in the file tree with additional properties for columns
+    /// Fixed version with proper memory management and IDisposable pattern
     /// </summary>
-    public class FileTreeItem : INotifyPropertyChanged
+    public class FileTreeItem : INotifyPropertyChanged, IDisposable
     {
         #region Fields
 
@@ -32,6 +35,11 @@ namespace ExplorerPro.UI.FileTree
         private int _level;
         private bool _hasChildren;
         private WeakReference _parentRef;
+        private bool _disposed;
+        
+        // Store event handler to allow proper cleanup
+        private EventHandler _loadChildrenHandler;
+        private NotifyCollectionChangedEventHandler _childrenChangedHandler;
 
         #endregion
 
@@ -179,7 +187,7 @@ namespace ExplorerPro.UI.FileTree
                     OnPropertyChanged(nameof(IsExpanded));
 
                     // Call LoadChildren directly when a directory is expanded
-                    if (value && IsDirectory)
+                    if (value && IsDirectory && !_disposed)
                     {
                         System.Diagnostics.Debug.WriteLine($"Expanding: {Name}, Path: {Path}");
                         LoadChildren?.Invoke(this, EventArgs.Empty);
@@ -256,7 +264,21 @@ namespace ExplorerPro.UI.FileTree
             {
                 if (_children != value)
                 {
+                    // Unsubscribe from old collection
+                    if (_children != null && _childrenChangedHandler != null)
+                    {
+                        _children.CollectionChanged -= _childrenChangedHandler;
+                    }
+                    
                     _children = value;
+                    
+                    // Subscribe to new collection
+                    if (_children != null && !_disposed)
+                    {
+                        _childrenChangedHandler = Children_CollectionChanged;
+                        _children.CollectionChanged += _childrenChangedHandler;
+                    }
+                    
                     OnPropertyChanged(nameof(Children));
                 }
             }
@@ -323,7 +345,12 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         public FileTreeItem()
         {
-            Children = new ObservableCollection<FileTreeItem>();
+            _children = new ObservableCollection<FileTreeItem>();
+            
+            // Subscribe to children collection changes
+            _childrenChangedHandler = Children_CollectionChanged;
+            _children.CollectionChanged += _childrenChangedHandler;
+            
             Foreground = SystemColors.WindowTextBrush;
             FontWeight = FontWeights.Normal;
             _level = 0; // Default level is 0 (root level)
@@ -409,10 +436,17 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Clears all children
+        /// Clears all children and properly disposes them
         /// </summary>
         public void ClearChildren()
         {
+            // Dispose all children first
+            foreach (var child in Children.ToList())
+            {
+                child.Parent = null; // Clear parent reference
+                child.Dispose();
+            }
+            
             Children.Clear();
         }
 
@@ -449,13 +483,105 @@ namespace ExplorerPro.UI.FileTree
 
         #endregion
 
+        #region Event Handlers
+
+        /// <summary>
+        /// Handles changes to the children collection
+        /// </summary>
+        private void Children_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            // Update parent references when children are added/removed
+            if (e.Action == NotifyCollectionChangedAction.Add && e.NewItems != null)
+            {
+                foreach (FileTreeItem child in e.NewItems)
+                {
+                    child.Parent = this;
+                }
+            }
+            else if (e.Action == NotifyCollectionChangedAction.Remove && e.OldItems != null)
+            {
+                foreach (FileTreeItem child in e.OldItems)
+                {
+                    child.Parent = null;
+                }
+            }
+            else if (e.Action == NotifyCollectionChangedAction.Reset)
+            {
+                // All items removed - handled by ClearChildren
+            }
+        }
+
+        #endregion
+
         #region INotifyPropertyChanged Implementation
 
         public event PropertyChangedEventHandler PropertyChanged;
 
         protected virtual void OnPropertyChanged(string propertyName)
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            if (!_disposed)
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            }
+        }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes resources used by the FileTreeItem
+        /// </summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Protected implementation of Dispose pattern
+        /// </summary>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    // Clear event handlers
+                    LoadChildren = null;
+                    PropertyChanged = null;
+                    
+                    // Unsubscribe from collection events
+                    if (_children != null && _childrenChangedHandler != null)
+                    {
+                        _children.CollectionChanged -= _childrenChangedHandler;
+                        _childrenChangedHandler = null;
+                    }
+                    
+                    // Clear children
+                    ClearChildren();
+                    
+                    // Clear parent reference
+                    _parentRef = null;
+                    
+                    // Clear other references
+                    _foreground = null;
+                    Icon = null;
+                    
+                    // Clear handler references
+                    _loadChildrenHandler = null;
+                }
+                
+                _disposed = true;
+            }
+        }
+
+        /// <summary>
+        /// Finalizer
+        /// </summary>
+        ~FileTreeItem()
+        {
+            Dispose(false);
         }
 
         #endregion

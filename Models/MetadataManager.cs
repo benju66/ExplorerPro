@@ -1,18 +1,29 @@
+// Models/MetadataManager.cs - Fixed version with cleanup mechanisms
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 
 namespace ExplorerPro.Models
 {
     /// <summary>
     /// Manages metadata for files and folders including pinned items, recent items, tags, colors, and bold status.
+    /// Fixed version with proper cleanup mechanisms to prevent memory leaks.
     /// </summary>
-    public class MetadataManager
+    public class MetadataManager : IDisposable
     {
         private string metadataFile;
         private MetadataStructure metadata;
+        private readonly object _syncLock = new object();
+        private readonly Timer _cleanupTimer;
+        private readonly TimeSpan _cleanupInterval = TimeSpan.FromMinutes(5);
+        private readonly int _maxRecentItems = 100;
+        private readonly int _maxPinnedItems = 50;
+        private readonly int _maxMetadataEntries = 10000;
+        private bool _disposed;
         
         // Singleton pattern implementation
         private static MetadataManager? _instance;
@@ -61,6 +72,9 @@ namespace ExplorerPro.Models
             };
 
             LoadMetadata();
+            
+            // Initialize cleanup timer
+            _cleanupTimer = new Timer(PerformCleanup, null, _cleanupInterval, _cleanupInterval);
         }
 
         /// <summary>
@@ -68,41 +82,47 @@ namespace ExplorerPro.Models
         /// </summary>
         public void LoadMetadata()
         {
-            try
+            lock (_syncLock)
             {
-                if (File.Exists(metadataFile))
+                try
                 {
-                    string jsonContent = File.ReadAllText(metadataFile);
-                    metadata = JsonConvert.DeserializeObject<MetadataStructure>(jsonContent);
+                    if (File.Exists(metadataFile))
+                    {
+                        string jsonContent = File.ReadAllText(metadataFile);
+                        metadata = JsonConvert.DeserializeObject<MetadataStructure>(jsonContent);
 
-                    // Ensure all required properties exist in the loaded metadata
-                    if (metadata.PinnedItems == null) metadata.PinnedItems = new List<string>();
-                    if (metadata.RecentItems == null) metadata.RecentItems = new List<string>();
-                    if (metadata.Tags == null) metadata.Tags = new Dictionary<string, List<string>>();
-                    if (metadata.LastAccessed == null) metadata.LastAccessed = new Dictionary<string, double>();
-                    if (metadata.ItemColors == null) metadata.ItemColors = new Dictionary<string, string>();
-                    if (metadata.ItemBold == null) metadata.ItemBold = new Dictionary<string, bool>();
-                    if (metadata.RecentColors == null) metadata.RecentColors = new List<string>();
+                        // Ensure all required properties exist in the loaded metadata
+                        if (metadata.PinnedItems == null) metadata.PinnedItems = new List<string>();
+                        if (metadata.RecentItems == null) metadata.RecentItems = new List<string>();
+                        if (metadata.Tags == null) metadata.Tags = new Dictionary<string, List<string>>();
+                        if (metadata.LastAccessed == null) metadata.LastAccessed = new Dictionary<string, double>();
+                        if (metadata.ItemColors == null) metadata.ItemColors = new Dictionary<string, string>();
+                        if (metadata.ItemBold == null) metadata.ItemBold = new Dictionary<string, bool>();
+                        if (metadata.RecentColors == null) metadata.RecentColors = new List<string>();
+                        
+                        // Perform initial cleanup
+                        CleanupMetadata();
+                    }
                 }
-            }
-            catch (Exception ex) when (ex is JsonException || ex is IOException)
-            {
-                Console.WriteLine($"Metadata file is corrupt or missing. Recreating with defaults. Error: {ex.Message}");
-                
-                // Reset to defaults if there's an error
-                metadata = new MetadataStructure
+                catch (Exception ex) when (ex is JsonException || ex is IOException)
                 {
-                    PinnedItems = new List<string>(),
-                    RecentItems = new List<string>(),
-                    Tags = new Dictionary<string, List<string>>(),
-                    LastAccessed = new Dictionary<string, double>(),
-                    ItemColors = new Dictionary<string, string>(),
-                    ItemBold = new Dictionary<string, bool>(),
-                    RecentColors = new List<string>()
-                };
-            }
+                    Console.WriteLine($"Metadata file is corrupt or missing. Recreating with defaults. Error: {ex.Message}");
+                    
+                    // Reset to defaults if there's an error
+                    metadata = new MetadataStructure
+                    {
+                        PinnedItems = new List<string>(),
+                        RecentItems = new List<string>(),
+                        Tags = new Dictionary<string, List<string>>(),
+                        LastAccessed = new Dictionary<string, double>(),
+                        ItemColors = new Dictionary<string, string>(),
+                        ItemBold = new Dictionary<string, bool>(),
+                        RecentColors = new List<string>()
+                    };
+                }
 
-            SaveMetadata();
+                SaveMetadata();
+            }
         }
 
         /// <summary>
@@ -110,21 +130,203 @@ namespace ExplorerPro.Models
         /// </summary>
         public void SaveMetadata()
         {
-            try
+            if (_disposed) return;
+            
+            lock (_syncLock)
             {
-                // Create directory if it doesn't exist
-                Directory.CreateDirectory(Path.GetDirectoryName(metadataFile));
-                
-                // Serialize and save the metadata
-                string jsonContent = JsonConvert.SerializeObject(metadata, Formatting.Indented);
-                File.WriteAllText(metadataFile, jsonContent);
-            }
-            catch (IOException ex)
-            {
-                Console.WriteLine($"Error saving metadata: {ex.Message}");
+                try
+                {
+                    // Create directory if it doesn't exist
+                    Directory.CreateDirectory(Path.GetDirectoryName(metadataFile));
+                    
+                    // Serialize and save the metadata
+                    string jsonContent = JsonConvert.SerializeObject(metadata, Formatting.Indented);
+                    File.WriteAllText(metadataFile, jsonContent);
+                }
+                catch (IOException ex)
+                {
+                    Console.WriteLine($"Error saving metadata: {ex.Message}");
+                }
             }
         }
-        
+
+        /// <summary>
+        /// Performs cleanup of metadata to prevent unbounded growth
+        /// </summary>
+        private void PerformCleanup(object state)
+        {
+            if (_disposed) return;
+            
+            try
+            {
+                lock (_syncLock)
+                {
+                    CleanupMetadata();
+                    SaveMetadata();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during metadata cleanup: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Cleans up metadata by removing old, invalid, or excess entries
+        /// </summary>
+        private void CleanupMetadata()
+        {
+            // Clean up recent items
+            if (metadata.RecentItems.Count > _maxRecentItems)
+            {
+                metadata.RecentItems = metadata.RecentItems.Take(_maxRecentItems).ToList();
+            }
+            
+            // Clean up pinned items
+            if (metadata.PinnedItems.Count > _maxPinnedItems)
+            {
+                metadata.PinnedItems = metadata.PinnedItems.Take(_maxPinnedItems).ToList();
+            }
+            
+            // Remove metadata for non-existent files/folders
+            RemoveInvalidPaths();
+            
+            // Clean up old last accessed entries (older than 30 days)
+            CleanupOldLastAccessed();
+            
+            // Limit total metadata entries
+            if (GetTotalMetadataCount() > _maxMetadataEntries)
+            {
+                TrimOldestMetadata();
+            }
+        }
+
+        /// <summary>
+        /// Removes metadata for paths that no longer exist
+        /// </summary>
+        private void RemoveInvalidPaths()
+        {
+            // Clean recent items
+            metadata.RecentItems = metadata.RecentItems
+                .Where(path => File.Exists(path) || Directory.Exists(path))
+                .ToList();
+            
+            // Clean pinned items
+            metadata.PinnedItems = metadata.PinnedItems
+                .Where(path => File.Exists(path) || Directory.Exists(path))
+                .ToList();
+            
+            // Clean tags
+            var invalidTagPaths = metadata.Tags.Keys
+                .Where(path => !File.Exists(path) && !Directory.Exists(path))
+                .ToList();
+            foreach (var path in invalidTagPaths)
+            {
+                metadata.Tags.Remove(path);
+            }
+            
+            // Clean colors
+            var invalidColorPaths = metadata.ItemColors.Keys
+                .Where(path => !File.Exists(path) && !Directory.Exists(path))
+                .ToList();
+            foreach (var path in invalidColorPaths)
+            {
+                metadata.ItemColors.Remove(path);
+            }
+            
+            // Clean bold settings
+            var invalidBoldPaths = metadata.ItemBold.Keys
+                .Where(path => !File.Exists(path) && !Directory.Exists(path))
+                .ToList();
+            foreach (var path in invalidBoldPaths)
+            {
+                metadata.ItemBold.Remove(path);
+            }
+            
+            // Clean last accessed
+            var invalidAccessPaths = metadata.LastAccessed.Keys
+                .Where(path => !File.Exists(path) && !Directory.Exists(path))
+                .ToList();
+            foreach (var path in invalidAccessPaths)
+            {
+                metadata.LastAccessed.Remove(path);
+            }
+        }
+
+        /// <summary>
+        /// Removes last accessed entries older than 30 days
+        /// </summary>
+        private void CleanupOldLastAccessed()
+        {
+            var cutoffDate = DateTime.UtcNow.AddDays(-30);
+            var cutoffTimestamp = (cutoffDate - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+            
+            var oldEntries = metadata.LastAccessed
+                .Where(kvp => kvp.Value < cutoffTimestamp)
+                .Select(kvp => kvp.Key)
+                .ToList();
+            
+            foreach (var key in oldEntries)
+            {
+                metadata.LastAccessed.Remove(key);
+            }
+        }
+
+        /// <summary>
+        /// Gets the total count of metadata entries
+        /// </summary>
+        private int GetTotalMetadataCount()
+        {
+            return metadata.Tags.Count + 
+                   metadata.ItemColors.Count + 
+                   metadata.ItemBold.Count + 
+                   metadata.LastAccessed.Count;
+        }
+
+        /// <summary>
+        /// Trims the oldest metadata entries when limit is exceeded
+        /// </summary>
+        private void TrimOldestMetadata()
+        {
+            // Sort last accessed entries by timestamp and remove oldest
+            var sortedAccess = metadata.LastAccessed
+                .OrderBy(kvp => kvp.Value)
+                .ToList();
+            
+            // Remove oldest 20% of entries
+            int removeCount = sortedAccess.Count / 5;
+            foreach (var entry in sortedAccess.Take(removeCount))
+            {
+                RemoveAllMetadataForPath(entry.Key);
+            }
+        }
+
+        /// <summary>
+        /// Removes all metadata for a specific path
+        /// </summary>
+        public void RemoveAllMetadataForPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            
+            lock (_syncLock)
+            {
+                metadata.PinnedItems.Remove(path);
+                metadata.RecentItems.Remove(path);
+                metadata.Tags.Remove(path);
+                metadata.LastAccessed.Remove(path);
+                metadata.ItemColors.Remove(path);
+                metadata.ItemBold.Remove(path);
+            }
+        }
+
+        /// <summary>
+        /// Forces an immediate cleanup of metadata
+        /// </summary>
+        public void ForceCleanup()
+        {
+            PerformCleanup(null);
+        }
+
         /// <summary>
         /// Updates path references when a file or folder is renamed or moved.
         /// </summary>
@@ -132,42 +334,45 @@ namespace ExplorerPro.Models
         /// <param name="newPath">New path</param>
         public void UpdatePathReferences(string oldPath, string newPath)
         {
-            // Update pinned items
-            UpdateItemPathInCollection(oldPath, newPath, metadata.PinnedItems);
-            
-            // Update recent items
-            UpdateItemPathInCollection(oldPath, newPath, metadata.RecentItems);
-            
-            // Update tags
-            if (metadata.Tags.TryGetValue(oldPath, out var tags))
+            lock (_syncLock)
             {
-                metadata.Tags.Remove(oldPath);
-                metadata.Tags[newPath] = tags;
+                // Update pinned items
+                UpdateItemPathInCollection(oldPath, newPath, metadata.PinnedItems);
+                
+                // Update recent items
+                UpdateItemPathInCollection(oldPath, newPath, metadata.RecentItems);
+                
+                // Update tags
+                if (metadata.Tags.TryGetValue(oldPath, out var tags))
+                {
+                    metadata.Tags.Remove(oldPath);
+                    metadata.Tags[newPath] = tags;
+                }
+                
+                // Update last accessed
+                if (metadata.LastAccessed.TryGetValue(oldPath, out var timestamp))
+                {
+                    metadata.LastAccessed.Remove(oldPath);
+                    metadata.LastAccessed[newPath] = timestamp;
+                }
+                
+                // Update item colors
+                if (metadata.ItemColors.TryGetValue(oldPath, out var color))
+                {
+                    metadata.ItemColors.Remove(oldPath);
+                    metadata.ItemColors[newPath] = color;
+                }
+                
+                // Update item bold settings
+                if (metadata.ItemBold.TryGetValue(oldPath, out var isBold))
+                {
+                    metadata.ItemBold.Remove(oldPath);
+                    metadata.ItemBold[newPath] = isBold;
+                }
+                
+                // Save metadata to persist changes
+                SaveMetadata();
             }
-            
-            // Update last accessed
-            if (metadata.LastAccessed.TryGetValue(oldPath, out var timestamp))
-            {
-                metadata.LastAccessed.Remove(oldPath);
-                metadata.LastAccessed[newPath] = timestamp;
-            }
-            
-            // Update item colors
-            if (metadata.ItemColors.TryGetValue(oldPath, out var color))
-            {
-                metadata.ItemColors.Remove(oldPath);
-                metadata.ItemColors[newPath] = color;
-            }
-            
-            // Update item bold settings
-            if (metadata.ItemBold.TryGetValue(oldPath, out var isBold))
-            {
-                metadata.ItemBold.Remove(oldPath);
-                metadata.ItemBold[newPath] = isBold;
-            }
-            
-            // Save metadata to persist changes
-            SaveMetadata();
         }
         
         /// <summary>
@@ -190,7 +395,10 @@ namespace ExplorerPro.Models
         /// <returns>List of recent color hex codes.</returns>
         public List<string> GetRecentColors()
         {
-            return metadata.RecentColors;
+            lock (_syncLock)
+            {
+                return new List<string>(metadata.RecentColors);
+            }
         }
 
         /// <summary>
@@ -200,19 +408,22 @@ namespace ExplorerPro.Models
         /// <param name="colorHex">The color hex code to add.</param>
         public void AddRecentColor(string colorHex)
         {
-            // If color is already in the list, remove it so we can re-insert at front
-            if (metadata.RecentColors.Contains(colorHex))
+            lock (_syncLock)
             {
-                metadata.RecentColors.Remove(colorHex);
+                // If color is already in the list, remove it so we can re-insert at front
+                if (metadata.RecentColors.Contains(colorHex))
+                {
+                    metadata.RecentColors.Remove(colorHex);
+                }
+                
+                // Insert at the beginning of the list
+                metadata.RecentColors.Insert(0, colorHex);
+                
+                // Cap at 5 entries
+                metadata.RecentColors = metadata.RecentColors.Take(5).ToList();
+                
+                SaveMetadata();
             }
-            
-            // Insert at the beginning of the list
-            metadata.RecentColors.Insert(0, colorHex);
-            
-            // Cap at 5 entries
-            metadata.RecentColors = metadata.RecentColors.Take(5).ToList();
-            
-            SaveMetadata();
         }
 
         /// <summary>
@@ -221,10 +432,13 @@ namespace ExplorerPro.Models
         /// <param name="colorHex">The color hex code to remove.</param>
         public void RemoveRecentColor(string colorHex)
         {
-            if (metadata.RecentColors.Contains(colorHex))
+            lock (_syncLock)
             {
-                metadata.RecentColors.Remove(colorHex);
-                SaveMetadata();
+                if (metadata.RecentColors.Contains(colorHex))
+                {
+                    metadata.RecentColors.Remove(colorHex);
+                    SaveMetadata();
+                }
             }
         }
 
@@ -233,8 +447,11 @@ namespace ExplorerPro.Models
         /// </summary>
         public void ClearRecentColors()
         {
-            metadata.RecentColors.Clear();
-            SaveMetadata();
+            lock (_syncLock)
+            {
+                metadata.RecentColors.Clear();
+                SaveMetadata();
+            }
         }
 
         #endregion
@@ -248,8 +465,11 @@ namespace ExplorerPro.Models
         /// <param name="colorHex">Color hex code to set.</param>
         public void SetItemColor(string itemPath, string colorHex)
         {
-            metadata.ItemColors[itemPath] = colorHex;
-            SaveMetadata();
+            lock (_syncLock)
+            {
+                metadata.ItemColors[itemPath] = colorHex;
+                SaveMetadata();
+            }
         }
 
         /// <summary>
@@ -259,7 +479,10 @@ namespace ExplorerPro.Models
         /// <returns>Color hex code or null if not found.</returns>
         public string GetItemColor(string itemPath)
         {
-            return metadata.ItemColors.TryGetValue(itemPath, out string color) ? color : null;
+            lock (_syncLock)
+            {
+                return metadata.ItemColors.TryGetValue(itemPath, out string color) ? color : null;
+            }
         }
 
         /// <summary>
@@ -269,8 +492,11 @@ namespace ExplorerPro.Models
         /// <param name="boldFlag">Whether the item should be bold.</param>
         public void SetItemBold(string itemPath, bool boldFlag)
         {
-            metadata.ItemBold[itemPath] = boldFlag;
-            SaveMetadata();
+            lock (_syncLock)
+            {
+                metadata.ItemBold[itemPath] = boldFlag;
+                SaveMetadata();
+            }
         }
 
         /// <summary>
@@ -280,7 +506,10 @@ namespace ExplorerPro.Models
         /// <returns>True if the item is bold, otherwise False.</returns>
         public bool GetItemBold(string itemPath)
         {
-            return metadata.ItemBold.TryGetValue(itemPath, out bool isBold) && isBold;
+            lock (_syncLock)
+            {
+                return metadata.ItemBold.TryGetValue(itemPath, out bool isBold) && isBold;
+            }
         }
 
         #endregion
@@ -293,10 +522,20 @@ namespace ExplorerPro.Models
         /// <param name="itemPath">Path to the item to pin.</param>
         public void AddPinnedItem(string itemPath)
         {
-            if (!metadata.PinnedItems.Contains(itemPath))
+            lock (_syncLock)
             {
-                metadata.PinnedItems.Add(itemPath);
-                SaveMetadata();
+                if (!metadata.PinnedItems.Contains(itemPath))
+                {
+                    metadata.PinnedItems.Add(itemPath);
+                    
+                    // Enforce limit
+                    if (metadata.PinnedItems.Count > _maxPinnedItems)
+                    {
+                        metadata.PinnedItems.RemoveAt(0); // Remove oldest
+                    }
+                    
+                    SaveMetadata();
+                }
             }
         }
 
@@ -306,10 +545,13 @@ namespace ExplorerPro.Models
         /// <param name="itemPath">Path to the item to unpin.</param>
         public void RemovePinnedItem(string itemPath)
         {
-            if (metadata.PinnedItems.Contains(itemPath))
+            lock (_syncLock)
             {
-                metadata.PinnedItems.Remove(itemPath);
-                SaveMetadata();
+                if (metadata.PinnedItems.Contains(itemPath))
+                {
+                    metadata.PinnedItems.Remove(itemPath);
+                    SaveMetadata();
+                }
             }
         }
 
@@ -319,7 +561,10 @@ namespace ExplorerPro.Models
         /// <returns>Sorted list of pinned items.</returns>
         public List<string> GetPinnedItems()
         {
-            return metadata.PinnedItems.OrderBy(item => item).ToList();
+            lock (_syncLock)
+            {
+                return metadata.PinnedItems.OrderBy(item => item).ToList();
+            }
         }
 
         #endregion
@@ -332,19 +577,22 @@ namespace ExplorerPro.Models
         /// <param name="itemPath">Path to the item to add to recent items.</param>
         public void AddRecentItem(string itemPath)
         {
-            // Remove the item if it already exists in the list
-            if (metadata.RecentItems.Contains(itemPath))
+            lock (_syncLock)
             {
-                metadata.RecentItems.Remove(itemPath);
+                // Remove the item if it already exists in the list
+                if (metadata.RecentItems.Contains(itemPath))
+                {
+                    metadata.RecentItems.Remove(itemPath);
+                }
+                
+                // Insert at the beginning of the list
+                metadata.RecentItems.Insert(0, itemPath);
+                
+                // Trim the list to max items
+                metadata.RecentItems = metadata.RecentItems.Take(_maxRecentItems).ToList();
+                
+                SaveMetadata();
             }
-            
-            // Insert at the beginning of the list
-            metadata.RecentItems.Insert(0, itemPath);
-            
-            // Trim the list to 10 items
-            metadata.RecentItems = metadata.RecentItems.Take(10).ToList();
-            
-            SaveMetadata();
         }
 
         /// <summary>
@@ -353,7 +601,10 @@ namespace ExplorerPro.Models
         /// <returns>List of recent items.</returns>
         public List<string> GetRecentItems()
         {
-            return metadata.RecentItems;
+            lock (_syncLock)
+            {
+                return new List<string>(metadata.RecentItems);
+            }
         }
 
         #endregion
@@ -367,8 +618,11 @@ namespace ExplorerPro.Models
         /// <param name="tags">List of tags to set.</param>
         public void SetTags(string itemPath, List<string> tags)
         {
-            metadata.Tags[itemPath] = tags;
-            SaveMetadata();
+            lock (_syncLock)
+            {
+                metadata.Tags[itemPath] = tags;
+                SaveMetadata();
+            }
         }
 
         /// <summary>
@@ -378,15 +632,18 @@ namespace ExplorerPro.Models
         /// <param name="tag">Tag to add.</param>
         public void AddTag(string itemPath, string tag)
         {
-            if (!metadata.Tags.ContainsKey(itemPath))
+            lock (_syncLock)
             {
-                metadata.Tags[itemPath] = new List<string>();
-            }
-            
-            if (!metadata.Tags[itemPath].Contains(tag))
-            {
-                metadata.Tags[itemPath].Add(tag);
-                SaveMetadata();
+                if (!metadata.Tags.ContainsKey(itemPath))
+                {
+                    metadata.Tags[itemPath] = new List<string>();
+                }
+                
+                if (!metadata.Tags[itemPath].Contains(tag))
+                {
+                    metadata.Tags[itemPath].Add(tag);
+                    SaveMetadata();
+                }
             }
         }
 
@@ -397,10 +654,13 @@ namespace ExplorerPro.Models
         /// <param name="tag">Tag to remove.</param>
         public void RemoveTag(string itemPath, string tag)
         {
-            if (metadata.Tags.ContainsKey(itemPath) && metadata.Tags[itemPath].Contains(tag))
+            lock (_syncLock)
             {
-                metadata.Tags[itemPath].Remove(tag);
-                SaveMetadata();
+                if (metadata.Tags.ContainsKey(itemPath) && metadata.Tags[itemPath].Contains(tag))
+                {
+                    metadata.Tags[itemPath].Remove(tag);
+                    SaveMetadata();
+                }
             }
         }
 
@@ -411,7 +671,12 @@ namespace ExplorerPro.Models
         /// <returns>List of tags for the item.</returns>
         public List<string> GetTags(string itemPath)
         {
-            return metadata.Tags.TryGetValue(itemPath, out List<string> tags) ? tags : new List<string>();
+            lock (_syncLock)
+            {
+                return metadata.Tags.TryGetValue(itemPath, out List<string> tags) 
+                    ? new List<string>(tags) 
+                    : new List<string>();
+            }
         }
 
         /// <summary>
@@ -421,17 +686,20 @@ namespace ExplorerPro.Models
         /// <returns>List of items with the specified tag.</returns>
         public List<string> GetItemsWithTag(string tag)
         {
-            List<string> matchingItems = new List<string>();
-            
-            foreach (var kvp in metadata.Tags)
+            lock (_syncLock)
             {
-                if (kvp.Value.Contains(tag))
+                List<string> matchingItems = new List<string>();
+                
+                foreach (var kvp in metadata.Tags)
                 {
-                    matchingItems.Add(kvp.Key);
+                    if (kvp.Value.Contains(tag))
+                    {
+                        matchingItems.Add(kvp.Key);
+                    }
                 }
+                
+                return matchingItems;
             }
-            
-            return matchingItems;
         }
 
         #endregion
@@ -444,14 +712,17 @@ namespace ExplorerPro.Models
         /// <param name="itemPath">Path to the item.</param>
         public void SetLastAccessed(string itemPath)
         {
-            if (File.Exists(itemPath) || Directory.Exists(itemPath))
+            lock (_syncLock)
             {
-                // Convert DateTime to Unix timestamp (seconds since epoch)
-                DateTime lastAccessTime = File.GetLastAccessTime(itemPath);
-                double unixTimestamp = (lastAccessTime - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
-                
-                metadata.LastAccessed[itemPath] = unixTimestamp;
-                SaveMetadata();
+                if (File.Exists(itemPath) || Directory.Exists(itemPath))
+                {
+                    // Convert DateTime to Unix timestamp (seconds since epoch)
+                    DateTime lastAccessTime = File.GetLastAccessTime(itemPath);
+                    double unixTimestamp = (lastAccessTime - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+                    
+                    metadata.LastAccessed[itemPath] = unixTimestamp;
+                    SaveMetadata();
+                }
             }
         }
 
@@ -462,7 +733,54 @@ namespace ExplorerPro.Models
         /// <returns>Last accessed time as Unix timestamp, or null if not found.</returns>
         public double? GetLastAccessed(string itemPath)
         {
-            return metadata.LastAccessed.TryGetValue(itemPath, out double timestamp) ? timestamp : (double?)null;
+            lock (_syncLock)
+            {
+                return metadata.LastAccessed.TryGetValue(itemPath, out double timestamp) ? timestamp : (double?)null;
+            }
+        }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    // Stop and dispose the cleanup timer
+                    _cleanupTimer?.Dispose();
+                    
+                    // Save any pending changes
+                    SaveMetadata();
+                    
+                    // Clear the singleton instance if it's this instance
+                    if (_instance == this)
+                    {
+                        lock (_lock)
+                        {
+                            if (_instance == this)
+                            {
+                                _instance = null;
+                            }
+                        }
+                    }
+                }
+                
+                _disposed = true;
+            }
+        }
+
+        ~MetadataManager()
+        {
+            Dispose(false);
         }
 
         #endregion
