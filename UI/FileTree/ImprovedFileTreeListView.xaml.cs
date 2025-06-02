@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Complete Updated Version with Memory Management Fixes
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Fixed version with LoadChildren memory leak resolved
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -56,6 +56,13 @@ namespace ExplorerPro.UI.FileTree
         // Enhanced drag & drop service
         private FileTreeDragDropService _enhancedDragDropService;
 
+        #endregion
+
+        #region LoadChildren Event Management
+        
+        // Dictionary to track LoadChildren event subscriptions for proper cleanup
+        private readonly Dictionary<FileTreeItem, EventHandler> _loadChildrenHandlers = new Dictionary<FileTreeItem, EventHandler>();
+        
         #endregion
 
         #region Property Changed Implementation
@@ -396,6 +403,69 @@ namespace ExplorerPro.UI.FileTree
         
         #endregion
 
+        #region LoadChildren Event Management Methods
+        
+        /// <summary>
+        /// Subscribes to LoadChildren event for a FileTreeItem with proper handler tracking
+        /// </summary>
+        private void SubscribeToLoadChildren(FileTreeItem item)
+        {
+            if (item == null || _loadChildrenHandlers.ContainsKey(item))
+                return;
+                
+            // Create a handler that doesn't capture 'this' directly
+            EventHandler handler = (s, e) => OnItemLoadChildren(item);
+            
+            // Store the handler for later unsubscription
+            _loadChildrenHandlers[item] = handler;
+            
+            // Subscribe to the event
+            item.LoadChildren += handler;
+        }
+        
+        /// <summary>
+        /// Unsubscribes from LoadChildren event for a FileTreeItem
+        /// </summary>
+        private void UnsubscribeFromLoadChildren(FileTreeItem item)
+        {
+            if (item == null || !_loadChildrenHandlers.TryGetValue(item, out EventHandler handler))
+                return;
+                
+            // Unsubscribe from the event
+            item.LoadChildren -= handler;
+            
+            // Remove from tracking dictionary
+            _loadChildrenHandlers.Remove(item);
+        }
+        
+        /// <summary>
+        /// Handles LoadChildren event without capturing 'this' in lambda
+        /// </summary>
+        private async void OnItemLoadChildren(FileTreeItem item)
+        {
+            if (_disposed) return;
+            
+            await LoadDirectoryContentsAsync(item);
+        }
+        
+        /// <summary>
+        /// Unsubscribes from all LoadChildren events
+        /// </summary>
+        private void UnsubscribeAllLoadChildren()
+        {
+            // Create a copy of the items to avoid modification during iteration
+            var items = _loadChildrenHandlers.Keys.ToList();
+            
+            foreach (var item in items)
+            {
+                UnsubscribeFromLoadChildren(item);
+            }
+            
+            _loadChildrenHandlers.Clear();
+        }
+        
+        #endregion
+
         #region Event Handler Methods for Services
         
         private void OnFileTreeServiceError(object sender, string error)
@@ -651,12 +721,15 @@ namespace ExplorerPro.UI.FileTree
                 _rootItems.Clear();
                 _fileTreeCache.Clear();
                 _selectionService?.ClearSelection();
+                
+                // Unsubscribe from all LoadChildren events before clearing
+                UnsubscribeAllLoadChildren();
 
                 var rootItem = _fileTreeService.CreateFileTreeItem(directory, 0);
                 if (rootItem != null)
                 {
-                    // Attach the LoadChildren event handler BEFORE adding to collection
-                    rootItem.LoadChildren += async (s, e) => await LoadDirectoryContentsAsync(rootItem);
+                    // Subscribe to LoadChildren event with proper tracking
+                    SubscribeToLoadChildren(rootItem);
                     
                     _rootItems.Add(rootItem);
                     _fileTreeCache.SetItem(directory, rootItem);
@@ -823,7 +896,8 @@ namespace ExplorerPro.UI.FileTree
                     
                     if (child.IsDirectory)
                     {
-                        child.LoadChildren += async (s, e) => await LoadDirectoryContentsAsync(child);
+                        // Subscribe to LoadChildren event with proper tracking
+                        SubscribeToLoadChildren(child);
                     }
                 }
                 
@@ -1632,6 +1706,9 @@ namespace ExplorerPro.UI.FileTree
                 {
                     bool wasExpanded = item.IsExpanded;
                     
+                    // Unsubscribe LoadChildren events for all children before clearing
+                    UnsubscribeChildrenLoadEvents(item);
+                    
                     item.ClearChildren();
                     item.HasChildren = _fileTreeService.DirectoryHasAccessibleChildren(directoryPath, _showHiddenFiles);
                     
@@ -1663,6 +1740,21 @@ namespace ExplorerPro.UI.FileTree
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to refresh directory {directoryPath}: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Unsubscribes LoadChildren events for all children of an item recursively
+        /// </summary>
+        private void UnsubscribeChildrenLoadEvents(FileTreeItem parentItem)
+        {
+            foreach (var child in parentItem.Children)
+            {
+                if (child.IsDirectory)
+                {
+                    UnsubscribeFromLoadChildren(child);
+                    UnsubscribeChildrenLoadEvents(child); // Recursive
+                }
             }
         }
 
@@ -1775,6 +1867,9 @@ namespace ExplorerPro.UI.FileTree
                     
                     // Cancel any active async operations
                     CancelActiveOperations();
+                    
+                    // Unsubscribe from all LoadChildren events
+                    UnsubscribeAllLoadChildren();
                     
                     // Save settings before disposal
                     try
@@ -1919,7 +2014,10 @@ namespace ExplorerPro.UI.FileTree
         {
             if (item == null) return;
             
-            // Clear children first
+            // Unsubscribe from LoadChildren event first
+            UnsubscribeFromLoadChildren(item);
+            
+            // Clear children recursively
             foreach (var child in item.Children)
             {
                 ClearItemRecursive(child);
@@ -1927,8 +2025,6 @@ namespace ExplorerPro.UI.FileTree
             
             // Clear this item
             item.Children.Clear();
-            // Note: We can't set LoadChildren to null from outside the class
-            // but clearing the children and parent references is sufficient
             item.Parent = null;
         }
         
