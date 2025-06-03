@@ -1,6 +1,7 @@
 // UI/FileTree/Services/IFileTreeService.cs
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ExplorerPro.UI.FileTree;
 
@@ -29,12 +30,32 @@ namespace ExplorerPro.UI.FileTree.Services
         FileTreeItem CreateFileTreeItem(string path, int level = 0);
 
         /// <summary>
-        /// Checks if a directory has accessible children
+        /// Creates a file tree item from a path asynchronously (with async HasChildren check)
+        /// </summary>
+        /// <param name="path">File or directory path</param>
+        /// <param name="level">Hierarchical level</param>
+        /// <param name="showHiddenFiles">Whether to consider hidden files</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns>Created file tree item</returns>
+        Task<FileTreeItem> CreateFileTreeItemAsync(string path, int level = 0, bool showHiddenFiles = false, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Checks if a directory has accessible children (synchronous - deprecated)
         /// </summary>
         /// <param name="directoryPath">Directory path to check</param>
         /// <param name="showHiddenFiles">Whether to consider hidden files</param>
         /// <returns>True if directory has accessible children</returns>
+        [Obsolete("Use DirectoryHasAccessibleChildrenAsync for better performance on network drives")]
         bool DirectoryHasAccessibleChildren(string directoryPath, bool showHiddenFiles = false);
+
+        /// <summary>
+        /// Checks if a directory has accessible children asynchronously
+        /// </summary>
+        /// <param name="directoryPath">Directory path to check</param>
+        /// <param name="showHiddenFiles">Whether to consider hidden files</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns>True if directory has accessible children</returns>
+        Task<bool> DirectoryHasAccessibleChildrenAsync(string directoryPath, bool showHiddenFiles = false, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Checks if a file or directory is hidden

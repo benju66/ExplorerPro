@@ -1,10 +1,11 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Performance Optimized Version
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Performance Optimized Version with Async Directory Checks
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -29,7 +30,7 @@ namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
     /// Interaction logic for ImprovedFileTreeListView.xaml with enhanced context menu support
-    /// Performance optimized version with O(n) selection complexity
+    /// Performance optimized version with O(n) selection complexity and async directory checks
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -73,6 +74,9 @@ namespace ExplorerPro.UI.FileTree
         // Performance metrics
         private DateTime _lastSelectionUpdateTime = DateTime.MinValue;
         private int _selectionUpdateCount = 0;
+        
+        // Cancellation support for async operations
+        private CancellationTokenSource _loadCancellationTokenSource;
         
         #endregion
 
@@ -203,6 +207,9 @@ namespace ExplorerPro.UI.FileTree
             try
             {
                 InitializeComponent();
+
+                // Initialize cancellation token source
+                _loadCancellationTokenSource = new CancellationTokenSource();
 
                 // Initialize dependencies first
                 _fileOperations = new FileOperations.FileOperations();
@@ -876,6 +883,11 @@ namespace ExplorerPro.UI.FileTree
                     return;
                 }
                 
+                // Cancel any ongoing load operations
+                _loadCancellationTokenSource?.Cancel();
+                _loadCancellationTokenSource = new CancellationTokenSource();
+                var cancellationToken = _loadCancellationTokenSource.Token;
+                
                 // Normalize the path
                 directory = Path.GetFullPath(directory);
                 
@@ -896,7 +908,12 @@ namespace ExplorerPro.UI.FileTree
                 // Unsubscribe from all LoadChildren events before clearing
                 UnsubscribeAllLoadChildren();
 
-                var rootItem = _fileTreeService.CreateFileTreeItem(directory, 0);
+                // Create root item with async HasChildren check
+                var rootItem = await _fileTreeService.CreateFileTreeItemAsync(directory, 0, _showHiddenFiles, cancellationToken);
+                
+                if (cancellationToken.IsCancellationRequested)
+                    return;
+                    
                 if (rootItem != null)
                 {
                     // Subscribe to LoadChildren event with proper tracking
@@ -910,6 +927,9 @@ namespace ExplorerPro.UI.FileTree
                     // Load children first
                     await LoadDirectoryContentsAsync(rootItem);
                     
+                    if (cancellationToken.IsCancellationRequested)
+                        return;
+                    
                     // Update current folder path
                     _currentFolderPath = directory;
                     LocationChanged?.Invoke(this, directory);
@@ -918,6 +938,8 @@ namespace ExplorerPro.UI.FileTree
                     
                     // Defer expansion until the visual tree is generated
                     Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => {
+                        if (_disposed) return;
+                        
                         // Now expand the root item after the visual tree is ready
                         rootItem.IsExpanded = true;
                         
@@ -940,6 +962,10 @@ namespace ExplorerPro.UI.FileTree
                 {
                     System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to create root item for: {directory}");
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                System.Diagnostics.Debug.WriteLine($"[INFO] SetRootDirectory cancelled");
             }
             catch (Exception ex)
             {
@@ -1040,6 +1066,7 @@ namespace ExplorerPro.UI.FileTree
                 
             string path = parentItem.Path;
             int childLevel = parentItem.Level + 1;
+            var cancellationToken = _loadCancellationTokenSource?.Token ?? CancellationToken.None;
 
             try
             {
@@ -1056,12 +1083,14 @@ namespace ExplorerPro.UI.FileTree
 
                 var children = await _fileTreeService.LoadDirectoryAsync(path, _showHiddenFiles, childLevel);
 
-                if (_disposed) return;
+                if (_disposed || cancellationToken.IsCancellationRequested) return;
 
                 parentItem.ClearChildren();
 
                 foreach (var child in children)
                 {
+                    if (cancellationToken.IsCancellationRequested) return;
+                    
                     // Set parent reference for efficient parent/child operations
                     child.Parent = parentItem;
                     
@@ -1078,6 +1107,15 @@ namespace ExplorerPro.UI.FileTree
                 parentItem.HasChildren = parentItem.Children.Count > 0;
                 
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Loaded {parentItem.Children.Count} items for directory: {path}");
+            }
+            catch (OperationCanceledException)
+            {
+                System.Diagnostics.Debug.WriteLine($"[INFO] Loading cancelled for: {path}");
+                if (!_disposed)
+                {
+                    parentItem.ClearChildren();
+                    parentItem.HasChildren = false;
+                }
             }
             catch (Exception ex)
             {
@@ -1884,6 +1922,8 @@ namespace ExplorerPro.UI.FileTree
             if (string.IsNullOrEmpty(directoryPath) || _disposed)
                 return;
 
+            var cancellationToken = _loadCancellationTokenSource?.Token ?? CancellationToken.None;
+
             try
             {
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Refreshing directory: {directoryPath}");
@@ -1899,12 +1939,22 @@ namespace ExplorerPro.UI.FileTree
                     UnsubscribeChildrenLoadEvents(item);
                     
                     item.ClearChildren();
-                    item.HasChildren = _fileTreeService.DirectoryHasAccessibleChildren(directoryPath, _showHiddenFiles);
+                    
+                    // Use async HasChildren check
+                    item.HasChildren = await _fileTreeService.DirectoryHasAccessibleChildrenAsync(
+                        directoryPath, _showHiddenFiles, cancellationToken);
+                    
+                    if (cancellationToken.IsCancellationRequested)
+                        return;
                     
                     if (wasExpanded && item.HasChildren)
                     {
                         await LoadDirectoryContentsAsync(item);
-                        item.IsExpanded = true;
+                        
+                        if (!cancellationToken.IsCancellationRequested)
+                        {
+                            item.IsExpanded = true;
+                        }
                     }
                     
                     // Clear cache after refresh
@@ -1921,14 +1971,21 @@ namespace ExplorerPro.UI.FileTree
                     System.Diagnostics.Debug.WriteLine($"[WARNING] Could not find item to refresh: {directoryPath}");
                 }
 
-                if (!_disposed)
+                if (!_disposed && !cancellationToken.IsCancellationRequested)
                 {
                     Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                     {
-                        OnPropertyChanged(nameof(_rootItems));
-                        UpdateVisibleItemsCache();
+                        if (!_disposed)
+                        {
+                            OnPropertyChanged(nameof(_rootItems));
+                            UpdateVisibleItemsCache();
+                        }
                     }));
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                System.Diagnostics.Debug.WriteLine($"[INFO] Refresh cancelled for: {directoryPath}");
             }
             catch (Exception ex)
             {
@@ -2030,6 +2087,9 @@ namespace ExplorerPro.UI.FileTree
         /// </summary>
         private void CancelActiveOperations()
         {
+            // Cancel load operations
+            _loadCancellationTokenSource?.Cancel();
+            
             // Cancel any active operations
             // Note: For better cancellation support, operations should accept CancellationToken
             _activeOperations.Clear();
@@ -2060,6 +2120,14 @@ namespace ExplorerPro.UI.FileTree
                     
                     // Cancel any active async operations
                     CancelActiveOperations();
+                    
+                    // Cancel and dispose cancellation token source
+                    if (_loadCancellationTokenSource != null)
+                    {
+                        _loadCancellationTokenSource.Cancel();
+                        _loadCancellationTokenSource.Dispose();
+                        _loadCancellationTokenSource = null;
+                    }
                     
                     // Unsubscribe from all LoadChildren events
                     UnsubscribeAllLoadChildren();

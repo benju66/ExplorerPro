@@ -1,4 +1,4 @@
-// UI/FileTree/Services/FileTreeThemeService.cs
+// UI/FileTree/Services/FileTreeThemeService.cs - Performance Optimized Version
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,7 +15,7 @@ namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
     /// Service responsible for managing theme-related functionality for the file tree view
-    /// with proper memory leak prevention
+    /// Performance optimized version that only updates visible items
     /// </summary>
     public class FileTreeThemeService : IDisposable
     {
@@ -31,6 +31,19 @@ namespace ExplorerPro.UI.FileTree.Services
         // Event handler delegates stored to ensure proper unsubscription
         private EventHandler<AppTheme> _themeChangedHandler;
         private EventHandler<AppTheme> _themeRefreshedHandler;
+
+        // Performance optimization fields
+        private readonly DispatcherTimer _deferredUpdateTimer;
+        private readonly Queue<TreeViewItem> _pendingThemeUpdates;
+        private bool _isProcessingDeferredUpdates;
+        private ScrollViewer _treeScrollViewer;
+        private double _lastVerticalOffset;
+        private const int MAX_VISIBLE_ITEMS_TO_UPDATE = 50; // Limit per frame
+        private const int DEFERRED_UPDATE_DELAY_MS = 100;
+
+        // Resource cache for current theme
+        private readonly Dictionary<string, object> _currentThemeResourceCache;
+        private AppTheme _cachedTheme;
 
         #endregion
 
@@ -48,6 +61,18 @@ namespace ExplorerPro.UI.FileTree.Services
             _mouseEnterHandlers = new Dictionary<UIElement, MouseEventHandler>();
             _mouseLeaveHandlers = new Dictionary<UIElement, MouseEventHandler>();
             _themedElements = new List<WeakReference>();
+            _pendingThemeUpdates = new Queue<TreeViewItem>();
+            _currentThemeResourceCache = new Dictionary<string, object>();
+
+            // Initialize deferred update timer
+            _deferredUpdateTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(DEFERRED_UPDATE_DELAY_MS)
+            };
+            _deferredUpdateTimer.Tick += OnDeferredUpdateTimerTick;
+
+            // Find and cache the ScrollViewer
+            _treeView.Loaded += (s, e) => CacheScrollViewer();
 
             // Create and store event handlers
             _themeChangedHandler = OnThemeChanged;
@@ -56,6 +81,9 @@ namespace ExplorerPro.UI.FileTree.Services
             // Subscribe to theme change events
             ThemeManager.Instance.ThemeChanged += _themeChangedHandler;
             ThemeManager.Instance.ThemeRefreshed += _themeRefreshedHandler;
+
+            // Cache initial theme resources
+            CacheCurrentThemeResources();
         }
 
         #endregion
@@ -63,7 +91,7 @@ namespace ExplorerPro.UI.FileTree.Services
         #region Public Methods
 
         /// <summary>
-        /// Refreshes all theme elements in the file tree
+        /// Refreshes all theme elements in the file tree - Optimized version
         /// </summary>
         public void RefreshThemeElements()
         {
@@ -72,50 +100,52 @@ namespace ExplorerPro.UI.FileTree.Services
 
             try
             {
+                var startTime = DateTime.Now;
                 bool isDarkMode = ThemeManager.Instance.IsDarkMode;
                 
-                // Update main grid background
+                // Update main grid background (fast)
                 if (_mainGrid != null)
                 {
-                    _mainGrid.Background = GetResource<SolidColorBrush>("BackgroundColor");
+                    _mainGrid.Background = GetCachedResource<SolidColorBrush>("BackgroundColor");
                 }
                 
-                // Update TreeView itself
+                // Update TreeView itself (fast)
                 if (_treeView != null)
                 {
-                    _treeView.Background = GetResource<SolidColorBrush>("TreeViewBackground");
-                    _treeView.BorderBrush = GetResource<SolidColorBrush>("TreeViewBorder");
-                    _treeView.Foreground = GetResource<SolidColorBrush>("TextColor");
-                    
-                    // Update TreeViewItems
-                    RefreshTreeViewItems();
+                    _treeView.Background = GetCachedResource<SolidColorBrush>("TreeViewBackground");
+                    _treeView.BorderBrush = GetCachedResource<SolidColorBrush>("TreeViewBorder");
+                    _treeView.Foreground = GetCachedResource<SolidColorBrush>("TextColor");
                 }
                 
-                // Refresh dynamic resources in DataTemplates
-                RefreshDataTemplateResources();
+                // Update only visible TreeViewItems
+                RefreshVisibleTreeViewItems();
+                
+                // Queue remaining items for deferred update
+                QueueNonVisibleItemsForUpdate();
                 
                 // Clean up dead weak references
                 CleanupDeadReferences();
                 
-                Console.WriteLine("FileTree theme elements refreshed successfully");
+                var elapsed = (DateTime.Now - startTime).TotalMilliseconds;
+                Console.WriteLine($"FileTree theme refresh completed in {elapsed:F1}ms (visible items only)");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing file tree theme: {ex.Message}");
-                // Non-critical error, continue
             }
         }
 
         /// <summary>
-        /// Applies theme to a specific TreeViewItem
+        /// Applies theme to a specific TreeViewItem - Optimized version
         /// </summary>
         /// <param name="treeViewItem">The TreeViewItem to theme</param>
         public void ApplyThemeToTreeViewItem(TreeViewItem treeViewItem)
         {
             if (_disposed || treeViewItem == null) return;
 
-            var textColor = GetResource<SolidColorBrush>("TextColor");
-            var treeLine = GetResource<SolidColorBrush>("TreeLineColor");
+            // Use cached resources for better performance
+            var textColor = GetCachedResource<SolidColorBrush>("TextColor");
+            var treeLine = GetCachedResource<SolidColorBrush>("TreeLineColor");
 
             // Apply theme to the TreeViewItem
             treeViewItem.Foreground = textColor;
@@ -123,39 +153,10 @@ namespace ExplorerPro.UI.FileTree.Services
             // Track the themed element with weak reference
             _themedElements.Add(new WeakReference(treeViewItem));
             
-            // Find and update all TextBlocks within the item
-            foreach (var textBlock in VisualTreeHelperEx.FindVisualChildren<TextBlock>(treeViewItem))
+            // Only process visual children if the item is visible and expanded
+            if (IsItemVisible(treeViewItem) && treeViewItem.IsExpanded)
             {
-                // Don't override custom colors from metadata
-                if (textBlock.Foreground == SystemColors.WindowTextBrush)
-                {
-                    textBlock.Foreground = textColor;
-                }
-            }
-            
-            // Update tree lines in the item
-            foreach (var line in VisualTreeHelperEx.FindVisualChildren<System.Windows.Shapes.Line>(treeViewItem))
-            {
-                line.Stroke = treeLine;
-                
-                // Set up mouse over handling for lines
-                if (line.Parent is UIElement parent)
-                {
-                    SetupTreeLineMouseHandlers(parent);
-                }
-            }
-            
-            // Update toggle buttons
-            foreach (var toggle in VisualTreeHelperEx.FindVisualChildren<ToggleButton>(treeViewItem))
-            {
-                RefreshTreeViewToggleButton(toggle);
-            }
-            
-            // Update Images (file/folder icons)
-            foreach (var image in VisualTreeHelperEx.FindVisualChildren<Image>(treeViewItem))
-            {
-                // Keep the image as is - just ensure it's visible
-                image.Opacity = 1.0;
+                ApplyThemeToVisualChildren(treeViewItem, textColor, treeLine);
             }
         }
 
@@ -167,8 +168,11 @@ namespace ExplorerPro.UI.FileTree.Services
             if (_disposed)
                 return;
 
-            // Schedule the refresh on the dispatcher with lower priority
-            _treeView?.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            // Clear and rebuild resource cache
+            CacheCurrentThemeResources();
+
+            // Schedule the refresh on the dispatcher with normal priority for visible items
+            _treeView?.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
             {
                 if (!_disposed)
                 {
@@ -179,32 +183,342 @@ namespace ExplorerPro.UI.FileTree.Services
 
         #endregion
 
-        #region Private Methods
+        #region Private Methods - Performance Optimized
 
         /// <summary>
-        /// Refreshes TreeViewItems with theme-appropriate styling
+        /// Caches the ScrollViewer reference for performance
         /// </summary>
-        private void RefreshTreeViewItems()
+        private void CacheScrollViewer()
         {
-            if (_disposed || _treeView == null)
+            _treeScrollViewer = VisualTreeHelperEx.FindScrollViewer(_treeView);
+            if (_treeScrollViewer != null)
+            {
+                _treeScrollViewer.ScrollChanged += OnScrollChanged;
+            }
+        }
+
+        /// <summary>
+        /// Handles scroll changes to update newly visible items
+        /// </summary>
+        private void OnScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            if (_disposed || Math.Abs(e.VerticalOffset - _lastVerticalOffset) < 1)
+                return;
+
+            _lastVerticalOffset = e.VerticalOffset;
+
+            // Update newly visible items with theme
+            _treeView.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            {
+                if (!_disposed)
+                {
+                    UpdateNewlyVisibleItems();
+                }
+            }));
+        }
+
+        /// <summary>
+        /// Caches current theme resources for fast access
+        /// </summary>
+        private void CacheCurrentThemeResources()
+        {
+            _cachedTheme = ThemeManager.Instance.CurrentTheme;
+            _currentThemeResourceCache.Clear();
+
+            // Cache commonly used resources
+            var resourceKeys = new[]
+            {
+                "TextColor", "TreeLineColor", "TreeLineHighlightColor",
+                "BackgroundColor", "TreeViewBackground", "TreeViewBorder",
+                "WindowBackground", "BorderColor", "SubtleTextColor"
+            };
+
+            foreach (var key in resourceKeys)
+            {
+                var resource = GetResource<object>(key);
+                if (resource != null)
+                {
+                    _currentThemeResourceCache[key] = resource;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets a cached resource for better performance
+        /// </summary>
+        private T GetCachedResource<T>(string key) where T : class
+        {
+            if (_currentThemeResourceCache.TryGetValue(key, out var cached) && cached is T typedResource)
+            {
+                return typedResource;
+            }
+            return GetResource<T>(key);
+        }
+
+        /// <summary>
+        /// Refreshes only visible TreeViewItems for performance
+        /// </summary>
+        private void RefreshVisibleTreeViewItems()
+        {
+            if (_disposed || _treeView == null || _treeScrollViewer == null)
                 return;
 
             try
             {
-                // Get theme colors for tree lines and text
-                var treeLine = GetResource<SolidColorBrush>("TreeLineColor");
-                var treeLineHighlight = GetResource<SolidColorBrush>("TreeLineHighlightColor");
-                var textColor = GetResource<SolidColorBrush>("TextColor");
-                
-                // Update all TreeViewItems
-                foreach (var item in VisualTreeHelperEx.FindVisualChildren<TreeViewItem>(_treeView))
+                var visibleItems = GetVisibleTreeViewItems();
+                var updateCount = 0;
+
+                foreach (var item in visibleItems.Take(MAX_VISIBLE_ITEMS_TO_UPDATE))
                 {
-                    ApplyThemeToTreeViewItem(item);
+                    if (_disposed) break;
+                    ApplyThemeToTreeViewItemFast(item);
+                    updateCount++;
                 }
+
+                System.Diagnostics.Debug.WriteLine($"[PERF] Updated {updateCount} visible items immediately");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing tree view items: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing visible tree items: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Fast theme application without deep traversal
+        /// </summary>
+        private void ApplyThemeToTreeViewItemFast(TreeViewItem item)
+        {
+            if (item == null || _disposed) return;
+
+            // Use cached resources
+            item.Foreground = GetCachedResource<SolidColorBrush>("TextColor");
+
+            // Only update immediate visual children if expanded
+            if (item.IsExpanded)
+            {
+                // Find immediate content presenter only
+                var contentPresenter = VisualTreeHelperEx.FindVisualChild<ContentPresenter>(item);
+                if (contentPresenter != null)
+                {
+                    UpdateContentPresenterTheme(contentPresenter);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Updates theme for a content presenter
+        /// </summary>
+        private void UpdateContentPresenterTheme(ContentPresenter presenter)
+        {
+            if (presenter == null) return;
+
+            // Update any TextBlocks in the content
+            var textBlock = VisualTreeHelperEx.FindVisualChild<TextBlock>(presenter);
+            if (textBlock != null && textBlock.Foreground == SystemColors.WindowTextBrush)
+            {
+                textBlock.Foreground = GetCachedResource<SolidColorBrush>("TextColor");
+            }
+        }
+
+        /// <summary>
+        /// Gets currently visible TreeViewItems efficiently
+        /// </summary>
+        private IEnumerable<TreeViewItem> GetVisibleTreeViewItems()
+        {
+            if (_treeScrollViewer == null)
+                yield break;
+
+            var viewport = new Rect(0, _treeScrollViewer.VerticalOffset,
+                                  _treeScrollViewer.ViewportWidth,
+                                  _treeScrollViewer.ViewportHeight);
+
+            // Use a more efficient approach - only check expanded items
+            foreach (var item in GetExpandedTreeViewItems(_treeView))
+            {
+                if (IsItemInViewport(item, viewport))
+                {
+                    yield return item;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets expanded TreeViewItems without deep recursion
+        /// </summary>
+        private IEnumerable<TreeViewItem> GetExpandedTreeViewItems(ItemsControl parent)
+        {
+            if (parent == null || _disposed)
+                yield break;
+
+            for (int i = 0; i < parent.Items.Count; i++)
+            {
+                var container = parent.ItemContainerGenerator.ContainerFromIndex(i) as TreeViewItem;
+                if (container != null)
+                {
+                    yield return container;
+
+                    // Only recurse if expanded to avoid unnecessary work
+                    if (container.IsExpanded)
+                    {
+                        foreach (var child in GetExpandedTreeViewItems(container))
+                        {
+                            yield return child;
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Checks if an item is in the viewport
+        /// </summary>
+        private bool IsItemInViewport(TreeViewItem item, Rect viewport)
+        {
+            try
+            {
+                var transform = item.TransformToAncestor(_treeView);
+                var position = transform.Transform(new Point(0, 0));
+                var itemBounds = new Rect(position.X, position.Y, item.ActualWidth, item.ActualHeight);
+                return viewport.IntersectsWith(itemBounds);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Checks if an item is visible
+        /// </summary>
+        private bool IsItemVisible(TreeViewItem item)
+        {
+            if (_treeScrollViewer == null) return true;
+            return IsItemInViewport(item, new Rect(0, _treeScrollViewer.VerticalOffset,
+                                                  _treeScrollViewer.ViewportWidth,
+                                                  _treeScrollViewer.ViewportHeight));
+        }
+
+        /// <summary>
+        /// Queues non-visible items for deferred theme update
+        /// </summary>
+        private void QueueNonVisibleItemsForUpdate()
+        {
+            if (_disposed) return;
+
+            _pendingThemeUpdates.Clear();
+
+            // Get all items that aren't visible
+            var allItems = GetExpandedTreeViewItems(_treeView).ToList();
+            var visibleItems = new HashSet<TreeViewItem>(GetVisibleTreeViewItems());
+
+            foreach (var item in allItems)
+            {
+                if (!visibleItems.Contains(item))
+                {
+                    _pendingThemeUpdates.Enqueue(item);
+                }
+            }
+
+            if (_pendingThemeUpdates.Count > 0)
+            {
+                System.Diagnostics.Debug.WriteLine($"[PERF] Queued {_pendingThemeUpdates.Count} items for deferred update");
+                _deferredUpdateTimer.Start();
+            }
+        }
+
+        /// <summary>
+        /// Processes deferred theme updates in batches
+        /// </summary>
+        private void OnDeferredUpdateTimerTick(object sender, EventArgs e)
+        {
+            if (_disposed || _isProcessingDeferredUpdates)
+                return;
+
+            _isProcessingDeferredUpdates = true;
+
+            try
+            {
+                var batchSize = Math.Min(20, _pendingThemeUpdates.Count);
+                var processedCount = 0;
+
+                while (processedCount < batchSize && _pendingThemeUpdates.Count > 0)
+                {
+                    var item = _pendingThemeUpdates.Dequeue();
+                    if (item != null && !_disposed)
+                    {
+                        ApplyThemeToTreeViewItemFast(item);
+                        processedCount++;
+                    }
+                }
+
+                if (_pendingThemeUpdates.Count == 0)
+                {
+                    _deferredUpdateTimer.Stop();
+                    System.Diagnostics.Debug.WriteLine("[PERF] Completed deferred theme updates");
+                }
+            }
+            finally
+            {
+                _isProcessingDeferredUpdates = false;
+            }
+        }
+
+        /// <summary>
+        /// Updates newly visible items after scrolling
+        /// </summary>
+        private void UpdateNewlyVisibleItems()
+        {
+            if (_disposed) return;
+
+            var visibleItems = GetVisibleTreeViewItems().Take(10); // Limit to avoid lag
+            foreach (var item in visibleItems)
+            {
+                // Only update if not already themed properly
+                if (item.Foreground != GetCachedResource<SolidColorBrush>("TextColor"))
+                {
+                    ApplyThemeToTreeViewItemFast(item);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Applies theme to visual children - Optimized version
+        /// </summary>
+        private void ApplyThemeToVisualChildren(TreeViewItem treeViewItem, SolidColorBrush textColor, SolidColorBrush treeLine)
+        {
+            // Limit depth of traversal for performance
+            var maxDepth = 2;
+            ApplyThemeToChildrenRecursive(treeViewItem, textColor, treeLine, 0, maxDepth);
+        }
+
+        /// <summary>
+        /// Recursive helper with depth limit
+        /// </summary>
+        private void ApplyThemeToChildrenRecursive(DependencyObject parent, SolidColorBrush textColor, SolidColorBrush treeLine, int currentDepth, int maxDepth)
+        {
+            if (currentDepth >= maxDepth || parent == null || _disposed)
+                return;
+
+            var childCount = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < childCount && i < 10; i++) // Limit children processed
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+
+                if (child is TextBlock textBlock && textBlock.Foreground == SystemColors.WindowTextBrush)
+                {
+                    textBlock.Foreground = textColor;
+                }
+                else if (child is System.Windows.Shapes.Line line)
+                {
+                    line.Stroke = treeLine;
+                }
+                else if (child is ToggleButton toggle)
+                {
+                    RefreshTreeViewToggleButton(toggle);
+                }
+
+                // Recurse with increased depth
+                ApplyThemeToChildrenRecursive(child, textColor, treeLine, currentDepth + 1, maxDepth);
             }
         }
 
@@ -261,24 +575,19 @@ namespace ExplorerPro.UI.FileTree.Services
 
             try
             {
-                // Set background to transparent to let hover effect work
                 toggle.Background = Brushes.Transparent;
                     
-                // Find the Path element for the expander arrow
                 var pathElement = VisualTreeHelperEx.FindVisualChild<System.Windows.Shapes.Path>(toggle);
                 if (pathElement != null)
                 {
-                    pathElement.Stroke = GetResource<SolidColorBrush>("TextColor");
-                    pathElement.Fill = GetResource<SolidColorBrush>("TextColor");
+                    pathElement.Stroke = GetCachedResource<SolidColorBrush>("TextColor");
+                    pathElement.Fill = GetCachedResource<SolidColorBrush>("TextColor");
                     
-                    // Remove existing handlers
                     RemoveMouseHandlers(toggle);
 
-                    // Create new handlers
                     MouseEventHandler enterHandler = (s, e) => ToggleButton_MouseEnter(s, e);
                     MouseEventHandler leaveHandler = (s, e) => ToggleButton_MouseLeave(s, e);
 
-                    // Store and attach handlers
                     _mouseEnterHandlers[toggle] = enterHandler;
                     _mouseLeaveHandlers[toggle] = leaveHandler;
                     
@@ -303,7 +612,7 @@ namespace ExplorerPro.UI.FileTree.Services
             {
                 foreach (var line in VisualTreeHelperEx.FindVisualChildren<System.Windows.Shapes.Line>(sender as DependencyObject))
                 {
-                    line.Stroke = GetResource<SolidColorBrush>("TreeLineHighlightColor");
+                    line.Stroke = GetCachedResource<SolidColorBrush>("TreeLineHighlightColor");
                 }
             }
             catch { /* Ignore errors in UI effects */ }
@@ -320,7 +629,7 @@ namespace ExplorerPro.UI.FileTree.Services
             {
                 foreach (var line in VisualTreeHelperEx.FindVisualChildren<System.Windows.Shapes.Line>(sender as DependencyObject))
                 {
-                    line.Stroke = GetResource<SolidColorBrush>("TreeLineColor");
+                    line.Stroke = GetCachedResource<SolidColorBrush>("TreeLineColor");
                 }
             }
             catch { /* Ignore errors in UI effects */ }
@@ -340,8 +649,8 @@ namespace ExplorerPro.UI.FileTree.Services
                     var pathElement = VisualTreeHelperEx.FindVisualChild<System.Windows.Shapes.Path>(toggle);
                     if (pathElement != null)
                     {
-                        pathElement.Stroke = GetResource<SolidColorBrush>("TreeLineHighlightColor");
-                        pathElement.Fill = GetResource<SolidColorBrush>("TreeLineHighlightColor");
+                        pathElement.Stroke = GetCachedResource<SolidColorBrush>("TreeLineHighlightColor");
+                        pathElement.Fill = GetCachedResource<SolidColorBrush>("TreeLineHighlightColor");
                     }
                 }
             }
@@ -362,49 +671,12 @@ namespace ExplorerPro.UI.FileTree.Services
                     var pathElement = VisualTreeHelperEx.FindVisualChild<System.Windows.Shapes.Path>(toggle);
                     if (pathElement != null)
                     {
-                        pathElement.Stroke = GetResource<SolidColorBrush>("TextColor");
-                        pathElement.Fill = GetResource<SolidColorBrush>("TextColor");
+                        pathElement.Stroke = GetCachedResource<SolidColorBrush>("TextColor");
+                        pathElement.Fill = GetCachedResource<SolidColorBrush>("TextColor");
                     }
                 }
             }
             catch { /* Ignore errors in UI effects */ }
-        }
-
-        /// <summary>
-        /// Refreshes resources in data templates
-        /// </summary>
-        private void RefreshDataTemplateResources()
-        {
-            if (_disposed || _treeView == null)
-                return;
-
-            try
-            {
-                // Force a refresh of all item containers
-                _treeView.UpdateLayout();
-                
-                // Refresh the items panel (if available)
-                var itemsPresenter = VisualTreeHelperEx.FindVisualChild<ItemsPresenter>(_treeView);
-                if (itemsPresenter != null)
-                {
-                    itemsPresenter.UpdateLayout();
-                }
-                
-                // Explicitly update all visible TextBlocks in the tree
-                var textBlocks = VisualTreeHelperEx.FindVisualChildren<TextBlock>(_treeView);
-                foreach (var textBlock in textBlocks)
-                {
-                    // Don't override custom foreground colors (from metadata)
-                    if (textBlock.Foreground == SystemColors.WindowTextBrush)
-                    {
-                        textBlock.Foreground = GetResource<SolidColorBrush>("TextColor");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Error refreshing data templates: {ex.Message}");
-            }
         }
 
         /// <summary>
@@ -419,7 +691,6 @@ namespace ExplorerPro.UI.FileTree.Services
                     return resource;
                 }
                 
-                // Try ThemeManager as a fallback for resources
                 return ThemeManager.Instance.GetResource<T>(resourceKey);
             }
             catch (Exception ex)
@@ -467,6 +738,8 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             if (!_disposed)
             {
+                // Clear resource cache when theme changes
+                CacheCurrentThemeResources();
                 ForceThemeRefresh();
             }
         }
@@ -478,6 +751,11 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             if (!_disposed)
             {
+                // Re-cache resources if theme is the same but resources might have changed
+                if (currentTheme == _cachedTheme)
+                {
+                    CacheCurrentThemeResources();
+                }
                 ForceThemeRefresh();
             }
         }
@@ -498,6 +776,20 @@ namespace ExplorerPro.UI.FileTree.Services
             {
                 if (disposing)
                 {
+                    // Stop timers
+                    if (_deferredUpdateTimer != null)
+                    {
+                        _deferredUpdateTimer.Stop();
+                        _deferredUpdateTimer.Tick -= OnDeferredUpdateTimerTick;
+                    }
+
+                    // Unsubscribe from ScrollViewer events
+                    if (_treeScrollViewer != null)
+                    {
+                        _treeScrollViewer.ScrollChanged -= OnScrollChanged;
+                        _treeScrollViewer = null;
+                    }
+
                     // Unsubscribe from ThemeManager events using stored handlers
                     if (_themeChangedHandler != null)
                     {
@@ -518,12 +810,12 @@ namespace ExplorerPro.UI.FileTree.Services
                         RemoveMouseHandlers(element);
                     }
                     
-                    // Clear dictionaries
+                    // Clear collections
                     _mouseEnterHandlers?.Clear();
                     _mouseLeaveHandlers?.Clear();
-                    
-                    // Clear themed elements list
                     _themedElements?.Clear();
+                    _pendingThemeUpdates?.Clear();
+                    _currentThemeResourceCache?.Clear();
                 }
                 
                 _disposed = true;

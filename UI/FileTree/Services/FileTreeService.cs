@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using ExplorerPro.Models;
@@ -12,7 +13,7 @@ using ExplorerPro.FileOperations;
 namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
-    /// Service for file tree operations with proper memory management
+    /// Service for file tree operations with proper memory management and async support
     /// </summary>
     public class FileTreeService : IFileTreeService, IDisposable
     {
@@ -69,7 +70,8 @@ namespace ExplorerPro.UI.FileTree.Services
                         if (!showHiddenFiles && IsHidden(dir))
                             continue;
 
-                        var dirItem = CreateFileTreeItem(dir, level);
+                        // Use async version for better performance on network drives
+                        var dirItem = await CreateFileTreeItemAsync(dir, level, showHiddenFiles);
                         items.Add(dirItem);
                     }
                     catch (UnauthorizedAccessException)
@@ -152,10 +154,12 @@ namespace ExplorerPro.UI.FileTree.Services
                 // Set icon
                 item.Icon = _iconProvider.GetIcon(path);
 
-                // For directories, check if they have children to set HasChildren property
+                // For directories, use synchronous check (deprecated)
                 if (item.IsDirectory)
                 {
+                    #pragma warning disable CS0618 // Using obsolete method for backward compatibility
                     item.HasChildren = DirectoryHasAccessibleChildren(path);
+                    #pragma warning restore CS0618
                 }
 
                 return item;
@@ -179,6 +183,54 @@ namespace ExplorerPro.UI.FileTree.Services
             }
         }
 
+        public async Task<FileTreeItem> CreateFileTreeItemAsync(string path, int level = 0, bool showHiddenFiles = false, CancellationToken cancellationToken = default)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(FileTreeService));
+
+            try
+            {
+                var item = await Task.Run(() => FileTreeItem.FromPath(path), cancellationToken);
+                item.Level = level;
+
+                // Apply styling from metadata
+                ApplyMetadataStyling(item);
+
+                // Set icon
+                item.Icon = _iconProvider.GetIcon(path);
+
+                // For directories, use async check for better performance
+                if (item.IsDirectory)
+                {
+                    item.HasChildren = await DirectoryHasAccessibleChildrenAsync(path, showHiddenFiles, cancellationToken);
+                }
+
+                return item;
+            }
+            catch (OperationCanceledException)
+            {
+                throw; // Re-throw cancellation
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to create file tree item: {ex.Message}");
+
+                // Return a basic item if creation fails
+                var fallbackItem = new FileTreeItem
+                {
+                    Name = Path.GetFileName(path),
+                    Path = path,
+                    Level = level,
+                    IsDirectory = Directory.Exists(path),
+                    Type = Directory.Exists(path) ? "Folder" : "File",
+                    HasChildren = false
+                };
+
+                return fallbackItem;
+            }
+        }
+
+        [Obsolete("Use DirectoryHasAccessibleChildrenAsync for better performance on network drives")]
         public bool DirectoryHasAccessibleChildren(string directoryPath, bool showHiddenFiles = false)
         {
             if (_disposed)
@@ -206,6 +258,67 @@ namespace ExplorerPro.UI.FileTree.Services
             catch (Exception)
             {
                 return false; // Error accessing, assume no children
+            }
+        }
+
+        public async Task<bool> DirectoryHasAccessibleChildrenAsync(string directoryPath, bool showHiddenFiles = false, CancellationToken cancellationToken = default)
+        {
+            if (_disposed)
+                return false;
+
+            try
+            {
+                // Run the enumeration on a background thread to avoid blocking UI
+                return await Task.Run(() =>
+                {
+                    try
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        // Use EnumerateFileSystemInfos for a single pass through the directory
+                        var directoryInfo = new DirectoryInfo(directoryPath);
+                        
+                        foreach (var entry in directoryInfo.EnumerateFileSystemInfos())
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            
+                            // Skip hidden entries if needed
+                            if (!showHiddenFiles && (entry.Attributes & FileAttributes.Hidden) == FileAttributes.Hidden)
+                                continue;
+                            
+                            // Found at least one visible entry
+                            return true;
+                        }
+                        
+                        return false;
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        return false; // Can't access, so effectively no children
+                    }
+                    catch (DirectoryNotFoundException)
+                    {
+                        return false; // Directory doesn't exist
+                    }
+                    catch (IOException)
+                    {
+                        return false; // I/O error, assume no children
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[ERROR] Error checking directory children: {ex.Message}");
+                        return false; // Error accessing, assume no children
+                    }
+                }, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return false; // Cancelled, return false
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Async directory check failed: {ex.Message}");
+                return false;
             }
         }
 
