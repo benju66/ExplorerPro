@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Performance Optimized Version with GetItemFromPoint Caching
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Fixed with proper adapter disposal
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -32,6 +32,7 @@ namespace ExplorerPro.UI.FileTree
     /// Interaction logic for ImprovedFileTreeListView.xaml with enhanced context menu support
     /// Performance optimized version with O(n) selection complexity, async directory checks,
     /// and cached GetItemFromPoint for smooth drag & drop
+    /// Fixed version with proper adapter disposal
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -335,7 +336,7 @@ namespace ExplorerPro.UI.FileTree
                 // Attach to the tree view with GetItemFromPoint function (now optimized with caching)
                 _enhancedDragDropService.AttachToControl(fileTreeView, GetItemFromPoint);
                 
-                // Keep old service interface for compatibility
+                // Keep old service interface for compatibility using the adapter
                 _dragDropService = new FileTreeDragDropServiceAdapter(_enhancedDragDropService);
 
                 _fileTreeService.ErrorOccurred += OnFileTreeServiceError;
@@ -2281,7 +2282,18 @@ namespace ExplorerPro.UI.FileTree
                     
                     // Dispose services in proper order
                     
-                    // 1. Dispose enhanced drag/drop service first (it depends on selection service)
+                    // 1. Dispose drag drop adapter FIRST (it depends on enhanced service)
+                    if (_dragDropService != null)
+                    {
+                        // Cast to our adapter type to access Dispose method
+                        if (_dragDropService is FileTreeDragDropServiceAdapter adapter)
+                        {
+                            adapter.Dispose();
+                        }
+                        _dragDropService = null;
+                    }
+                    
+                    // 2. Dispose enhanced drag/drop service
                     if (_enhancedDragDropService != null)
                     {
                         _enhancedDragDropService.FilesDropped -= OnFilesDropped;
@@ -2292,9 +2304,6 @@ namespace ExplorerPro.UI.FileTree
                         _enhancedDragDropService.Dispose();
                         _enhancedDragDropService = null;
                     }
-                    
-                    // 2. Dispose drag drop adapter
-                    _dragDropService = null;
                     
                     // 3. Dispose theme service
                     if (_themeService != null)
