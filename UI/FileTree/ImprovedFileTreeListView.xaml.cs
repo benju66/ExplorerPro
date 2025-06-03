@@ -1,4 +1,4 @@
-// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Performance Optimized Version with Async Directory Checks
+// UI/FileTree/ImprovedFileTreeListView.xaml.cs - Performance Optimized Version with GetItemFromPoint Caching
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -30,7 +30,8 @@ namespace ExplorerPro.UI.FileTree
 {
     /// <summary>
     /// Interaction logic for ImprovedFileTreeListView.xaml with enhanced context menu support
-    /// Performance optimized version with O(n) selection complexity and async directory checks
+    /// Performance optimized version with O(n) selection complexity, async directory checks,
+    /// and cached GetItemFromPoint for smooth drag & drop
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -77,6 +78,12 @@ namespace ExplorerPro.UI.FileTree
         
         // Cancellation support for async operations
         private CancellationTokenSource _loadCancellationTokenSource;
+        
+        // GetItemFromPoint cache
+        private readonly Dictionary<Point, CachedHitTestResult> _hitTestCache = new Dictionary<Point, CachedHitTestResult>();
+        private readonly Queue<Point> _hitTestCacheQueue = new Queue<Point>();
+        private const int HIT_TEST_CACHE_SIZE = 20;
+        private const double HIT_TEST_POSITION_TOLERANCE = 3.0; // Tolerance for position matching
         
         #endregion
 
@@ -197,6 +204,20 @@ namespace ExplorerPro.UI.FileTree
         
         #endregion
 
+        #region Nested Types
+        
+        /// <summary>
+        /// Cached hit test result with timestamp
+        /// </summary>
+        private class CachedHitTestResult
+        {
+            public FileTreeItem Item { get; set; }
+            public DateTime CacheTime { get; set; }
+            public bool IsValid => (DateTime.Now - CacheTime).TotalMilliseconds < 300; // Cache for 300ms
+        }
+        
+        #endregion
+
         #region Constructor
 
         /// <summary>
@@ -311,7 +332,7 @@ namespace ExplorerPro.UI.FileTree
                 _enhancedDragDropService.ErrorOccurred += OnDragDropError;
                 _enhancedDragDropService.OutlookExtractionCompleted += OnOutlookExtractionCompleted;
                 
-                // Attach to the tree view with GetItemFromPoint function
+                // Attach to the tree view with GetItemFromPoint function (now optimized with caching)
                 _enhancedDragDropService.AttachToControl(fileTreeView, GetItemFromPoint);
                 
                 // Keep old service interface for compatibility
@@ -448,6 +469,7 @@ namespace ExplorerPro.UI.FileTree
             
             // Clear caches
             ClearTreeViewItemCache();
+            ClearHitTestCache();
         }
         
         #endregion
@@ -516,6 +538,15 @@ namespace ExplorerPro.UI.FileTree
         {
             _treeViewItemCache.Clear();
             _visibleTreeViewItems.Clear();
+        }
+        
+        /// <summary>
+        /// Clears the hit test cache
+        /// </summary>
+        private void ClearHitTestCache()
+        {
+            _hitTestCache.Clear();
+            _hitTestCacheQueue.Clear();
         }
         
         /// <summary>
@@ -904,6 +935,7 @@ namespace ExplorerPro.UI.FileTree
                 _fileTreeCache.Clear();
                 _selectionService?.ClearSelection();
                 ClearTreeViewItemCache();
+                ClearHitTestCache(); // Clear hit test cache when tree structure changes
                 
                 // Unsubscribe from all LoadChildren events before clearing
                 UnsubscribeAllLoadChildren();
@@ -1106,6 +1138,9 @@ namespace ExplorerPro.UI.FileTree
                 
                 parentItem.HasChildren = parentItem.Children.Count > 0;
                 
+                // Clear hit test cache when tree structure changes
+                ClearHitTestCache();
+                
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Loaded {parentItem.Children.Count} items for directory: {path}");
             }
             catch (OperationCanceledException)
@@ -1196,6 +1231,7 @@ namespace ExplorerPro.UI.FileTree
                 {
                     // Clear cache for expanded items as container generation changes
                     ClearTreeViewItemCache();
+                    ClearHitTestCache(); // Clear hit test cache when tree structure changes
                     
                     Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
                         if (_disposed) return;
@@ -1412,6 +1448,7 @@ namespace ExplorerPro.UI.FileTree
                 
                 // Clear cache when containers are regenerated
                 ClearTreeViewItemCache();
+                ClearHitTestCache(); // Clear hit test cache when containers regenerate
                 
                 // Update visible items
                 UpdateVisibleItemsCache();
@@ -1888,15 +1925,33 @@ namespace ExplorerPro.UI.FileTree
         
         #endregion
 
-        #region Drag and Drop
+        #region Drag and Drop - OPTIMIZED WITH CACHING
 
-        // Updated GetItemFromPoint method to ensure it works correctly
+        /// <summary>
+        /// Gets item from point with caching to avoid repeated visual tree traversal
+        /// </summary>
         private FileTreeItem GetItemFromPoint(Point point)
         {
+            // Round the point to reduce cache misses from minor mouse movements
+            var roundedPoint = new Point(
+                Math.Round(point.X / HIT_TEST_POSITION_TOLERANCE) * HIT_TEST_POSITION_TOLERANCE,
+                Math.Round(point.Y / HIT_TEST_POSITION_TOLERANCE) * HIT_TEST_POSITION_TOLERANCE
+            );
+            
+            // Check cache first
+            if (_hitTestCache.TryGetValue(roundedPoint, out var cachedResult) && cachedResult.IsValid)
+            {
+                return cachedResult.Item;
+            }
+            
+            // Not in cache or expired, perform hit test
             HitTestResult result = VisualTreeHelper.HitTest(fileTreeView, point);
             if (result == null)
+            {
+                CacheHitTestResult(roundedPoint, null);
                 return null;
-                
+            }
+            
             DependencyObject obj = result.VisualHit;
             
             // Walk up the visual tree to find TreeViewItem
@@ -1905,12 +1960,41 @@ namespace ExplorerPro.UI.FileTree
                 obj = VisualTreeHelper.GetParent(obj);
             }
             
+            FileTreeItem item = null;
             if (obj is TreeViewItem treeViewItem)
             {
-                return treeViewItem.DataContext as FileTreeItem;
+                item = treeViewItem.DataContext as FileTreeItem;
             }
             
-            return null;
+            // Cache the result
+            CacheHitTestResult(roundedPoint, item);
+            
+            return item;
+        }
+        
+        /// <summary>
+        /// Caches a hit test result
+        /// </summary>
+        private void CacheHitTestResult(Point point, FileTreeItem item)
+        {
+            // Enforce cache size limit
+            if (_hitTestCache.Count >= HIT_TEST_CACHE_SIZE)
+            {
+                // Remove oldest entry
+                if (_hitTestCacheQueue.Count > 0)
+                {
+                    var oldestPoint = _hitTestCacheQueue.Dequeue();
+                    _hitTestCache.Remove(oldestPoint);
+                }
+            }
+            
+            // Add new entry
+            _hitTestCache[point] = new CachedHitTestResult 
+            { 
+                Item = item, 
+                CacheTime = DateTime.Now 
+            };
+            _hitTestCacheQueue.Enqueue(point);
         }
         
         #endregion
@@ -1957,8 +2041,9 @@ namespace ExplorerPro.UI.FileTree
                         }
                     }
                     
-                    // Clear cache after refresh
+                    // Clear caches after refresh
                     ClearTreeViewItemCache();
+                    ClearHitTestCache();
                     
                     System.Diagnostics.Debug.WriteLine($"[DEBUG] Directory refreshed: {directoryPath}, Children: {item.Children.Count}");
                 }
@@ -2142,6 +2227,7 @@ namespace ExplorerPro.UI.FileTree
                     
                     // Clear performance optimization caches
                     ClearTreeViewItemCache();
+                    ClearHitTestCache();
                     
                     // Save settings before disposal
                     try

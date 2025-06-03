@@ -1,4 +1,4 @@
-// UI/FileTree/Services/FileTreeDragDropService.cs - Fixed version with proper cleanup
+// UI/FileTree/Services/FileTreeDragDropService.cs - Optimized with throttling and caching
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -19,7 +19,7 @@ namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
     /// Enhanced drag and drop service with multi-selection, visual feedback, and advanced features
-    /// Fixed version with proper memory management and disposal
+    /// Optimized version with event throttling and caching to prevent UI stuttering
     /// </summary>
     public class FileTreeDragDropService : IDisposable
     {
@@ -28,6 +28,11 @@ namespace ExplorerPro.UI.FileTree.Services
         private const double DRAG_THRESHOLD = 10.0;
         private const string INTERNAL_FORMAT = "ExplorerPro.InternalDrop";
         private const string OUTLOOK_FORMAT = "FileGroupDescriptor";
+        
+        // Throttling constants
+        private const int DRAG_OVER_THROTTLE_MS = 50; // Process drag over every 50ms max
+        private const double POSITION_TOLERANCE = 5.0; // Tolerance for position changes
+        private const int ITEM_CACHE_SIZE = 10; // Size of item position cache
         
         #endregion
         
@@ -58,6 +63,26 @@ namespace ExplorerPro.UI.FileTree.Services
         private EventHandler<FileTreeItem> _springLoadedExpandingHandler;
         private EventHandler<FileTreeItem> _springLoadedCollapsingHandler;
         private EventHandler<FileTreeSelectionChangedEventArgs> _selectionChangedHandler;
+        
+        // Throttling and caching fields
+        private DateTime _lastDragOverTime = DateTime.MinValue;
+        private Point _lastDragOverPosition;
+        private readonly Dictionary<Point, CachedItemResult> _itemPositionCache = new Dictionary<Point, CachedItemResult>();
+        private readonly Queue<Point> _cacheKeyQueue = new Queue<Point>();
+        
+        #endregion
+        
+        #region Nested Types
+        
+        /// <summary>
+        /// Cached result for GetItemFromPoint
+        /// </summary>
+        private class CachedItemResult
+        {
+            public FileTreeItem Item { get; set; }
+            public DateTime CacheTime { get; set; }
+            public bool IsValid => (DateTime.Now - CacheTime).TotalMilliseconds < 500; // Cache for 500ms
+        }
         
         #endregion
         
@@ -185,6 +210,9 @@ namespace ExplorerPro.UI.FileTree.Services
                 _autoScrollHelper = null;
             }
             
+            // Clear caches
+            ClearCaches();
+            
             // Clear references
             _control = null;
             _getItemFromPoint = null;
@@ -286,7 +314,7 @@ namespace ExplorerPro.UI.FileTree.Services
                 // Get the item under the mouse
                 if (_getItemFromPoint != null)
                 {
-                    _potentialDragItem = _getItemFromPoint(_dragStartPoint.Value);
+                    _potentialDragItem = GetItemFromPointCached(_dragStartPoint.Value);
                     
                     // Only prepare for drag if the clicked item is selected
                     if (_potentialDragItem == null || !_selectionService.IsItemSelected(_potentialDragItem))
@@ -333,6 +361,9 @@ namespace ExplorerPro.UI.FileTree.Services
             try
             {
                 _isDragging = true;
+                
+                // Clear caches at start of drag
+                ClearCaches();
                 
                 // Create data object with selected files from SelectionService
                 var dataObject = CreateDragDataObject();
@@ -453,11 +484,15 @@ namespace ExplorerPro.UI.FileTree.Services
         
         #endregion
         
-        #region Drag Over Handling
+        #region Drag Over Handling - OPTIMIZED WITH THROTTLING
         
         private void OnDragEnter(object sender, DragEventArgs e)
         {
             e.Handled = true;
+            
+            // Clear caches when entering
+            ClearCaches();
+            
             ProcessDragOver(e);
         }
         
@@ -465,12 +500,30 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             e.Handled = true;
             
-            // Get item under mouse using the stored function
+            var position = e.GetPosition(_control);
+            
+            // Check if we should throttle this event
+            if (ShouldThrottleDragOver(position))
+            {
+                // Skip processing but still allow drop
+                e.Effects = _isValidDropTarget ? DetermineDropEffects(e) : DragDropEffects.None;
+                return;
+            }
+            
+            // Update last processed time and position
+            _lastDragOverTime = DateTime.Now;
+            _lastDragOverPosition = position;
+            
+            // Get item under mouse using cached function
             if (_getItemFromPoint != null)
             {
-                var position = e.GetPosition(_control);
-                var item = _getItemFromPoint(position);
-                UpdateDropTarget(item);
+                var item = GetItemFromPointCached(position);
+                
+                // Only update if item changed
+                if (item != _currentDropTarget)
+                {
+                    UpdateDropTarget(item);
+                }
             }
             
             ProcessDragOver(e);
@@ -478,7 +531,6 @@ namespace ExplorerPro.UI.FileTree.Services
             // Update auto-scroll
             if (_autoScrollHelper != null)
             {
-                var position = e.GetPosition(_control);
                 _autoScrollHelper.UpdatePosition(position);
                 
                 if (_autoScrollHelper.IsInScrollZone(position))
@@ -487,7 +539,7 @@ namespace ExplorerPro.UI.FileTree.Services
                     _autoScrollHelper.Stop();
             }
             
-            // Update adorner position
+            // Update adorner position (always update for smooth movement)
             if (_dragAdorner != null && _adornerLayer != null)
             {
                 _dragAdorner.UpdatePosition(e.GetPosition(_adornerLayer));
@@ -508,7 +560,83 @@ namespace ExplorerPro.UI.FileTree.Services
                 UpdateDropTarget(null);
                 _autoScrollHelper?.Stop();
                 _springLoadedHelper?.CancelAll();
+                
+                // Clear caches when leaving
+                ClearCaches();
             }
+        }
+        
+        /// <summary>
+        /// Determines if drag over event should be throttled
+        /// </summary>
+        private bool ShouldThrottleDragOver(Point currentPosition)
+        {
+            // Check time throttling
+            var timeSinceLastUpdate = (DateTime.Now - _lastDragOverTime).TotalMilliseconds;
+            if (timeSinceLastUpdate < DRAG_OVER_THROTTLE_MS)
+            {
+                // Also check if position changed significantly
+                var distance = (currentPosition - _lastDragOverPosition).Length;
+                if (distance < POSITION_TOLERANCE)
+                {
+                    return true; // Throttle this event
+                }
+            }
+            
+            return false;
+        }
+        
+        /// <summary>
+        /// Gets item from point with caching
+        /// </summary>
+        private FileTreeItem GetItemFromPointCached(Point position)
+        {
+            if (_getItemFromPoint == null) return null;
+            
+            // Round position to reduce cache misses for minor movements
+            var roundedPosition = new Point(
+                Math.Round(position.X / POSITION_TOLERANCE) * POSITION_TOLERANCE,
+                Math.Round(position.Y / POSITION_TOLERANCE) * POSITION_TOLERANCE
+            );
+            
+            // Check cache
+            if (_itemPositionCache.TryGetValue(roundedPosition, out var cachedResult) && cachedResult.IsValid)
+            {
+                return cachedResult.Item;
+            }
+            
+            // Not in cache or expired, get the item
+            var item = _getItemFromPoint(position);
+            
+            // Update cache
+            if (_itemPositionCache.Count >= ITEM_CACHE_SIZE)
+            {
+                // Remove oldest entry
+                if (_cacheKeyQueue.Count > 0)
+                {
+                    var oldestKey = _cacheKeyQueue.Dequeue();
+                    _itemPositionCache.Remove(oldestKey);
+                }
+            }
+            
+            _itemPositionCache[roundedPosition] = new CachedItemResult 
+            { 
+                Item = item, 
+                CacheTime = DateTime.Now 
+            };
+            _cacheKeyQueue.Enqueue(roundedPosition);
+            
+            return item;
+        }
+        
+        /// <summary>
+        /// Clears all caches
+        /// </summary>
+        private void ClearCaches()
+        {
+            _itemPositionCache.Clear();
+            _cacheKeyQueue.Clear();
+            _lastDragOverTime = DateTime.MinValue;
         }
         
         private void ProcessDragOver(DragEventArgs e)
@@ -564,11 +692,14 @@ namespace ExplorerPro.UI.FileTree.Services
                 _autoScrollHelper?.Stop();
                 _springLoadedHelper?.CollapseAll();
                 
+                // Clear caches after drop
+                ClearCaches();
+                
                 // Get final drop target
                 if (_getItemFromPoint != null)
                 {
                     var position = e.GetPosition(_control);
-                    var item = _getItemFromPoint(position);
+                    var item = GetItemFromPointCached(position);
                     UpdateDropTarget(item);
                 }
                 
@@ -636,7 +767,7 @@ namespace ExplorerPro.UI.FileTree.Services
         
         #endregion
         
-        #region Visual Feedback
+        #region Visual Feedback - OPTIMIZED
         
         private void OnGiveFeedback(object sender, GiveFeedbackEventArgs e)
         {
@@ -679,6 +810,10 @@ namespace ExplorerPro.UI.FileTree.Services
         
         private void UpdateDropTarget(FileTreeItem item)
         {
+            // Only update if target changed
+            if (_currentDropTarget == item)
+                return;
+            
             // Clear old highlight
             if (_currentDropTarget != null)
             {
@@ -794,6 +929,9 @@ namespace ExplorerPro.UI.FileTree.Services
             _autoScrollHelper?.Stop();
             _springLoadedHelper?.CancelAll();
             UpdateDropTarget(null);
+            
+            // Clear caches
+            ClearCaches();
         }
         
         private void OnSpringLoadedFolderExpanding(object sender, FileTreeItem item)
@@ -895,6 +1033,9 @@ namespace ExplorerPro.UI.FileTree.Services
                     _adornerLayer = null;
                     _currentDropTarget = null;
                     _potentialDragItem = null;
+                    
+                    // Clear caches
+                    ClearCaches();
                 }
                 
                 _disposed = true;
