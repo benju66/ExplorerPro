@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Threading.Tasks;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Collections.ObjectModel;
 
 namespace ExplorerPro.Utilities
 {
@@ -373,5 +374,80 @@ namespace ExplorerPro.Utilities
         }
 
         #endregion
+    }
+}
+
+/// <summary>
+/// Thread-safe extension methods for ObservableCollection
+/// </summary>
+public static class CollectionExtensions
+{
+    /// <summary>
+    /// Adds an item to the collection in a thread-safe manner
+    /// </summary>
+    public static void AddSafe<T>(this ObservableCollection<T> collection, T item)
+    {
+        if (Application.Current?.Dispatcher.CheckAccess() == true)
+        {
+            collection.Add(item);
+        }
+        else
+        {
+            Application.Current?.Dispatcher.Invoke(() => collection.Add(item));
+        }
+    }
+
+    /// <summary>
+    /// Removes an item from the collection in a thread-safe manner
+    /// </summary>
+    public static void RemoveSafe<T>(this ObservableCollection<T> collection, T item)
+    {
+        if (Application.Current?.Dispatcher.CheckAccess() == true)
+        {
+            collection.Remove(item);
+        }
+        else
+        {
+            Application.Current?.Dispatcher.Invoke(() => collection.Remove(item));
+        }
+    }
+
+    /// <summary>
+    /// Clears the collection in a thread-safe manner
+    /// </summary>
+    public static void ClearSafe<T>(this ObservableCollection<T> collection)
+    {
+        if (Application.Current?.Dispatcher.CheckAccess() == true)
+        {
+            collection.Clear();
+        }
+        else
+        {
+            Application.Current?.Dispatcher.Invoke(() => collection.Clear());
+        }
+    }
+
+    /// <summary>
+    /// Adds multiple items to the collection in a thread-safe manner
+    /// </summary>
+    public static void AddRangeSafe<T>(this ObservableCollection<T> collection, IEnumerable<T> items)
+    {
+        if (Application.Current?.Dispatcher.CheckAccess() == true)
+        {
+            foreach (var item in items)
+            {
+                collection.Add(item);
+            }
+        }
+        else
+        {
+            Application.Current?.Dispatcher.Invoke(() =>
+            {
+                foreach (var item in items)
+                {
+                    collection.Add(item);
+                }
+            });
+        }
     }
 }

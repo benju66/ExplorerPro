@@ -170,8 +170,8 @@ namespace ExplorerPro.UI.FileTree.Coordinators
                 // Cancel any ongoing operations
                 _loadChildrenManager.CancelActiveOperations();
                 
-                // Clear existing data
-                ClearCurrentData();
+                // Clear existing data on UI thread
+                Application.Current.Dispatcher.Invoke(() => ClearCurrentData());
                 
                 // Normalize the path
                 directory = Path.GetFullPath(directory);
@@ -183,20 +183,27 @@ namespace ExplorerPro.UI.FileTree.Coordinators
                 
                 if (rootItem != null)
                 {
-                    // Setup root item
-                    _loadChildrenManager.SubscribeToLoadChildren(rootItem);
-                    _rootItems.Add(rootItem);
-                    _fileTreeCache.SetItem(directory, rootItem);
+                    // Setup root item and add to collection on UI thread
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        _loadChildrenManager.SubscribeToLoadChildren(rootItem);
+                        _rootItems.Add(rootItem);
+                        _fileTreeCache.SetItem(directory, rootItem);
+                    });
                     
                     // Load children
                     await _loadChildrenManager.LoadDirectoryContentsAsync(rootItem).ConfigureAwait(false);
                     
-                    // Update current path
-                    _currentFolderPath = directory;
+                    // Update current path and expand root item on UI thread
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        _currentFolderPath = directory;
+                        rootItem.IsExpanded = true;
+                    });
+                    
                     LocationChanged?.Invoke(this, directory);
                     
-                    // Expand root item and update UI
-                    rootItem.IsExpanded = true;
+                    // Update UI
                     await UpdateUIAfterDirectoryLoad().ConfigureAwait(false);
                     
                     System.Diagnostics.Debug.WriteLine($"[DEBUG] Root directory set successfully: {directory}");
@@ -537,6 +544,12 @@ namespace ExplorerPro.UI.FileTree.Coordinators
 
         private void ClearCurrentData()
         {
+            // Ensure this method is called from UI thread since it modifies collections
+            if (Application.Current?.Dispatcher.CheckAccess() != true)
+            {
+                throw new InvalidOperationException("ClearCurrentData must be called from the UI thread");
+            }
+            
             _rootItems.Clear();
             _fileTreeCache.Clear();
             _selectionService?.ClearSelection();

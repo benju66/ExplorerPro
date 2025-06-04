@@ -156,40 +156,55 @@ namespace ExplorerPro.UI.FileTree.Managers
             {
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Loading directory contents for: {path}");
                 
-                if (parentItem.Children.Count > 0 && !parentItem.HasDummyChild())
+                // Check if already loaded (must be on UI thread)
+                bool alreadyLoaded = false;
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    alreadyLoaded = parentItem.Children.Count > 0 && !parentItem.HasDummyChild();
+                });
+                
+                if (alreadyLoaded)
                 {
                     System.Diagnostics.Debug.WriteLine($"[DEBUG] Directory already loaded: {path}");
                     return;
                 }
                 
-                parentItem.ClearChildren();
-                parentItem.Children.Add(new FileTreeItem { Name = "Loading...", Level = childLevel });
+                // Clear children and add loading indicator on UI thread
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    parentItem.ClearChildren();
+                    parentItem.Children.Add(new FileTreeItem { Name = "Loading...", Level = childLevel });
+                });
 
                 // OPTIMIZED: Use ConfigureAwait(false) to avoid deadlocks and improve performance
                 var children = await _fileTreeService.LoadDirectoryAsync(path, _showHiddenFiles, childLevel).ConfigureAwait(false);
 
                 if (_disposed || cancellationToken.IsCancellationRequested) return;
 
-                parentItem.ClearChildren();
-
-                foreach (var child in children)
+                // Update children collection on UI thread
+                await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    if (cancellationToken.IsCancellationRequested) return;
-                    
-                    // Set parent reference for efficient parent/child operations
-                    child.Parent = parentItem;
-                    
-                    parentItem.Children.Add(child);
-                    _fileTreeCache.SetItem(child.Path, child);
-                    
-                    if (child.IsDirectory)
+                    parentItem.ClearChildren();
+
+                    foreach (var child in children)
                     {
-                        // Subscribe to LoadChildren event with proper tracking
-                        SubscribeToLoadChildren(child);
+                        if (cancellationToken.IsCancellationRequested) return;
+                        
+                        // Set parent reference for efficient parent/child operations
+                        child.Parent = parentItem;
+                        
+                        parentItem.Children.Add(child);
+                        _fileTreeCache.SetItem(child.Path, child);
+                        
+                        if (child.IsDirectory)
+                        {
+                            // Subscribe to LoadChildren event with proper tracking
+                            SubscribeToLoadChildren(child);
+                        }
                     }
-                }
-                
-                parentItem.HasChildren = parentItem.Children.Count > 0;
+                    
+                    parentItem.HasChildren = parentItem.Children.Count > 0;
+                });
                 
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Loaded {parentItem.Children.Count} items for directory: {path}");
                 
@@ -201,8 +216,11 @@ namespace ExplorerPro.UI.FileTree.Managers
                 System.Diagnostics.Debug.WriteLine($"[INFO] Loading cancelled for: {path}");
                 if (!_disposed)
                 {
-                    parentItem.ClearChildren();
-                    parentItem.HasChildren = false;
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        parentItem.ClearChildren();
+                        parentItem.HasChildren = false;
+                    });
                 }
             }
             catch (Exception ex)
@@ -211,13 +229,16 @@ namespace ExplorerPro.UI.FileTree.Managers
                 
                 if (!_disposed)
                 {
-                    parentItem.ClearChildren();
-                    parentItem.Children.Add(new FileTreeItem { 
-                        Name = $"Error: {ex.Message}", 
-                        Level = childLevel,
-                        Type = "Error"
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        parentItem.ClearChildren();
+                        parentItem.Children.Add(new FileTreeItem { 
+                            Name = $"Error: {ex.Message}", 
+                            Level = childLevel,
+                            Type = "Error"
+                        });
+                        parentItem.HasChildren = true;
                     });
-                    parentItem.HasChildren = true;
                     
                     // Notify load error
                     DirectoryLoadError?.Invoke(this, new DirectoryLoadErrorEventArgs(parentItem, ex));
@@ -236,10 +257,12 @@ namespace ExplorerPro.UI.FileTree.Managers
 
             bool wasExpanded = directoryItem.IsExpanded;
             
-            // Unsubscribe LoadChildren events for all children before clearing
-            UnsubscribeChildrenLoadEvents(directoryItem);
-            
-            directoryItem.ClearChildren();
+            // Unsubscribe LoadChildren events for all children before clearing (on UI thread)
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                UnsubscribeChildrenLoadEvents(directoryItem);
+                directoryItem.ClearChildren();
+            });
             
             var cancellationToken = _loadCancellationTokenSource?.Token ?? CancellationToken.None;
             
@@ -257,7 +280,10 @@ namespace ExplorerPro.UI.FileTree.Managers
                 
                 if (!cancellationToken.IsCancellationRequested)
                 {
-                    directoryItem.IsExpanded = true;
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        directoryItem.IsExpanded = true;
+                    });
                 }
             }
         }

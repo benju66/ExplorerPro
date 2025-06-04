@@ -137,7 +137,8 @@ namespace ExplorerPro.UI.Panels.ToDoPanel
             if (sender is CheckBox checkBox && checkBox.DataContext is TaskItem task)
             {
                 task.IsCompleted = checkBox.IsChecked ?? false;
-                SaveTasks();
+                
+                ExecuteOnUIThread(SaveTasks);
             }
         }
         
@@ -157,20 +158,23 @@ namespace ExplorerPro.UI.Panels.ToDoPanel
                     string json = File.ReadAllText(_tasksFilePath);
                     List<TaskItem>? loadedTasks = JsonConvert.DeserializeObject<List<TaskItem>>(json);
                     
-                    Tasks.Clear();
-                    if (loadedTasks != null)
+                    ExecuteOnUIThread(() =>
                     {
-                        foreach (var task in loadedTasks)
+                        Tasks.Clear();
+                        if (loadedTasks != null)
                         {
-                            Tasks.Add(task);
+                            foreach (var task in loadedTasks)
+                            {
+                                Tasks.Add(task);
+                            }
+                            
+                            _logger?.LogInformation($"Loaded {Tasks.Count} tasks");
                         }
-                        
-                        _logger?.LogInformation($"Loaded {Tasks.Count} tasks");
-                    }
-                    else
-                    {
-                        _logger?.LogInformation("Tasks file was corrupted or empty; starting with empty list");
-                    }
+                        else
+                        {
+                            _logger?.LogInformation("Tasks file was corrupted or empty; starting with empty list");
+                        }
+                    });
                 }
                 else
                 {
@@ -247,9 +251,12 @@ namespace ExplorerPro.UI.Panels.ToDoPanel
             if (task == null)
                 return;
                 
-            Tasks.Add(task);
-            SaveTasks();
-            _logger?.LogInformation($"Added task: {task.Text}");
+            ExecuteOnUIThread(() =>
+            {
+                Tasks.Add(task);
+                SaveTasks();
+                _logger?.LogInformation($"Added task: {task.Text}");
+            });
         }
         
         /// <summary>
@@ -258,10 +265,14 @@ namespace ExplorerPro.UI.Panels.ToDoPanel
         /// <param name="task">The task to update</param>
         public void UpdateTask(TaskItem task)
         {
-            // The observable collection will automatically update the UI
-            // since TaskItem implements INotifyPropertyChanged
-            SaveTasks();
-            _logger?.LogInformation($"Updated task: {task.Text}");
+            if (task == null)
+                return;
+                
+            ExecuteOnUIThread(() =>
+            {
+                SaveTasks();
+                _logger?.LogInformation($"Updated task: {task.Text}");
+            });
         }
         
         /// <summary>
@@ -273,9 +284,12 @@ namespace ExplorerPro.UI.Panels.ToDoPanel
             if (task == null)
                 return;
                 
-            Tasks.Remove(task);
-            SaveTasks();
-            _logger?.LogInformation($"Deleted task: {task.Text}");
+            ExecuteOnUIThread(() =>
+            {
+                Tasks.Remove(task);
+                SaveTasks();
+                _logger?.LogInformation($"Deleted task: {task.Text}");
+            });
         }
         
         /// <summary>
@@ -380,15 +394,17 @@ namespace ExplorerPro.UI.Panels.ToDoPanel
         {
             var newTasks = _recurringTaskManager.ProcessDueRecurringTasks();
             
-            foreach (var task in newTasks)
-            {
-                Tasks.Add(task);
-            }
-            
             if (newTasks.Count > 0)
             {
-                SaveTasks();
-                _logger?.LogInformation($"Added {newTasks.Count} tasks from recurring patterns");
+                ExecuteOnUIThread(() =>
+                {
+                    foreach (var task in newTasks)
+                    {
+                        Tasks.Add(task);
+                    }
+                    SaveTasks();
+                    _logger?.LogInformation($"Added {newTasks.Count} tasks from recurring patterns");
+                });
             }
         }
         
@@ -543,6 +559,22 @@ namespace ExplorerPro.UI.Panels.ToDoPanel
         #endregion
         
         #region Helper Methods
+        
+        /// <summary>
+        /// Executes an action on the UI thread safely
+        /// </summary>
+        /// <param name="action">The action to execute</param>
+        private void ExecuteOnUIThread(Action action)
+        {
+            if (Application.Current?.Dispatcher.CheckAccess() == true)
+            {
+                action();
+            }
+            else
+            {
+                Application.Current?.Dispatcher.Invoke(action);
+            }
+        }
         
         /// <summary>
         /// Raises the PropertyChanged event
