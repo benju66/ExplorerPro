@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -13,14 +14,16 @@ namespace ExplorerPro.UI.FileTree.Managers
 {
     /// <summary>
     /// Manages LoadChildren event subscriptions and directory loading operations
-    /// FIXED: Implemented weak event pattern to prevent memory leaks
+    /// FIXED: Implemented thread-safe weak event pattern with proper cleanup to prevent memory leaks
     /// </summary>
     public class FileTreeLoadChildrenManager : IDisposable
     {
         private readonly IFileTreeService _fileTreeService;
         private readonly IFileTreeCache _fileTreeCache;
         
-        // FIXED: Use WeakEventManager pattern to prevent memory leaks
+        // FIXED: Hybrid approach for better tracking and cleanup
+        private readonly ConcurrentDictionary<string, WeakReference<FileTreeItem>> _trackedItems 
+            = new ConcurrentDictionary<string, WeakReference<FileTreeItem>>();
         private readonly ConditionalWeakTable<FileTreeItem, WeakLoadChildrenHandler> _loadChildrenHandlers 
             = new ConditionalWeakTable<FileTreeItem, WeakLoadChildrenHandler>();
         
@@ -28,17 +31,27 @@ namespace ExplorerPro.UI.FileTree.Managers
         private bool _showHiddenFiles;
         private bool _disposed = false;
 
-        // FIXED: Thread synchronization for event management
-        private readonly object _eventLock = new object();
+        // FIXED: Use ReaderWriterLockSlim for better performance
+        private readonly ReaderWriterLockSlim _eventLock = new ReaderWriterLockSlim();
+        
+        // FIXED: Cleanup timer for dead references
+        private readonly Timer _cleanupTimer;
+        private readonly object _cleanupLock = new object();
 
         public event EventHandler<DirectoryLoadedEventArgs>? DirectoryLoaded;
         public event EventHandler<DirectoryLoadErrorEventArgs>? DirectoryLoadError;
+
+        // FIXED: Public property to check if disposed (for WeakLoadChildrenHandler)
+        public bool IsDisposed => _disposed;
 
         public FileTreeLoadChildrenManager(IFileTreeService fileTreeService, IFileTreeCache fileTreeCache)
         {
             _fileTreeService = fileTreeService ?? throw new ArgumentNullException(nameof(fileTreeService));
             _fileTreeCache = fileTreeCache ?? throw new ArgumentNullException(nameof(fileTreeCache));
             _loadCancellationTokenSource = new CancellationTokenSource();
+            
+            // FIXED: Setup cleanup timer that runs every 30 seconds
+            _cleanupTimer = new Timer(CleanupDeadReferences, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
         }
 
         public void UpdateSettings(bool showHiddenFiles)
@@ -49,34 +62,43 @@ namespace ExplorerPro.UI.FileTree.Managers
         #region LoadChildren Event Management - FIXED for Memory Leaks
 
         /// <summary>
-        /// FIXED: Subscribes to LoadChildren event using weak reference pattern to prevent memory leaks
+        /// FIXED: Thread-safe subscription with proper duplicate checking and weak reference tracking
         /// </summary>
         public void SubscribeToLoadChildren(FileTreeItem item)
         {
             if (item == null || _disposed) return;
             
-            lock (_eventLock)
+            _eventLock.EnterWriteLock();
+            try
             {
-                // Check if already subscribed
+                // FIXED: Check if already subscribed to prevent duplicates
                 if (_loadChildrenHandlers.TryGetValue(item, out _)) return;
                 
                 // Create weak handler that doesn't keep strong reference to manager
                 var weakHandler = new WeakLoadChildrenHandler(this, item);
                 _loadChildrenHandlers.Add(item, weakHandler);
                 
+                // FIXED: Track item in concurrent dictionary for cleanup
+                _trackedItems.TryAdd(item.Path, new WeakReference<FileTreeItem>(item));
+                
                 // Subscribe using the weak handler
                 item.LoadChildren += weakHandler.HandleLoadChildren;
+            }
+            finally
+            {
+                _eventLock.ExitWriteLock();
             }
         }
         
         /// <summary>
-        /// FIXED: Proper unsubscription with weak reference cleanup
+        /// FIXED: Thread-safe unsubscription with proper cleanup
         /// </summary>
         public void UnsubscribeFromLoadChildren(FileTreeItem item)
         {
             if (item == null || _disposed) return;
             
-            lock (_eventLock)
+            _eventLock.EnterWriteLock();
+            try
             {
                 if (_loadChildrenHandlers.TryGetValue(item, out var weakHandler))
                 {
@@ -86,7 +108,14 @@ namespace ExplorerPro.UI.FileTree.Managers
                     // Mark handler as disposed and remove from tracking
                     weakHandler.Dispose();
                     _loadChildrenHandlers.Remove(item);
+                    
+                    // FIXED: Remove from tracking dictionary
+                    _trackedItems.TryRemove(item.Path, out _);
                 }
+            }
+            finally
+            {
+                _eventLock.ExitWriteLock();
             }
         }
         
@@ -108,26 +137,75 @@ namespace ExplorerPro.UI.FileTree.Managers
         }
         
         /// <summary>
-        /// FIXED: Thread-safe unsubscription from all LoadChildren events
+        /// FIXED: Proper thread-safe cleanup of all subscriptions using tracking dictionary
         /// </summary>
         public void UnsubscribeAllLoadChildren()
         {
-            lock (_eventLock)
+            _eventLock.EnterWriteLock();
+            try
             {
-                // Get current items (ConditionalWeakTable doesn't support enumeration directly)
-                // We'll iterate through items that may still be alive
+                // FIXED: Use tracking dictionary to safely enumerate items
                 var itemsToUnsubscribe = new List<FileTreeItem>();
                 
-                // Since we can't enumerate ConditionalWeakTable directly,
-                // we'll rely on disposal to clean up remaining handlers
-                foreach (var kvp in _loadChildrenHandlers)
+                foreach (var kvp in _trackedItems.ToList()) // ToList for safe enumeration
                 {
-                    itemsToUnsubscribe.Add(kvp.Key);
+                    if (kvp.Value.TryGetTarget(out var item))
+                    {
+                        itemsToUnsubscribe.Add(item);
+                    }
+                    else
+                    {
+                        // Remove dead reference
+                        _trackedItems.TryRemove(kvp.Key, out _);
+                    }
                 }
                 
                 foreach (var item in itemsToUnsubscribe)
                 {
-                    UnsubscribeFromLoadChildren(item);
+                    if (_loadChildrenHandlers.TryGetValue(item, out var weakHandler))
+                    {
+                        item.LoadChildren -= weakHandler.HandleLoadChildren;
+                        weakHandler.Dispose();
+                        _loadChildrenHandlers.Remove(item);
+                    }
+                }
+                
+                // Clear tracking dictionary
+                _trackedItems.Clear();
+            }
+            finally
+            {
+                _eventLock.ExitWriteLock();
+            }
+        }
+
+        /// <summary>
+        /// FIXED: Periodic cleanup of dead weak references
+        /// </summary>
+        private void CleanupDeadReferences(object? state)
+        {
+            if (_disposed) return;
+            
+            lock (_cleanupLock)
+            {
+                var deadPaths = new List<string>();
+                
+                foreach (var kvp in _trackedItems.ToList())
+                {
+                    if (!kvp.Value.TryGetTarget(out _))
+                    {
+                        deadPaths.Add(kvp.Key);
+                    }
+                }
+                
+                foreach (var path in deadPaths)
+                {
+                    _trackedItems.TryRemove(path, out _);
+                }
+                
+                if (deadPaths.Count > 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DEBUG] Cleaned up {deadPaths.Count} dead weak references");
                 }
             }
         }
@@ -137,14 +215,15 @@ namespace ExplorerPro.UI.FileTree.Managers
         #region Directory Loading
 
         /// <summary>
-        /// Loads directory contents asynchronously
+        /// FIXED: Added defensive checks and ensured single subscription per item
         /// OPTIMIZED: Added ConfigureAwait(false) for better async performance
         /// </summary>
         public async Task LoadDirectoryContentsAsync(FileTreeItem parentItem)
         {
+            // FIXED: Defensive check for disposed state at start
             if (_disposed || parentItem == null || !parentItem.IsDirectory)
             {
-                System.Diagnostics.Debug.WriteLine($"[DEBUG] LoadDirectoryContentsAsync: Invalid parent item");
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] LoadDirectoryContentsAsync: Invalid parent item or disposed");
                 return;
             }
                 
@@ -154,6 +233,9 @@ namespace ExplorerPro.UI.FileTree.Managers
 
             try
             {
+                // FIXED: Check disposed state before any async operation
+                if (_disposed || cancellationToken.IsCancellationRequested) return;
+                
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Loading directory contents for: {path}");
                 
                 // Check if already loaded (must be on UI thread)
@@ -169,6 +251,9 @@ namespace ExplorerPro.UI.FileTree.Managers
                     return;
                 }
                 
+                // FIXED: Check disposed again before continuing
+                if (_disposed || cancellationToken.IsCancellationRequested) return;
+                
                 // Clear children and add loading indicator on UI thread
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
@@ -179,6 +264,7 @@ namespace ExplorerPro.UI.FileTree.Managers
                 // OPTIMIZED: Use ConfigureAwait(false) to avoid deadlocks and improve performance
                 var children = await _fileTreeService.LoadDirectoryAsync(path, _showHiddenFiles, childLevel).ConfigureAwait(false);
 
+                // FIXED: Check disposed and cancelled before updating UI
                 if (_disposed || cancellationToken.IsCancellationRequested) return;
 
                 // Update children collection on UI thread
@@ -188,7 +274,7 @@ namespace ExplorerPro.UI.FileTree.Managers
 
                     foreach (var child in children)
                     {
-                        if (cancellationToken.IsCancellationRequested) return;
+                        if (_disposed || cancellationToken.IsCancellationRequested) return;
                         
                         // Set parent reference for efficient parent/child operations
                         child.Parent = parentItem;
@@ -198,8 +284,21 @@ namespace ExplorerPro.UI.FileTree.Managers
                         
                         if (child.IsDirectory)
                         {
-                            // Subscribe to LoadChildren event with proper tracking
-                            SubscribeToLoadChildren(child);
+                            // FIXED: Ensure subscription only happens once per item
+                            _eventLock.EnterReadLock();
+                            try
+                            {
+                                if (!_loadChildrenHandlers.TryGetValue(child, out _))
+                                {
+                                    _eventLock.ExitReadLock();
+                                    SubscribeToLoadChildren(child);
+                                    _eventLock.EnterReadLock();
+                                }
+                            }
+                            finally
+                            {
+                                _eventLock.ExitReadLock();
+                            }
                         }
                     }
                     
@@ -208,8 +307,11 @@ namespace ExplorerPro.UI.FileTree.Managers
                 
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Loaded {parentItem.Children.Count} items for directory: {path}");
                 
-                // Notify successful load
-                DirectoryLoaded?.Invoke(this, new DirectoryLoadedEventArgs(parentItem, children));
+                // Notify successful load if not disposed
+                if (!_disposed)
+                {
+                    DirectoryLoaded?.Invoke(this, new DirectoryLoadedEventArgs(parentItem, children));
+                }
             }
             catch (OperationCanceledException)
             {
@@ -252,6 +354,7 @@ namespace ExplorerPro.UI.FileTree.Managers
         /// </summary>
         public async Task RefreshDirectoryAsync(FileTreeItem directoryItem)
         {
+            // FIXED: Defensive check for disposed state
             if (_disposed || directoryItem == null || !directoryItem.IsDirectory)
                 return;
 
@@ -266,11 +369,15 @@ namespace ExplorerPro.UI.FileTree.Managers
             
             var cancellationToken = _loadCancellationTokenSource?.Token ?? CancellationToken.None;
             
+            // FIXED: Check disposed before async operations
+            if (_disposed || cancellationToken.IsCancellationRequested)
+                return;
+            
             // OPTIMIZED: Use ConfigureAwait(false) for async HasChildren check
             directoryItem.HasChildren = await _fileTreeService.DirectoryHasAccessibleChildrenAsync(
                 directoryItem.Path, _showHiddenFiles, cancellationToken).ConfigureAwait(false);
             
-            if (cancellationToken.IsCancellationRequested)
+            if (_disposed || cancellationToken.IsCancellationRequested)
                 return;
             
             if (wasExpanded && directoryItem.HasChildren)
@@ -278,7 +385,7 @@ namespace ExplorerPro.UI.FileTree.Managers
                 // OPTIMIZED: Use ConfigureAwait(false) for async loading
                 await LoadDirectoryContentsAsync(directoryItem).ConfigureAwait(false);
                 
-                if (!cancellationToken.IsCancellationRequested)
+                if (!(_disposed || cancellationToken.IsCancellationRequested))
                 {
                     await Application.Current.Dispatcher.InvokeAsync(() =>
                     {
@@ -320,6 +427,9 @@ namespace ExplorerPro.UI.FileTree.Managers
             {
                 _disposed = true;
 
+                // FIXED: Dispose cleanup timer
+                _cleanupTimer?.Dispose();
+
                 // Cancel any active operations
                 _loadCancellationTokenSource?.Cancel();
                 _loadCancellationTokenSource?.Dispose();
@@ -327,6 +437,9 @@ namespace ExplorerPro.UI.FileTree.Managers
 
                 // Unsubscribe from all LoadChildren events
                 UnsubscribeAllLoadChildren();
+
+                // FIXED: Dispose reader-writer lock
+                _eventLock?.Dispose();
 
                 // Clear event handlers
                 DirectoryLoaded = null;
@@ -340,13 +453,14 @@ namespace ExplorerPro.UI.FileTree.Managers
     #region Weak Event Handler Implementation
 
     /// <summary>
-    /// FIXED: Weak event handler that prevents memory leaks by not holding strong reference to manager
+    /// FIXED: Thread-safe weak event handler that prevents memory leaks
     /// </summary>
     internal class WeakLoadChildrenHandler : IDisposable
     {
         private readonly WeakReference<FileTreeLoadChildrenManager> _managerRef;
         private readonly WeakReference<FileTreeItem> _itemRef;
-        private bool _disposed = false;
+        private volatile bool _disposed = false;
+        private readonly object _handlerLock = new object();
 
         public WeakLoadChildrenHandler(FileTreeLoadChildrenManager manager, FileTreeItem item)
         {
@@ -356,22 +470,42 @@ namespace ExplorerPro.UI.FileTree.Managers
 
         public void HandleLoadChildren(object? sender, EventArgs e)
         {
-            if (_disposed) return;
-            
-            // Try to get manager and item from weak references
-            if (_managerRef.TryGetTarget(out var manager) && 
-                _itemRef.TryGetTarget(out var item))
+            // FIXED: Thread-safe handling with proper locking
+            lock (_handlerLock)
             {
-                // Call the actual load method
-                _ = manager.LoadDirectoryContentsAsync(item);
+                if (_disposed) return;
+                
+                // Try to get manager and item from weak references
+                if (_managerRef.TryGetTarget(out var manager) && 
+                    _itemRef.TryGetTarget(out var item))
+                {
+                    // FIXED: Ensure manager is not disposed before calling
+                    if (!manager.IsDisposed)
+                    {
+                        // Call the actual load method
+                        _ = manager.LoadDirectoryContentsAsync(item);
+                    }
+                    else
+                    {
+                        // Manager is disposed, auto-dispose this handler
+                        Dispose();
+                    }
+                }
+                else
+                {
+                    // References are dead, auto-dispose this handler
+                    Dispose();
+                }
             }
-            // If references are dead, we can't do anything - this prevents memory leaks
         }
 
         public void Dispose()
         {
-            _disposed = true;
-            // Weak references will be cleaned up by GC automatically
+            lock (_handlerLock)
+            {
+                _disposed = true;
+                // Weak references will be cleaned up by GC automatically
+            }
         }
     }
 
