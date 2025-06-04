@@ -41,18 +41,18 @@
                 Background="{DynamicResource BackgroundColor}" 
                 BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1"
                 Panel.ZIndex="1">
-            <Grid>
+            <Grid MinWidth="620">
                 <Grid.ColumnDefinitions>
                     <!-- Checkbox column -->
                     <ColumnDefinition Width="Auto"/>
                     <!-- Name column (resizable) -->
-                    <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="100" MaxWidth="600"/>
+                    <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="150" MaxWidth="600"/>
                     <!-- Size column -->
-                    <ColumnDefinition Width="100"/>
+                    <ColumnDefinition Width="100" MinWidth="80"/>
                     <!-- Type column -->
-                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="120" MinWidth="100"/>
                     <!-- Date Modified column -->
-                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="150" MinWidth="120"/>
                     <!-- Remaining space -->
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
@@ -153,18 +153,18 @@
             
             <TreeView.ItemTemplate>
                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                    <Grid x:Name="ItemGrid">
+                    <Grid x:Name="ItemGrid" MinWidth="620">
                         <Grid.ColumnDefinitions>
                             <!-- Checkbox column -->
                             <ColumnDefinition Width="Auto"/>
-                            <!-- Name column - bind to the header column's Width -->
-                            <ColumnDefinition Width="{Binding ElementName=NameColumn, Path=Width, Mode=OneWay}"/>
+                            <!-- Name column - bind to the header column's Width but allow extension -->
+                            <ColumnDefinition Width="{Binding ElementName=NameColumn, Path=Width, Mode=OneWay}" MinWidth="150"/>
                             <!-- Size column -->
-                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="100" MinWidth="80"/>
                             <!-- Type column -->
-                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="120" MinWidth="100"/>
                             <!-- Date Modified column -->
-                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="150" MinWidth="120"/>
                             <!-- Remaining space -->
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
@@ -182,7 +182,7 @@
                                   Tag="{Binding}"/>
                         
                         <!-- Name Column with tree structure -->
-                        <Grid Grid.Column="1" ClipToBounds="True">
+                        <Grid Grid.Column="1">
                             <!-- Tree structure content -->
                             <Grid>
                                 <!-- Background canvas for drawing connecting lines -->
@@ -250,9 +250,10 @@
                                            Margin="2,0,5,0" VerticalAlignment="Center"
                                            RenderOptions.BitmapScalingMode="HighQuality"/>
                                     
-                                    <!-- File/Folder Name -->
+                                    <!-- File/Folder Name - Allow text to extend for horizontal scrolling -->
                                     <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"
+                                               TextTrimming="None"
+                                               TextWrapping="NoWrap"
                                                Foreground="{Binding Foreground}"
                                                FontWeight="{Binding FontWeight}"
                                                ToolTip="{Binding Path}"/>
@@ -265,7 +266,8 @@
                                   VerticalAlignment="Center" 
                                   TextAlignment="Right"
                                   Margin="5,0"
-                                  TextTrimming="CharacterEllipsis"
+                                  TextTrimming="None"
+                                  TextWrapping="NoWrap"
                                   Foreground="{Binding Foreground}"
                                   FontWeight="{Binding FontWeight}"/>
                         
@@ -274,7 +276,8 @@
                                   VerticalAlignment="Center" 
                                   TextAlignment="Left"
                                   Margin="5,0"
-                                  TextTrimming="CharacterEllipsis"
+                                  TextTrimming="None"
+                                  TextWrapping="NoWrap"
                                   Foreground="{Binding Foreground}"
                                   FontWeight="{Binding FontWeight}"/>
                         
@@ -283,7 +286,8 @@
                                   VerticalAlignment="Center" 
                                   TextAlignment="Left"
                                   Margin="5,0"
-                                  TextTrimming="CharacterEllipsis"
+                                  TextTrimming="None"
+                                  TextWrapping="NoWrap"
                                   Foreground="{Binding Foreground}"
                                   FontWeight="{Binding FontWeight}"/>
                     </Grid>
