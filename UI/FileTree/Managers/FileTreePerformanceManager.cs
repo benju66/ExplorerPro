@@ -4,6 +4,8 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using System.Windows.Threading;
 using ExplorerPro.Models;
 using ExplorerPro.UI.FileTree.Utilities;
@@ -11,126 +13,303 @@ using ExplorerPro.UI.FileTree.Utilities;
 namespace ExplorerPro.UI.FileTree.Managers
 {
     /// <summary>
-    /// Manages performance optimizations for the file tree including caching and debouncing
-    /// OPTIMIZED: Simplified caching strategy for better performance
-    /// FIXED: Added thread safety to prevent race conditions
+    /// Handles all performance optimizations for the FileTreeListView including caching, 
+    /// visual tree management, and hit testing.
     /// </summary>
     public class FileTreePerformanceManager : IDisposable
     {
+        #region Private Fields
+
         private readonly TreeView _treeView;
+        private readonly ScrollViewer _scrollViewer;
         
-        // OPTIMIZED: Use ConditionalWeakTable instead of WeakReference dictionary
-        private ConditionalWeakTable<FileTreeItem, TreeViewItem> _treeViewItemCache = new ConditionalWeakTable<FileTreeItem, TreeViewItem>();
+        // Cache for TreeViewItem lookups to avoid repeated visual tree traversal
+        private readonly Dictionary<FileTreeItem, WeakReference> _treeViewItemCache = new Dictionary<FileTreeItem, WeakReference>();
         
-        // FIXED: Thread synchronization for cache operations
-        private readonly object _cacheLock = new object();
+        // Track currently visible TreeViewItems for efficient updates
+        private readonly HashSet<TreeViewItem> _visibleTreeViewItems = new HashSet<TreeViewItem>();
         
-        // OPTIMIZED: Removed visible items tracking (too much overhead)
-        // private readonly HashSet<TreeViewItem> _visibleTreeViewItems = new HashSet<TreeViewItem>();
-        
-        // OPTIMIZED: Increased debounce timer from 50ms to 100ms for better batching
-        private DispatcherTimer? _selectionUpdateTimer;
-        private bool _pendingSelectionUpdate = false;
-        private bool _isScrolling = false;
+        // Hit test cache for drag & drop performance
+        private readonly Dictionary<Point, CachedHitTestResult> _hitTestCache = new Dictionary<Point, CachedHitTestResult>();
+        private readonly Queue<Point> _hitTestCacheQueue = new Queue<Point>();
+        private const int HIT_TEST_CACHE_SIZE = 20;
+        private const double HIT_TEST_POSITION_TOLERANCE = 3.0;
         
         // Performance metrics
-        private DateTime _lastSelectionUpdateTime = DateTime.MinValue;
-        private int _selectionUpdateCount = 0;
-        
-        // OPTIMIZED: Removed hit test cache entirely - WPF hit testing is already optimized
-        // Modern WPF doesn't need this level of caching and it adds more overhead than benefit
+        private DateTime _lastCacheUpdate = DateTime.MinValue;
+        private int _cacheHitCount = 0;
+        private int _cacheMissCount = 0;
         
         private bool _disposed = false;
 
-        public event EventHandler? SelectionUpdateRequested;
+        #endregion
 
-        public FileTreePerformanceManager(TreeView treeView)
+        #region Events
+
+        public event EventHandler VisibleItemsCacheUpdated;
+        public event EventHandler SelectionUpdateRequested;
+
+        #endregion
+
+        #region Constructor
+
+        public FileTreePerformanceManager(TreeView treeView, ScrollViewer scrollViewer = null)
         {
             _treeView = treeView ?? throw new ArgumentNullException(nameof(treeView));
-            InitializePerformanceOptimizations();
+            _scrollViewer = scrollViewer ?? VisualTreeHelperEx.FindScrollViewer(treeView);
+            
+            Initialize();
         }
 
-        private void InitializePerformanceOptimizations()
+        #endregion
+
+        #region Initialization
+
+        private void Initialize()
         {
-            // OPTIMIZED: Increased debounce from 50ms to 100ms for better batching
-            // FIXED: Proper initialization to prevent nullable warnings
-            _selectionUpdateTimer = new DispatcherTimer
+            if (_scrollViewer != null)
             {
-                Interval = TimeSpan.FromMilliseconds(100)
-            };
-            _selectionUpdateTimer.Tick += OnSelectionUpdateTimer_Tick;
+                _scrollViewer.ScrollChanged += OnScrollChanged;
+            }
             
-            // Track scrolling state to optimize updates
-            var scrollViewer = VisualTreeHelperEx.FindScrollViewer(_treeView);
-            if (scrollViewer != null)
+            if (_treeView.ItemContainerGenerator != null)
             {
-                scrollViewer.ScrollChanged += OnScrollViewer_ScrollChanged;
+                _treeView.ItemContainerGenerator.StatusChanged += OnContainerGeneratorStatusChanged;
             }
         }
 
-        #region Optimized Cache Management
+        #endregion
+
+        #region Public Methods
 
         /// <summary>
-        /// OPTIMIZED: Gets a TreeViewItem from cache using ConditionalWeakTable
-        /// FIXED: Added thread safety to prevent race conditions
+        /// Gets a TreeViewItem for the given data item using caching for performance
         /// </summary>
-        public TreeViewItem? GetTreeViewItemCached(FileTreeItem? dataItem)
+        public TreeViewItem GetTreeViewItemCached(FileTreeItem dataItem)
         {
             if (dataItem == null) return null;
             
-            lock (_cacheLock)
+            // Check cache first
+            if (_treeViewItemCache.TryGetValue(dataItem, out WeakReference weakRef) && 
+                weakRef.Target is TreeViewItem cachedItem && 
+                cachedItem.DataContext == dataItem)
             {
-                // Try cache first - ConditionalWeakTable is more efficient than WeakReference dictionary
-                if (_treeViewItemCache.TryGetValue(dataItem, out TreeViewItem cachedItem) && 
-                    cachedItem.DataContext == dataItem)
-                {
-                    return cachedItem;
-                }
-                
-                // Not in cache, find it
-                var treeViewItem = VisualTreeHelperEx.FindTreeViewItemOptimized(_treeView, dataItem);
-                
-                // Update cache
-                if (treeViewItem != null)
-                {
-                    // FIXED: ConditionalWeakTable doesn't have AddOrUpdate, use proper API with thread safety
-                    try
-                    {
-                        _treeViewItemCache.Add(dataItem, treeViewItem);
-                    }
-                    catch (ArgumentException)
-                    {
-                        // Item already exists, remove and add again
-                        _treeViewItemCache.Remove(dataItem);
-                        _treeViewItemCache.Add(dataItem, treeViewItem);
-                    }
-                }
-                
-                return treeViewItem;
+                _cacheHitCount++;
+                return cachedItem;
             }
+            
+            // Not in cache or stale, find it
+            _cacheMissCount++;
+            var treeViewItem = VisualTreeHelperEx.FindTreeViewItemOptimized(_treeView, dataItem);
+            
+            // Update cache
+            if (treeViewItem != null)
+            {
+                _treeViewItemCache[dataItem] = new WeakReference(treeViewItem);
+            }
+            
+            return treeViewItem;
         }
 
         /// <summary>
-        /// OPTIMIZED: Gets all TreeViewItems efficiently - removed visible items tracking
-        /// FIXED: Added thread safety
+        /// Gets an item from a point using cached hit testing
+        /// </summary>
+        public FileTreeItem GetItemFromPoint(Point point)
+        {
+            // Check cache first
+            var cachedResult = GetCachedHitTestResult(point);
+            if (cachedResult != null && cachedResult.IsValid)
+            {
+                return cachedResult.Item;
+            }
+            
+            // Perform hit test
+            var hitTestResult = VisualTreeHelper.HitTest(_treeView, point);
+            var treeViewItem = VisualTreeHelperEx.FindAncestor<TreeViewItem>(hitTestResult?.VisualHit);
+            var item = treeViewItem?.DataContext as FileTreeItem;
+            
+            // Cache the result
+            CacheHitTestResult(point, item);
+            
+            return item;
+        }
+
+        /// <summary>
+        /// Gets all TreeViewItems efficiently using cache when possible
         /// </summary>
         public IEnumerable<TreeViewItem> GetAllTreeViewItemsFast()
         {
-            // OPTIMIZED: Simplified to always use tree traversal
-            // Visible items tracking was causing more overhead than benefit
-            // Thread safety not needed here as this is read-only tree traversal
+            if (_visibleTreeViewItems.Count > 0 && _visibleTreeViewItems.Count < 100)
+            {
+                return _visibleTreeViewItems.ToList();
+            }
+            
             return GetExpandedTreeViewItems(_treeView);
         }
 
         /// <summary>
-        /// Gets all expanded TreeViewItems recursively
+        /// Gets all visible TreeViewItems
         /// </summary>
+        public IEnumerable<TreeViewItem> GetAllVisibleTreeViewItems()
+        {
+            return VisualTreeHelperEx.FindVisualChildren<TreeViewItem>(_treeView)
+                .Where(item => item.IsVisible);
+        }
+
+        /// <summary>
+        /// Updates the visible items cache for performance optimization
+        /// </summary>
+        public void UpdateVisibleItemsCache()
+        {
+            _visibleTreeViewItems.Clear();
+            
+            if (_scrollViewer == null) return;
+            
+            // Get visible bounds
+            var visibleBounds = new Rect(0, _scrollViewer.VerticalOffset, 
+                                       _scrollViewer.ViewportWidth, 
+                                       _scrollViewer.ViewportHeight);
+            
+            // Find visible TreeViewItems
+            foreach (var item in GetAllTreeViewItemsFast())
+            {
+                var bounds = VisualTreeHelperEx.GetBounds(item, _treeView);
+                if (visibleBounds.IntersectsWith(bounds))
+                {
+                    _visibleTreeViewItems.Add(item);
+                }
+            }
+            
+            _lastCacheUpdate = DateTime.Now;
+            VisibleItemsCacheUpdated?.Invoke(this, EventArgs.Empty);
+            
+            System.Diagnostics.Debug.WriteLine($"[PERF] Visible items cache updated: {_visibleTreeViewItems.Count} items");
+        }
+
+        /// <summary>
+        /// Clears all caches
+        /// </summary>
+        public void ClearAllCaches()
+        {
+            ClearTreeViewItemCache();
+            ClearHitTestCache();
+        }
+
+        /// <summary>
+        /// Gets performance statistics
+        /// </summary>
+        public PerformanceStats GetPerformanceStats()
+        {
+            return new PerformanceStats
+            {
+                CacheHitCount = _cacheHitCount,
+                CacheMissCount = _cacheMissCount,
+                CacheHitRatio = _cacheHitCount + _cacheMissCount > 0 ? 
+                    (double)_cacheHitCount / (_cacheHitCount + _cacheMissCount) : 0.0,
+                VisibleItemsCount = _visibleTreeViewItems.Count,
+                CachedItemsCount = _treeViewItemCache.Count,
+                LastCacheUpdate = _lastCacheUpdate
+            };
+        }
+
+        /// <summary>
+        /// Schedules a selection update (for coordinator compatibility)
+        /// </summary>
+        public void ScheduleSelectionUpdate()
+        {
+            SelectionUpdateRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Invalidates cache for a specific directory
+        /// </summary>
+        public void InvalidateDirectory(string directoryPath)
+        {
+            if (string.IsNullOrEmpty(directoryPath)) return;
+            
+            var itemsToRemove = _treeViewItemCache.Keys
+                .Where(item => item?.Path?.StartsWith(directoryPath, StringComparison.OrdinalIgnoreCase) == true)
+                .ToList();
+            
+            foreach (var item in itemsToRemove)
+            {
+                _treeViewItemCache.Remove(item);
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"[PERF] Invalidated cache for directory: {directoryPath}");
+        }
+
+        #endregion
+
+        #region Private Methods
+
+        public void ClearTreeViewItemCache()
+        {
+            _treeViewItemCache.Clear();
+            _visibleTreeViewItems.Clear();
+        }
+
+        private void ClearHitTestCache()
+        {
+            _hitTestCache.Clear();
+            _hitTestCacheQueue.Clear();
+        }
+
+        private CachedHitTestResult GetCachedHitTestResult(Point point)
+        {
+            // Check for exact match first
+            if (_hitTestCache.TryGetValue(point, out CachedHitTestResult result))
+            {
+                return result;
+            }
+            
+            // Check for nearby points within tolerance
+            foreach (var kvp in _hitTestCache)
+            {
+                var cachedPoint = kvp.Key;
+                var distance = Math.Sqrt(Math.Pow(point.X - cachedPoint.X, 2) + 
+                                       Math.Pow(point.Y - cachedPoint.Y, 2));
+                
+                if (distance <= HIT_TEST_POSITION_TOLERANCE && kvp.Value.IsValid)
+                {
+                    return kvp.Value;
+                }
+            }
+            
+            return null;
+        }
+
+        private void CacheHitTestResult(Point point, FileTreeItem item)
+        {
+            // Remove old entries if cache is full
+            while (_hitTestCacheQueue.Count >= HIT_TEST_CACHE_SIZE)
+            {
+                var oldPoint = _hitTestCacheQueue.Dequeue();
+                _hitTestCache.Remove(oldPoint);
+            }
+            
+            // Add new entry
+            var result = new CachedHitTestResult
+            {
+                Item = item,
+                CacheTime = DateTime.Now
+            };
+            
+            _hitTestCache[point] = result;
+            _hitTestCacheQueue.Enqueue(point);
+        }
+
         private IEnumerable<TreeViewItem> GetExpandedTreeViewItems(ItemsControl parent)
         {
             if (parent == null || _disposed) yield break;
             
-            // Ensure containers are generated
             parent.UpdateLayout();
+            
+            if (parent.ItemContainerGenerator.Status != GeneratorStatus.ContainersGenerated)
+            {
+                parent.UpdateLayout();
+                parent.ApplyTemplate();
+            }
             
             for (int i = 0; i < parent.Items.Count; i++)
             {
@@ -139,7 +318,6 @@ namespace ExplorerPro.UI.FileTree.Managers
                 {
                     yield return container;
                     
-                    // Only recurse if expanded
                     if (container.IsExpanded)
                     {
                         foreach (var child in GetExpandedTreeViewItems(container))
@@ -151,155 +329,81 @@ namespace ExplorerPro.UI.FileTree.Managers
             }
         }
 
-        /// <summary>
-        /// OPTIMIZED: Simplified cache clearing
-        /// FIXED: Added thread safety
-        /// </summary>
-        public void ClearTreeViewItemCache()
-        {
-            lock (_cacheLock)
-            {
-                // ConditionalWeakTable doesn't have a Clear method, but items will be cleaned up by GC
-                _treeViewItemCache = new ConditionalWeakTable<FileTreeItem, TreeViewItem>();
-            }
-        }
-
-        /// <summary>
-        /// OPTIMIZED: Selective cache invalidation for specific directory
-        /// FIXED: Thread-safe implementation
-        /// </summary>
-        public void InvalidateDirectory(string directoryPath)
-        {
-            if (string.IsNullOrEmpty(directoryPath)) return;
-            
-            lock (_cacheLock)
-            {
-                // Only clear cache for items in the specific directory
-                // ConditionalWeakTable will handle cleanup automatically
-                // This is much more efficient than clearing the entire cache
-                // Note: We can't easily iterate ConditionalWeakTable to remove specific items,
-                // but the weak references will be cleaned up by GC when items are no longer referenced
-            }
-        }
-
-        #endregion
-
-        #region Optimized Hit Testing
-
-        /// <summary>
-        /// OPTIMIZED: Direct hit testing without caching - WPF is already optimized for this
-        /// </summary>
-        public FileTreeItem GetItemFromPoint(Point point)
-        {
-            // OPTIMIZED: Removed hit test cache - modern WPF hit testing is efficient enough
-            var result = System.Windows.Media.VisualTreeHelper.HitTest(_treeView, point);
-            if (result == null) return null;
-            
-            DependencyObject obj = result.VisualHit;
-            
-            // Walk up the visual tree to find TreeViewItem
-            while (obj != null && !(obj is TreeViewItem))
-            {
-                obj = System.Windows.Media.VisualTreeHelper.GetParent(obj);
-            }
-            
-            return (obj as TreeViewItem)?.DataContext as FileTreeItem;
-        }
-
-        #endregion
-
-        #region Optimized Selection Update Debouncing
-
-        /// <summary>
-        /// OPTIMIZED: Schedules a debounced selection update with scroll awareness
-        /// </summary>
-        public void ScheduleSelectionUpdate()
-        {
-            // OPTIMIZED: Skip updates during continuous scrolling
-            if (_isScrolling) return;
-            
-            _pendingSelectionUpdate = true;
-            
-            if (!_selectionUpdateTimer.IsEnabled)
-            {
-                _selectionUpdateTimer.Start();
-            }
-        }
-
-        private void OnSelectionUpdateTimer_Tick(object? sender, EventArgs e)
-        {
-            _selectionUpdateTimer?.Stop();
-            
-            if (_pendingSelectionUpdate && !_disposed && !_isScrolling)
-            {
-                _pendingSelectionUpdate = false;
-                _selectionUpdateCount++;
-                _lastSelectionUpdateTime = DateTime.Now;
-                SelectionUpdateRequested?.Invoke(this, EventArgs.Empty);
-            }
-        }
-
         #endregion
 
         #region Event Handlers
 
-        private void OnScrollViewer_ScrollChanged(object? sender, ScrollChangedEventArgs e)
+        private void OnScrollChanged(object sender, ScrollChangedEventArgs e)
         {
-            if (e.VerticalChange != 0)
+            if (e.VerticalChange != 0 || e.ViewportHeightChange != 0)
             {
-                _isScrolling = true;
-                
-                // OPTIMIZED: Stop scroll detection after a delay instead of immediate updates
-                _treeView.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                // Update cache on next dispatcher cycle for better performance
+                Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                 {
                     if (!_disposed)
                     {
-                        _isScrolling = false;
+                        UpdateVisibleItemsCache();
                     }
                 }));
             }
         }
 
-        #endregion
-
-        #region Performance Metrics
-
-        public void LogPerformanceMetrics()
+        private void OnContainerGeneratorStatusChanged(object sender, EventArgs e)
         {
-            var timeSinceLastUpdate = DateTime.Now - _lastSelectionUpdateTime;
-            System.Diagnostics.Debug.WriteLine($"[PERF] Selection updates: {_selectionUpdateCount}, " +
-                                             $"Last update: {timeSinceLastUpdate.TotalMilliseconds:F0}ms ago, " +
-                                             $"Cache entries: ConditionalWeakTable (auto-managed)");
+            if (_treeView.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
+            {
+                // Clear caches when containers are regenerated
+                ClearAllCaches();
+                
+                // Update visible items
+                UpdateVisibleItemsCache();
+            }
         }
 
         #endregion
 
-        #region Disposal
+        #region IDisposable
 
         public void Dispose()
         {
             if (!_disposed)
             {
                 _disposed = true;
-
-                // FIXED: Proper disposal with null checks
-                if (_selectionUpdateTimer != null)
+                
+                if (_scrollViewer != null)
                 {
-                    _selectionUpdateTimer.Stop();
-                    _selectionUpdateTimer.Tick -= OnSelectionUpdateTimer_Tick;
-                    _selectionUpdateTimer = null;
+                    _scrollViewer.ScrollChanged -= OnScrollChanged;
                 }
-
-                // Unsubscribe from scroll viewer events
-                var scrollViewer = VisualTreeHelperEx.FindScrollViewer(_treeView);
-                if (scrollViewer != null)
+                
+                if (_treeView?.ItemContainerGenerator != null)
                 {
-                    scrollViewer.ScrollChanged -= OnScrollViewer_ScrollChanged;
+                    _treeView.ItemContainerGenerator.StatusChanged -= OnContainerGeneratorStatusChanged;
                 }
-
-                // OPTIMIZED: ConditionalWeakTable handles its own cleanup
-                SelectionUpdateRequested = null;
+                
+                ClearAllCaches();
+                VisibleItemsCacheUpdated = null;
             }
+        }
+
+        #endregion
+
+        #region Nested Types
+
+        private class CachedHitTestResult
+        {
+            public FileTreeItem Item { get; set; }
+            public DateTime CacheTime { get; set; }
+            public bool IsValid => (DateTime.Now - CacheTime).TotalMilliseconds < 300; // Cache for 300ms
+        }
+
+        public class PerformanceStats
+        {
+            public int CacheHitCount { get; set; }
+            public int CacheMissCount { get; set; }
+            public double CacheHitRatio { get; set; }
+            public int VisibleItemsCount { get; set; }
+            public int CachedItemsCount { get; set; }
+            public DateTime LastCacheUpdate { get; set; }
         }
 
         #endregion

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using ExplorerPro.UI.FileTree.Services;
 
 namespace ExplorerPro.UI.FileTree
@@ -9,6 +10,11 @@ namespace ExplorerPro.UI.FileTree
     /// </summary>
     public interface IFileTree
     {
+        /// <summary>
+        /// Gets the root items collection for the file tree.
+        /// </summary>
+        ObservableCollection<FileTreeItem> RootItems { get; }
+
         /// <summary>
         /// Gets the current path displayed in the file tree.
         /// </summary>
