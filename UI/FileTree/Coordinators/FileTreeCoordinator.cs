@@ -1,3 +1,4 @@
+// UI/FileTree/Coordinators/FileTreeCoordinator.cs
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -109,10 +110,11 @@ namespace ExplorerPro.UI.FileTree.Coordinators
 
             // Initialize managers in constructor to fix readonly field assignment
             _eventManager = new FileTreeEventManager(_treeView, _fileTreeService, _selectionService);
-            _performanceManager = new FileTreePerformanceManager(_treeView);
+            _performanceManager = new FileTreePerformanceManager(_treeView); // Will find ScrollViewer internally
             _loadChildrenManager = new FileTreeLoadChildrenManager(_fileTreeService, _fileTreeCache);
 
             SetupEventHandlers();
+            SetupDragDrop();
         }
 
         #endregion
@@ -151,6 +153,12 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             _dragDropService.FilesMoved += OnFilesMoved;
             _dragDropService.ErrorOccurred += OnDragDropError;
             _dragDropService.OutlookExtractionCompleted += OnOutlookExtractionCompleted;
+        }
+
+        private void SetupDragDrop()
+        {
+            // Attach drag drop service to the tree view
+            _dragDropService.AttachToControl(_treeView, GetItemFromPoint);
         }
 
         #endregion
@@ -682,6 +690,16 @@ namespace ExplorerPro.UI.FileTree.Coordinators
                     System.Diagnostics.Debug.WriteLine($"[ERROR] Error unsubscribing events during disposal: {ex.Message}");
                 }
 
+                // Detach drag drop service from control
+                try
+                {
+                    _dragDropService?.DetachFromControl();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ERROR] Error detaching drag drop service: {ex.Message}");
+                }
+
                 // Dispose managers
                 try
                 {
@@ -704,4 +722,4 @@ namespace ExplorerPro.UI.FileTree.Coordinators
 
         #endregion
     }
-} 
+}

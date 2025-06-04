@@ -121,8 +121,8 @@ namespace ExplorerPro.UI.FileTree
 
         private void InitializeManagers()
         {
-            // Initialize performance manager first
-            _performanceManager = new FileTreePerformanceManager(fileTreeView, TreeScrollViewer);
+            // Initialize performance manager first - no explicit ScrollViewer needed, it will find it
+            _performanceManager = new FileTreePerformanceManager(fileTreeView);
             
             // Initialize all dependencies for coordinator
             var dependencies = CreateServiceDependencies();

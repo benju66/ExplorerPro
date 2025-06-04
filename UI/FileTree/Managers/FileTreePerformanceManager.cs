@@ -1,3 +1,5 @@
+// UI/FileTree/Managers/FileTreePerformanceManager.cs
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,7 +23,7 @@ namespace ExplorerPro.UI.FileTree.Managers
         #region Private Fields
 
         private readonly TreeView _treeView;
-        private readonly ScrollViewer _scrollViewer;
+        private ScrollViewer _scrollViewer;
         
         // Cache for TreeViewItem lookups to avoid repeated visual tree traversal
         private readonly Dictionary<FileTreeItem, WeakReference> _treeViewItemCache = new Dictionary<FileTreeItem, WeakReference>();
@@ -31,7 +33,7 @@ namespace ExplorerPro.UI.FileTree.Managers
         
         // Hit test cache for drag & drop performance
         private readonly Dictionary<Point, CachedHitTestResult> _hitTestCache = new Dictionary<Point, CachedHitTestResult>();
-        private readonly Queue<Point> _hitTestCacheQueue = new Queue<Point>();
+        private readonly Queue<Point> _cacheKeyQueue = new Queue<Point>();
         private const int HIT_TEST_CACHE_SIZE = 20;
         private const double HIT_TEST_POSITION_TOLERANCE = 3.0;
         
@@ -53,10 +55,24 @@ namespace ExplorerPro.UI.FileTree.Managers
 
         #region Constructor
 
-        public FileTreePerformanceManager(TreeView treeView, ScrollViewer scrollViewer = null)
+        public FileTreePerformanceManager(TreeView treeView, ScrollViewer explicitScrollViewer = null)
         {
             _treeView = treeView ?? throw new ArgumentNullException(nameof(treeView));
-            _scrollViewer = scrollViewer ?? VisualTreeHelperEx.FindScrollViewer(treeView);
+            
+            // If explicit ScrollViewer provided, use it; otherwise find it within TreeView
+            if (explicitScrollViewer != null)
+            {
+                _scrollViewer = explicitScrollViewer;
+            }
+            else
+            {
+                // Defer finding the ScrollViewer until the template is applied
+                _treeView.Loaded += OnTreeViewLoaded;
+                if (_treeView.IsLoaded)
+                {
+                    FindScrollViewer();
+                }
+            }
             
             Initialize();
         }
@@ -75,6 +91,23 @@ namespace ExplorerPro.UI.FileTree.Managers
             if (_treeView.ItemContainerGenerator != null)
             {
                 _treeView.ItemContainerGenerator.StatusChanged += OnContainerGeneratorStatusChanged;
+            }
+        }
+
+        private void OnTreeViewLoaded(object sender, RoutedEventArgs e)
+        {
+            _treeView.Loaded -= OnTreeViewLoaded;
+            FindScrollViewer();
+        }
+
+        private void FindScrollViewer()
+        {
+            // Find the ScrollViewer within the TreeView's template
+            _scrollViewer = VisualTreeHelperEx.FindScrollViewer(_treeView);
+            
+            if (_scrollViewer != null && !_disposed)
+            {
+                _scrollViewer.ScrollChanged += OnScrollChanged;
             }
         }
 
@@ -163,7 +196,12 @@ namespace ExplorerPro.UI.FileTree.Managers
         {
             _visibleTreeViewItems.Clear();
             
-            if (_scrollViewer == null) return;
+            if (_scrollViewer == null)
+            {
+                // Try to find ScrollViewer again if not found yet
+                FindScrollViewer();
+                if (_scrollViewer == null) return;
+            }
             
             // Get visible bounds
             var visibleBounds = new Rect(0, _scrollViewer.VerticalOffset, 
@@ -370,6 +408,11 @@ namespace ExplorerPro.UI.FileTree.Managers
             {
                 _disposed = true;
                 
+                if (_treeView != null)
+                {
+                    _treeView.Loaded -= OnTreeViewLoaded;
+                }
+                
                 if (_scrollViewer != null)
                 {
                     _scrollViewer.ScrollChanged -= OnScrollChanged;
@@ -382,6 +425,7 @@ namespace ExplorerPro.UI.FileTree.Managers
                 
                 ClearAllCaches();
                 VisibleItemsCacheUpdated = null;
+                SelectionUpdateRequested = null;
             }
         }
 
@@ -408,4 +452,4 @@ namespace ExplorerPro.UI.FileTree.Managers
 
         #endregion
     }
-} 
+}

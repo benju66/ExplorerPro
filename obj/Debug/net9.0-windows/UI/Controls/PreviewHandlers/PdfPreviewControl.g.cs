@@ -132,8 +132,7 @@ namespace ExplorerPro.UI.Controls.PreviewHandlers {
                 return;
             }
             _contentLoaded = true;
-            System.Uri resourceLocater = new System.Uri(("/ExplorerPro;V1.0.0.0;component/ui/controls/previewhandlers/pdfpreviewcontrol.xam" +
-                    "l"), System.UriKind.Relative);
+            System.Uri resourceLocater = new System.Uri("/ExplorerPro;component/ui/controls/previewhandlers/pdfpreviewcontrol.xaml", System.UriKind.Relative);
             
             #line 1 "..\..\..\..\..\..\UI\Controls\PreviewHandlers\PdfPreviewControl.xaml"
             System.Windows.Application.LoadComponent(this, resourceLocater);
