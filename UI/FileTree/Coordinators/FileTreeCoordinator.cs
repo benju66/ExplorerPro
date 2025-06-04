@@ -17,6 +17,7 @@ using ExplorerPro.UI.FileTree.Services;
 using ExplorerPro.UI.FileTree.Utilities;
 using ExplorerPro.UI.FileTree.Commands;
 using ExplorerPro.Utilities;
+using System.Windows.Threading;
 
 namespace ExplorerPro.UI.FileTree.Coordinators
 {
@@ -49,6 +50,16 @@ namespace ExplorerPro.UI.FileTree.Coordinators
         private bool _isProcessingSelection = false;
         private bool _isUpdatingVisualSelection = false;
         private bool _disposed = false;
+
+        // Add new fields for selection state tracking
+        private readonly Dictionary<string, bool> _previousSelectionState = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        private readonly Queue<TreeViewItem> _pendingSelectionUpdates = new Queue<TreeViewItem>();
+        private readonly DispatcherTimer _selectionUpdateBatchTimer;
+        private volatile bool _isBatchUpdateInProgress = false;
+        private DateTime _lastSelectionUpdateStart;
+        private TimeSpan _lastSelectionUpdateDuration;
+        private int _lastItemsProcessed;
+        private int _lastItemsChanged;
 
         #endregion
 
@@ -107,6 +118,12 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
             _fileOperationHandler = fileOperationHandler ?? throw new ArgumentNullException(nameof(fileOperationHandler));
             _dragDropService = dragDropService ?? throw new ArgumentNullException(nameof(dragDropService));
+
+            // Initialize batch timer for selection updates
+            _selectionUpdateBatchTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(50)
+            };
 
             // Initialize managers in constructor to fix readonly field assignment
             _eventManager = new FileTreeEventManager(_treeView, _fileTreeService, _selectionService);
@@ -607,33 +624,273 @@ namespace ExplorerPro.UI.FileTree.Coordinators
         {
             if (_isUpdatingVisualSelection || _disposed) return;
             
+            var updateStart = DateTime.UtcNow;
+            _lastSelectionUpdateStart = updateStart;
+            
             _isUpdatingVisualSelection = true;
             _isProcessingSelection = true;
             
             try
             {
-                var selectedPaths = new HashSet<string>(_selectionService.SelectedPaths, StringComparer.OrdinalIgnoreCase);
-                
-                foreach (var treeViewItem in _performanceManager.GetAllTreeViewItemsFast())
+                // Use high-priority for immediate visible updates, background for others
+                Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
                 {
-                    if (_disposed) break;
-                    
-                    if (treeViewItem.DataContext is FileTreeItem dataItem)
-                    {
-                        var shouldBeSelected = selectedPaths.Contains(dataItem.Path);
-                        
-                        if (treeViewItem.IsSelected != shouldBeSelected)
-                        {
-                            treeViewItem.IsSelected = shouldBeSelected;
-                        }
-                    }
-                }
+                    ProcessSelectionUpdatesWithChangeTracking();
+                }));
             }
             finally
             {
                 _isUpdatingVisualSelection = false;
                 _isProcessingSelection = false;
             }
+        }
+
+        /// <summary>
+        /// Processes selection updates with intelligent change tracking and batching
+        /// </summary>
+        private void ProcessSelectionUpdatesWithChangeTracking()
+        {
+            if (_disposed || _isBatchUpdateInProgress) return;
+            
+            _isBatchUpdateInProgress = true;
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            int itemsProcessed = 0;
+            int itemsChanged = 0;
+            
+            try
+            {
+                var currentSelectedPaths = new HashSet<string>(_selectionService.SelectedPaths, StringComparer.OrdinalIgnoreCase);
+                var changedItems = new List<(TreeViewItem item, bool shouldBeSelected)>();
+                
+                // Step 1: Identify changes by comparing with previous state
+                var pathsToCheck = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                pathsToCheck.UnionWith(currentSelectedPaths);
+                pathsToCheck.UnionWith(_previousSelectionState.Keys);
+                
+                // Step 2: Get visible items first for immediate updates
+                var visibleItems = GetVisibleTreeViewItemsWithPaths();
+                var visiblePaths = new HashSet<string>(visibleItems.Keys, StringComparer.OrdinalIgnoreCase);
+                
+                // Step 3: Process visible items first (immediate UI response)
+                foreach (var kvp in visibleItems)
+                {
+                    var path = kvp.Key;
+                    var treeViewItem = kvp.Value;
+                    
+                    if (pathsToCheck.Contains(path))
+                    {
+                        var shouldBeSelected = currentSelectedPaths.Contains(path);
+                        var wasSelected = _previousSelectionState.GetValueOrDefault(path, false);
+                        
+                        if (shouldBeSelected != wasSelected || treeViewItem.IsSelected != shouldBeSelected)
+                        {
+                            changedItems.Add((treeViewItem, shouldBeSelected));
+                            itemsChanged++;
+                        }
+                        
+                        itemsProcessed++;
+                    }
+                }
+                
+                // Step 4: Apply visible changes immediately with batching
+                if (changedItems.Count > 0)
+                {
+                    ApplySelectionChangesBatched(changedItems, isVisible: true);
+                }
+                
+                // Step 5: Schedule non-visible items for background processing
+                var nonVisibleChanges = new List<string>();
+                foreach (var path in pathsToCheck)
+                {
+                    if (!visiblePaths.Contains(path))
+                    {
+                        var shouldBeSelected = currentSelectedPaths.Contains(path);
+                        var wasSelected = _previousSelectionState.GetValueOrDefault(path, false);
+                        
+                        if (shouldBeSelected != wasSelected)
+                        {
+                            nonVisibleChanges.Add(path);
+                        }
+                    }
+                }
+                
+                if (nonVisibleChanges.Count > 0)
+                {
+                    ScheduleNonVisibleSelectionUpdates(nonVisibleChanges, currentSelectedPaths);
+                }
+                
+                // Step 6: Update previous state tracking
+                _previousSelectionState.Clear();
+                foreach (var path in currentSelectedPaths)
+                {
+                    _previousSelectionState[path] = true;
+                }
+                
+                stopwatch.Stop();
+                _lastSelectionUpdateDuration = stopwatch.Elapsed;
+                _lastItemsProcessed = itemsProcessed;
+                _lastItemsChanged = itemsChanged;
+                
+                // Log performance metrics for large updates
+                if (itemsChanged > 10 || stopwatch.ElapsedMilliseconds > 5)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[SELECTION-PERF] Updated {itemsChanged}/{itemsProcessed} items in {stopwatch.ElapsedMilliseconds}ms " +
+                        $"(Visible: {changedItems.Count}, Non-visible queued: {nonVisibleChanges.Count})");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Selection update failed: {ex.Message}");
+            }
+            finally
+            {
+                _isBatchUpdateInProgress = false;
+            }
+        }
+
+        /// <summary>
+        /// Gets visible TreeViewItems with their data paths for efficient processing
+        /// </summary>
+        private Dictionary<string, TreeViewItem> GetVisibleTreeViewItemsWithPaths()
+        {
+            var result = new Dictionary<string, TreeViewItem>(StringComparer.OrdinalIgnoreCase);
+            
+            try
+            {
+                // Use performance manager's optimized visible items retrieval
+                var visibleItems = _performanceManager.GetAllVisibleTreeViewItems()
+                    .Take(100) // Limit to prevent excessive processing
+                    .ToList();
+                
+                foreach (var item in visibleItems)
+                {
+                    if (item.DataContext is FileTreeItem dataItem && !string.IsNullOrEmpty(dataItem.Path))
+                    {
+                        result[dataItem.Path] = item;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to get visible items: {ex.Message}");
+                
+                // Fallback to basic approach
+                foreach (var item in _performanceManager.GetAllTreeViewItemsFast().Take(50))
+                {
+                    if (item.DataContext is FileTreeItem dataItem && !string.IsNullOrEmpty(dataItem.Path))
+                    {
+                        result[dataItem.Path] = item;
+                    }
+                }
+            }
+            
+            return result;
+        }
+
+        /// <summary>
+        /// Applies selection changes in batches for better performance
+        /// </summary>
+        private void ApplySelectionChangesBatched(List<(TreeViewItem item, bool shouldBeSelected)> changes, bool isVisible)
+        {
+            // Use different batch sizes based on visibility
+            int batchSize = isVisible ? 20 : 10; // Smaller batches for non-visible items
+            var batches = changes.ChunksOf(batchSize);
+            
+            var priority = isVisible ? DispatcherPriority.Render : DispatcherPriority.Background;
+            
+            foreach (var batch in batches)
+            {
+                Application.Current.Dispatcher.BeginInvoke(priority, new Action(() =>
+                {
+                    if (_disposed) return;
+                    
+                    foreach (var (item, shouldBeSelected) in batch)
+                    {
+                        if (item != null && item.IsSelected != shouldBeSelected)
+                        {
+                            item.IsSelected = shouldBeSelected;
+                        }
+                    }
+                }));
+            }
+        }
+
+        /// <summary>
+        /// Schedules non-visible items for background selection updates
+        /// </summary>
+        private void ScheduleNonVisibleSelectionUpdates(List<string> pathsToUpdate, HashSet<string> currentSelectedPaths)
+        {
+            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            {
+                if (_disposed) return;
+                
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                int updated = 0;
+                
+                try
+                {
+                    // Process in small batches to avoid blocking UI
+                    var batchSize = 15;
+                    var processed = 0;
+                    
+                    foreach (var path in pathsToUpdate)
+                    {
+                        if (_disposed) break;
+                        
+                        // Find the TreeViewItem (may not be visible/created yet)
+                        var dataItem = _fileTreeService.FindItemByPath(_rootItems, path);
+                        if (dataItem != null)
+                        {
+                            var treeViewItem = _performanceManager.GetTreeViewItemCached(dataItem);
+                            if (treeViewItem != null)
+                            {
+                                var shouldBeSelected = currentSelectedPaths.Contains(path);
+                                if (treeViewItem.IsSelected != shouldBeSelected)
+                                {
+                                    treeViewItem.IsSelected = shouldBeSelected;
+                                    updated++;
+                                }
+                            }
+                        }
+                        
+                        processed++;
+                        
+                        // Yield control periodically to keep UI responsive
+                        if (processed % batchSize == 0)
+                        {
+                            Application.Current.Dispatcher.Invoke(DispatcherPriority.Background, new Action(() => { }));
+                        }
+                    }
+                    
+                    stopwatch.Stop();
+                    if (updated > 0)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[SELECTION-PERF] Background update: {updated} non-visible items in {stopwatch.ElapsedMilliseconds}ms");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ERROR] Background selection update failed: {ex.Message}");
+                }
+            }));
+        }
+
+        /// <summary>
+        /// Gets performance metrics for the selection update system
+        /// </summary>
+        public SelectionUpdatePerformanceMetrics GetSelectionPerformanceMetrics()
+        {
+            return new SelectionUpdatePerformanceMetrics
+            {
+                LastUpdateStart = _lastSelectionUpdateStart,
+                LastUpdateDuration = _lastSelectionUpdateDuration,
+                LastItemsProcessed = _lastItemsProcessed,
+                LastItemsChanged = _lastItemsChanged,
+                PreviousStateTrackingCount = _previousSelectionState.Count,
+                IsBatchUpdateInProgress = _isBatchUpdateInProgress
+            };
         }
 
         protected void OnPropertyChanged(string propertyName)
@@ -706,6 +963,10 @@ namespace ExplorerPro.UI.FileTree.Coordinators
                     _eventManager?.Dispose();
                     _performanceManager?.Dispose();
                     _loadChildrenManager?.Dispose();
+                    
+                    // Dispose the selection update timer
+                    _selectionUpdateBatchTimer?.Stop();
+                    _pendingSelectionUpdates?.Clear();
                 }
                 catch (Exception ex)
                 {
@@ -721,5 +982,40 @@ namespace ExplorerPro.UI.FileTree.Coordinators
         }
 
         #endregion
+    }
+
+    /// <summary>
+    /// Performance metrics for selection updates
+    /// </summary>
+    public class SelectionUpdatePerformanceMetrics
+    {
+        public DateTime LastUpdateStart { get; set; }
+        public TimeSpan LastUpdateDuration { get; set; }
+        public int LastItemsProcessed { get; set; }
+        public int LastItemsChanged { get; set; }
+        public int PreviousStateTrackingCount { get; set; }
+        public bool IsBatchUpdateInProgress { get; set; }
+    }
+
+    /// <summary>
+    /// Extension methods for collection chunking
+    /// </summary>
+    public static class CollectionExtensions
+    {
+        public static IEnumerable<IEnumerable<T>> ChunksOf<T>(this IEnumerable<T> enumerable, int chunkSize)
+        {
+            var chunk = new List<T>(chunkSize);
+            foreach (var item in enumerable)
+            {
+                chunk.Add(item);
+                if (chunk.Count == chunkSize)
+                {
+                    yield return chunk;
+                    chunk = new List<T>(chunkSize);
+                }
+            }
+            if (chunk.Count > 0)
+                yield return chunk;
+        }
     }
 }
