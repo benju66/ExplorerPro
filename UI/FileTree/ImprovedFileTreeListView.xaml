@@ -47,12 +47,12 @@
                     <ColumnDefinition Width="Auto"/>
                     <!-- Name column (resizable) -->
                     <ColumnDefinition x:Name="NameColumn" Width="250" MinWidth="150" MaxWidth="600"/>
-                    <!-- Size column -->
-                    <ColumnDefinition Width="100" MinWidth="80"/>
-                    <!-- Type column -->
-                    <ColumnDefinition Width="120" MinWidth="100"/>
-                    <!-- Date Modified column -->
+                    <!-- Date Modified column (moved from position 5 to 3) -->
                     <ColumnDefinition Width="150" MinWidth="120"/>
+                    <!-- Type column (moved from position 4 to 4) -->
+                    <ColumnDefinition Width="120" MinWidth="100"/>
+                    <!-- Size column (moved from position 3 to 5) -->
+                    <ColumnDefinition Width="100" MinWidth="80"/>
                     <!-- Remaining space -->
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
@@ -93,21 +93,21 @@
                     </ToggleButton>
                 </Grid>
                 
-                <!-- Size Header -->
+                <!-- Date Modified Header (now in column 2) -->
                 <Border Grid.Column="2" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1,0,0,0">
-                    <TextBlock Text="Size" Padding="8,4" TextAlignment="Right" VerticalAlignment="Center" 
+                    <TextBlock Text="Date Modified" Padding="8,4" VerticalAlignment="Center" 
                                Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
                 </Border>
                 
-                <!-- Type Header -->
+                <!-- Type Header (now in column 3) -->
                 <Border Grid.Column="3" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1,0,0,0">
                     <TextBlock Text="Type" Padding="8,4" VerticalAlignment="Center" 
                                Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
                 </Border>
                 
-                <!-- Date Modified Header -->
+                <!-- Size Header (now in column 4) -->
                 <Border Grid.Column="4" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1,0,0,0">
-                    <TextBlock Text="Date Modified" Padding="8,4" VerticalAlignment="Center" 
+                    <TextBlock Text="Size" Padding="8,4" TextAlignment="Right" VerticalAlignment="Center" 
                                Foreground="{DynamicResource TextColor}" FontWeight="SemiBold"/>
                 </Border>
                 
@@ -159,12 +159,12 @@
                             <ColumnDefinition Width="Auto"/>
                             <!-- Name column - bind to the header column's Width but allow extension -->
                             <ColumnDefinition Width="{Binding ElementName=NameColumn, Path=Width, Mode=OneWay}" MinWidth="150"/>
-                            <!-- Size column -->
-                            <ColumnDefinition Width="100" MinWidth="80"/>
-                            <!-- Type column -->
-                            <ColumnDefinition Width="120" MinWidth="100"/>
-                            <!-- Date Modified column -->
+                            <!-- Date Modified column (moved from position 5 to 3) -->
                             <ColumnDefinition Width="150" MinWidth="120"/>
+                            <!-- Type column (moved from position 4 to 4) -->
+                            <ColumnDefinition Width="120" MinWidth="100"/>
+                            <!-- Size column (moved from position 3 to 5) -->
+                            <ColumnDefinition Width="100" MinWidth="80"/>
                             <!-- Remaining space -->
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
@@ -261,17 +261,17 @@
                             </Grid>
                         </Grid>
                         
-                        <!-- Size Column -->
-                        <TextBlock Grid.Column="2" Text="{Binding Size}" 
+                        <!-- Date Modified Column (now in column 2) -->
+                        <TextBlock Grid.Column="2" Text="{Binding LastModifiedStr}" 
                                   VerticalAlignment="Center" 
-                                  TextAlignment="Right"
+                                  TextAlignment="Left"
                                   Margin="5,0"
                                   TextTrimming="None"
                                   TextWrapping="NoWrap"
                                   Foreground="{Binding Foreground}"
                                   FontWeight="{Binding FontWeight}"/>
                         
-                        <!-- Type Column -->
+                        <!-- Type Column (now in column 3) -->
                         <TextBlock Grid.Column="3" Text="{Binding Type}" 
                                   VerticalAlignment="Center" 
                                   TextAlignment="Left"
@@ -281,10 +281,10 @@
                                   Foreground="{Binding Foreground}"
                                   FontWeight="{Binding FontWeight}"/>
                         
-                        <!-- Date Modified Column -->
-                        <TextBlock Grid.Column="4" Text="{Binding LastModifiedStr}" 
+                        <!-- Size Column (now in column 4) -->
+                        <TextBlock Grid.Column="4" Text="{Binding Size}" 
                                   VerticalAlignment="Center" 
-                                  TextAlignment="Left"
+                                  TextAlignment="Right"
                                   Margin="5,0"
                                   TextTrimming="None"
                                   TextWrapping="NoWrap"
