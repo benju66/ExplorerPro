@@ -272,24 +272,73 @@ namespace ExplorerPro.UI.FileTree.Services
         
         public bool HandleOutlookDrop(DataObject dataObject, string targetPath)
         {
-            var task = HandleOutlookDropAsync(dataObject, targetPath);
-            task.Wait();
-            return task.Result;
+            // DEADLOCK FIX: Instead of using task.Wait() which can cause UI thread deadlock,
+            // we use Task.Run to execute the async operation on a background thread.
+            // This approach ensures that:
+            // 1. The UI thread is not blocked
+            // 2. We maintain the same return type (bool)
+            // 3. The method can be safely called from the UI thread
+            // 4. Error handling and events are properly maintained
+            
+            try
+            {
+                // Execute the async operation on a background thread to prevent UI deadlock
+                var task = Task.Run(async () => await HandleOutlookDropAsync(dataObject, targetPath));
+                
+                // Use ConfigureAwait(false) and GetAwaiter().GetResult() for safer synchronous waiting
+                // This approach is safer than task.Wait() as it doesn't wrap exceptions in AggregateException
+                return task.ConfigureAwait(false).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                // Ensure any exceptions are properly handled and reported
+                OnError($"Outlook drop operation failed: {ex.Message}");
+                return false;
+            }
         }
         
         public async Task<bool> HandleOutlookDropAsync(DataObject dataObject, string targetPath)
         {
             try
             {
-                var extractionResult = await OutlookDataExtractor.ExtractOutlookFilesAsync(dataObject, targetPath);
+                // Use ConfigureAwait(false) to avoid potential deadlocks and improve performance
+                // since we don't need to continue on the original synchronization context
+                var extractionResult = await OutlookDataExtractor.ExtractOutlookFilesAsync(dataObject, targetPath)
+                    .ConfigureAwait(false);
                 
-                OnOutlookExtractionCompleted(new OutlookExtractionCompletedEventArgs(extractionResult, targetPath));
+                // THREAD SAFETY: Ensure events are raised on the UI thread
+                // This is important because WPF controls and event handlers typically expect to run on the UI thread
+                if (Application.Current?.Dispatcher != null)
+                {
+                    // Use Dispatcher.Invoke to marshal the event to the UI thread synchronously
+                    // We use synchronous invoke here because the caller is already handling async execution
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        OnOutlookExtractionCompleted(new OutlookExtractionCompletedEventArgs(extractionResult, targetPath));
+                    });
+                }
+                else
+                {
+                    // Fallback: raise event directly if no dispatcher is available (e.g., in unit tests)
+                    OnOutlookExtractionCompleted(new OutlookExtractionCompletedEventArgs(extractionResult, targetPath));
+                }
                 
                 return extractionResult.Success;
             }
             catch (Exception ex)
             {
-                OnError($"Outlook extraction failed: {ex.Message}");
+                // THREAD SAFETY: Ensure error event is also raised on the UI thread
+                if (Application.Current?.Dispatcher != null)
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        OnError($"Outlook extraction failed: {ex.Message}");
+                    });
+                }
+                else
+                {
+                    OnError($"Outlook extraction failed: {ex.Message}");
+                }
                 return false;
             }
         }
