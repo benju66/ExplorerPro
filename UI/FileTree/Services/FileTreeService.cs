@@ -1,10 +1,11 @@
-// UI/FileTree/Services/FileTreeService.cs - Enhanced with batch operations and optimized HasChildren
+// UI/FileTree/Services/FileTreeService.cs - Fixed Threading Issues
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Media;
 using ExplorerPro.Models;
 using ExplorerPro.Utilities;
@@ -14,7 +15,7 @@ namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
     /// Service for file tree operations with proper memory management and async support
-    /// Enhanced with batch operations and optimized HasChildren check
+    /// Fixed version with proper UI thread handling for WPF objects
     /// </summary>
     public class FileTreeService : IFileTreeService, IDisposable
     {
@@ -82,10 +83,10 @@ namespace ExplorerPro.UI.FileTree.Services
                         // Use async version for better performance on network drives
                         var dirItem = await CreateFileTreeItemAsync(dir, level, showHiddenFiles);
                         
-                        // Apply batch metadata
+                        // Apply batch metadata - FIXED: styling applied on UI thread
                         if (metadataBatch.TryGetValue(dir, out var metadata))
                         {
-                            ApplyBatchMetadataStyling(dirItem, metadata);
+                            await ApplyBatchMetadataStylingAsync(dirItem, metadata);
                         }
                         
                         items.Add(dirItem);
@@ -110,12 +111,12 @@ namespace ExplorerPro.UI.FileTree.Services
                         if (!showHiddenFiles && IsHidden(file))
                             continue;
 
-                        var fileItem = CreateFileTreeItem(file, level);
+                        var fileItem = await CreateFileTreeItemInternalAsync(file, level);
                         
-                        // Apply batch metadata
+                        // Apply batch metadata - FIXED: styling applied on UI thread
                         if (metadataBatch.TryGetValue(file, out var metadata))
                         {
-                            ApplyBatchMetadataStyling(fileItem, metadata);
+                            await ApplyBatchMetadataStylingAsync(fileItem, metadata);
                         }
                         
                         items.Add(fileItem);
@@ -171,11 +172,11 @@ namespace ExplorerPro.UI.FileTree.Services
                 var item = FileTreeItem.FromPath(path);
                 item.Level = level;
 
-                // Apply styling from metadata
-                ApplyMetadataStyling(item);
+                // FIXED: Apply styling synchronously on UI thread
+                ApplyMetadataStylingOnUIThread(item);
 
-                // Set icon
-                item.Icon = _iconProvider.GetIcon(path);
+                // FIXED: Set icon on UI thread
+                SetIconOnUIThread(item, path);
 
                 // For directories, use synchronous check (deprecated)
                 if (item.IsDirectory)
@@ -211,16 +212,23 @@ namespace ExplorerPro.UI.FileTree.Services
             if (_disposed)
                 throw new ObjectDisposedException(nameof(FileTreeService));
 
+            var item = await CreateFileTreeItemInternalAsync(path, level, showHiddenFiles, cancellationToken);
+            
+            // FIXED: Apply styling on UI thread
+            await ApplyMetadataStylingAsync(item);
+            
+            return item;
+        }
+
+        private async Task<FileTreeItem> CreateFileTreeItemInternalAsync(string path, int level = 0, bool showHiddenFiles = false, CancellationToken cancellationToken = default)
+        {
             try
             {
                 var item = await Task.Run(() => FileTreeItem.FromPath(path), cancellationToken);
                 item.Level = level;
 
-                // Apply styling from metadata
-                ApplyMetadataStyling(item);
-
-                // Set icon
-                item.Icon = _iconProvider.GetIcon(path);
+                // FIXED: Set icon on UI thread
+                await SetIconAsync(item, path);
 
                 // For directories, use async check for better performance
                 if (item.IsDirectory)
@@ -381,11 +389,34 @@ namespace ExplorerPro.UI.FileTree.Services
             }
         }
 
+        // FIXED: Synchronous version that ensures UI thread execution
         public void ApplyMetadataStyling(FileTreeItem item)
         {
             if (_disposed || item == null)
                 return;
 
+            if (Application.Current?.Dispatcher.CheckAccess() == true)
+            {
+                ApplyMetadataStylingCore(item);
+            }
+            else
+            {
+                Application.Current?.Dispatcher.Invoke(() => ApplyMetadataStylingCore(item));
+            }
+        }
+
+        // FIXED: Async version for use in async methods
+        private async Task ApplyMetadataStylingAsync(FileTreeItem item)
+        {
+            if (_disposed || item == null)
+                return;
+
+            await Application.Current.Dispatcher.InvokeAsync(() => ApplyMetadataStylingCore(item));
+        }
+
+        // FIXED: Core styling logic that must run on UI thread
+        private void ApplyMetadataStylingCore(FileTreeItem item)
+        {
             try
             {
                 // Apply text color if set in metadata
@@ -394,6 +425,7 @@ namespace ExplorerPro.UI.FileTree.Services
                 {
                     try
                     {
+                        // FIXED: SolidColorBrush is created on UI thread
                         item.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colorHex));
                     }
                     catch
@@ -416,14 +448,36 @@ namespace ExplorerPro.UI.FileTree.Services
             }
         }
 
+        // FIXED: Synchronous version that ensures UI thread execution
+        private void ApplyMetadataStylingOnUIThread(FileTreeItem item)
+        {
+            if (_disposed || item == null)
+                return;
+
+            if (Application.Current?.Dispatcher.CheckAccess() == true)
+            {
+                ApplyMetadataStylingCore(item);
+            }
+            else
+            {
+                Application.Current?.Dispatcher.Invoke(() => ApplyMetadataStylingCore(item));
+            }
+        }
+
         /// <summary>
-        /// Applies metadata styling from batch metadata info
+        /// FIXED: Applies metadata styling from batch metadata info on UI thread
         /// </summary>
-        private void ApplyBatchMetadataStyling(FileTreeItem item, MetadataInfo metadata)
+        private async Task ApplyBatchMetadataStylingAsync(FileTreeItem item, MetadataInfo metadata)
         {
             if (item == null || metadata == null)
                 return;
 
+            await Application.Current.Dispatcher.InvokeAsync(() => ApplyBatchMetadataStylingCore(item, metadata));
+        }
+
+        // FIXED: Core batch styling logic that must run on UI thread
+        private void ApplyBatchMetadataStylingCore(FileTreeItem item, MetadataInfo metadata)
+        {
             try
             {
                 // Apply text color if set
@@ -431,6 +485,7 @@ namespace ExplorerPro.UI.FileTree.Services
                 {
                     try
                     {
+                        // FIXED: SolidColorBrush is created on UI thread
                         item.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(metadata.Color));
                     }
                     catch
@@ -450,6 +505,37 @@ namespace ExplorerPro.UI.FileTree.Services
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to apply batch metadata styling: {ex.Message}");
                 // Continue without styling
             }
+        }
+
+        // FIXED: Set icon on UI thread synchronously
+        private void SetIconOnUIThread(FileTreeItem item, string path)
+        {
+            if (_disposed || item == null)
+                return;
+
+            if (Application.Current?.Dispatcher.CheckAccess() == true)
+            {
+                item.Icon = _iconProvider.GetIcon(path);
+            }
+            else
+            {
+                Application.Current?.Dispatcher.Invoke(() => 
+                {
+                    item.Icon = _iconProvider.GetIcon(path);
+                });
+            }
+        }
+
+        // FIXED: Set icon on UI thread asynchronously
+        private async Task SetIconAsync(FileTreeItem item, string path)
+        {
+            if (_disposed || item == null)
+                return;
+
+            await Application.Current.Dispatcher.InvokeAsync(() => 
+            {
+                item.Icon = _iconProvider.GetIcon(path);
+            });
         }
 
         public FileTreeItem FindItemByPath(IEnumerable<FileTreeItem> items, string path)
