@@ -1,4 +1,4 @@
-// Models/MetadataManager.cs - Fixed version with cleanup mechanisms
+// Models/MetadataManager.cs - Enhanced with batch operations
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,7 +11,7 @@ namespace ExplorerPro.Models
 {
     /// <summary>
     /// Manages metadata for files and folders including pinned items, recent items, tags, colors, and bold status.
-    /// Fixed version with proper cleanup mechanisms to prevent memory leaks.
+    /// Enhanced version with batch operations for better performance.
     /// </summary>
     public class MetadataManager : IDisposable
     {
@@ -149,6 +149,148 @@ namespace ExplorerPro.Models
                 }
             }
         }
+
+        #region Batch Operations
+
+        /// <summary>
+        /// Gets metadata for multiple items in a single batch operation
+        /// </summary>
+        /// <param name="paths">Collection of paths to get metadata for</param>
+        /// <returns>Dictionary of path to metadata info</returns>
+        public Dictionary<string, MetadataInfo> GetBatchMetadata(IEnumerable<string> paths)
+        {
+            if (paths == null)
+                return new Dictionary<string, MetadataInfo>();
+
+            lock (_syncLock)
+            {
+                var result = new Dictionary<string, MetadataInfo>(StringComparer.OrdinalIgnoreCase);
+                
+                foreach (var path in paths)
+                {
+                    if (string.IsNullOrEmpty(path))
+                        continue;
+                    
+                    var info = new MetadataInfo
+                    {
+                        Path = path,
+                        IsPinned = metadata.PinnedItems.Contains(path),
+                        IsRecent = metadata.RecentItems.Contains(path),
+                        Tags = metadata.Tags.TryGetValue(path, out var tags) ? new List<string>(tags) : new List<string>(),
+                        Color = metadata.ItemColors.TryGetValue(path, out var color) ? color : null,
+                        IsBold = metadata.ItemBold.TryGetValue(path, out var bold) && bold,
+                        LastAccessed = metadata.LastAccessed.TryGetValue(path, out var accessed) ? accessed : (double?)null
+                    };
+                    
+                    result[path] = info;
+                }
+                
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// Sets metadata for multiple items in a single batch operation
+        /// </summary>
+        /// <param name="items">Collection of metadata info to set</param>
+        public void SetBatchMetadata(IEnumerable<MetadataInfo> items)
+        {
+            if (items == null)
+                return;
+
+            lock (_syncLock)
+            {
+                foreach (var info in items)
+                {
+                    if (string.IsNullOrEmpty(info.Path))
+                        continue;
+                    
+                    // Update pinned status
+                    if (info.IsPinned && !metadata.PinnedItems.Contains(info.Path))
+                    {
+                        metadata.PinnedItems.Add(info.Path);
+                    }
+                    else if (!info.IsPinned)
+                    {
+                        metadata.PinnedItems.Remove(info.Path);
+                    }
+                    
+                    // Update tags
+                    if (info.Tags != null && info.Tags.Count > 0)
+                    {
+                        metadata.Tags[info.Path] = new List<string>(info.Tags);
+                    }
+                    else
+                    {
+                        metadata.Tags.Remove(info.Path);
+                    }
+                    
+                    // Update color
+                    if (!string.IsNullOrEmpty(info.Color))
+                    {
+                        metadata.ItemColors[info.Path] = info.Color;
+                    }
+                    else
+                    {
+                        metadata.ItemColors.Remove(info.Path);
+                    }
+                    
+                    // Update bold status
+                    if (info.IsBold)
+                    {
+                        metadata.ItemBold[info.Path] = true;
+                    }
+                    else
+                    {
+                        metadata.ItemBold.Remove(info.Path);
+                    }
+                    
+                    // Update last accessed if provided
+                    if (info.LastAccessed.HasValue)
+                    {
+                        metadata.LastAccessed[info.Path] = info.LastAccessed.Value;
+                    }
+                }
+                
+                // Save after batch update
+                SaveMetadata();
+            }
+        }
+
+        /// <summary>
+        /// Adds multiple recent items in a single batch operation
+        /// </summary>
+        /// <param name="paths">Collection of paths to add as recent</param>
+        public void AddBatchRecentItems(IEnumerable<string> paths)
+        {
+            if (paths == null)
+                return;
+
+            lock (_syncLock)
+            {
+                foreach (var path in paths)
+                {
+                    if (string.IsNullOrEmpty(path))
+                        continue;
+                    
+                    // Remove if already exists
+                    metadata.RecentItems.Remove(path);
+                    
+                    // Insert at beginning
+                    metadata.RecentItems.Insert(0, path);
+                }
+                
+                // Trim to max items
+                if (metadata.RecentItems.Count > _maxRecentItems)
+                {
+                    metadata.RecentItems = metadata.RecentItems.Take(_maxRecentItems).ToList();
+                }
+                
+                SaveMetadata();
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// Performs cleanup of metadata to prevent unbounded growth
@@ -811,5 +953,24 @@ namespace ExplorerPro.Models
 
         [JsonProperty("recent_colors")]
         public List<string> RecentColors { get; set; }
+    }
+
+    /// <summary>
+    /// Container class for metadata information about a single item
+    /// </summary>
+    public class MetadataInfo
+    {
+        public string Path { get; set; }
+        public bool IsPinned { get; set; }
+        public bool IsRecent { get; set; }
+        public List<string> Tags { get; set; }
+        public string Color { get; set; }
+        public bool IsBold { get; set; }
+        public double? LastAccessed { get; set; }
+        
+        public MetadataInfo()
+        {
+            Tags = new List<string>();
+        }
     }
 }

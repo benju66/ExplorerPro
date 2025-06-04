@@ -1,4 +1,4 @@
-// UI/FileTree/Services/FileTreeCacheService.cs - Enhanced version with better memory management
+// UI/FileTree/Services/FileTreeCacheService.cs - Enhanced with batch operations and optimized eviction
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,7 +8,7 @@ namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
     /// LRU (Least Recently Used) cache implementation for file tree items
-    /// Enhanced version with better memory management and disposal
+    /// Enhanced version with batch operations and optimized eviction
     /// </summary>
     public class FileTreeCacheService : IFileTreeCache, IDisposable
     {
@@ -16,6 +16,7 @@ namespace ExplorerPro.UI.FileTree.Services
         private readonly Dictionary<string, LinkedListNode<CacheNode>> _accessOrder;
         private readonly LinkedList<CacheNode> _accessList;
         private readonly int _capacity;
+        private readonly int _maxCapacity; // Allow 10% overflow
         private readonly ReaderWriterLockSlim _lock;
         private bool _disposed;
         
@@ -23,6 +24,10 @@ namespace ExplorerPro.UI.FileTree.Services
         private long _approximateMemoryUsage;
         private readonly long _maxMemoryUsage;
         private const long ESTIMATED_ITEM_SIZE = 1024; // Estimated bytes per FileTreeItem
+        
+        // Batch operation support
+        private readonly List<KeyValuePair<string, FileTreeItem>> _pendingBatch;
+        private bool _batchMode = false;
 
         public event EventHandler<CacheEvictionEventArgs> ItemEvicted;
 
@@ -51,12 +56,14 @@ namespace ExplorerPro.UI.FileTree.Services
                 throw new ArgumentException("Capacity must be greater than zero", nameof(capacity));
 
             _capacity = capacity;
+            _maxCapacity = (int)(capacity * 1.1); // Allow 10% overflow
             _maxMemoryUsage = maxMemoryUsageMB * 1024 * 1024; // Convert MB to bytes
             _cache = new Dictionary<string, CacheNode>(capacity, StringComparer.OrdinalIgnoreCase);
             _accessOrder = new Dictionary<string, LinkedListNode<CacheNode>>(capacity, StringComparer.OrdinalIgnoreCase);
             _accessList = new LinkedList<CacheNode>();
             _lock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
             _approximateMemoryUsage = 0;
+            _pendingBatch = new List<KeyValuePair<string, FileTreeItem>>(100);
         }
 
         public FileTreeItem GetItem(string key)
@@ -101,42 +108,127 @@ namespace ExplorerPro.UI.FileTree.Services
             _lock.EnterWriteLock();
             try
             {
-                if (_cache.TryGetValue(key, out CacheNode existingNode))
-                {
-                    // Update existing item
-                    var oldItem = existingNode.Item;
-                    existingNode.Item = item;
-                    existingNode.LastAccessed = DateTime.UtcNow;
-                    UpdateAccessOrder(key, existingNode);
-                    
-                    // Raise replaced event
-                    OnItemEvicted(key, oldItem, EvictionReason.Replaced);
-                }
-                else
-                {
-                    // Check if we need to evict based on capacity or memory
-                    while (ShouldEvict())
-                    {
-                        EvictLeastRecentlyUsed();
-                    }
-
-                    var newNode = new CacheNode 
-                    { 
-                        Key = key, 
-                        Item = item,
-                        LastAccessed = DateTime.UtcNow,
-                        EstimatedSize = EstimateItemSize(item)
-                    };
-                    
-                    _cache[key] = newNode;
-                    var listNode = _accessList.AddFirst(newNode);
-                    _accessOrder[key] = listNode;
-                    _approximateMemoryUsage += newNode.EstimatedSize;
-                }
+                SetItemInternal(key, item);
             }
             finally
             {
                 _lock.ExitWriteLock();
+            }
+        }
+
+        /// <summary>
+        /// Sets multiple items in batch for better performance
+        /// </summary>
+        public void SetItemBatch(IEnumerable<KeyValuePair<string, FileTreeItem>> items)
+        {
+            ThrowIfDisposed();
+            
+            if (items == null)
+                return;
+
+            _lock.EnterWriteLock();
+            try
+            {
+                _batchMode = true;
+                
+                foreach (var kvp in items)
+                {
+                    if (!string.IsNullOrEmpty(kvp.Key) && kvp.Value != null)
+                    {
+                        SetItemInternal(kvp.Key, kvp.Value);
+                    }
+                }
+                
+                // Perform batch eviction if needed
+                PerformBatchEviction();
+            }
+            finally
+            {
+                _batchMode = false;
+                _lock.ExitWriteLock();
+            }
+        }
+
+        /// <summary>
+        /// Internal set method without locking for batch operations
+        /// </summary>
+        private void SetItemInternal(string key, FileTreeItem item)
+        {
+            if (_cache.TryGetValue(key, out CacheNode existingNode))
+            {
+                // Update existing item
+                var oldItem = existingNode.Item;
+                existingNode.Item = item;
+                existingNode.LastAccessed = DateTime.UtcNow;
+                existingNode.EstimatedSize = EstimateItemSize(item);
+                UpdateAccessOrder(key, existingNode);
+                
+                // Update memory usage
+                _approximateMemoryUsage = _approximateMemoryUsage - existingNode.EstimatedSize + EstimateItemSize(item);
+                
+                // Raise replaced event only if not in batch mode
+                if (!_batchMode)
+                {
+                    OnItemEvicted(key, oldItem, EvictionReason.Replaced);
+                }
+            }
+            else
+            {
+                // Check if we need to evict based on capacity or memory
+                // Allow temporary overflow during batch operations
+                if (!_batchMode && ShouldEvictImmediate())
+                {
+                    EvictLeastRecentlyUsed();
+                }
+
+                var newNode = new CacheNode 
+                { 
+                    Key = key, 
+                    Item = item,
+                    LastAccessed = DateTime.UtcNow,
+                    EstimatedSize = EstimateItemSize(item)
+                };
+                
+                _cache[key] = newNode;
+                var listNode = _accessList.AddFirst(newNode);
+                _accessOrder[key] = listNode;
+                _approximateMemoryUsage += newNode.EstimatedSize;
+            }
+        }
+
+        /// <summary>
+        /// Performs batch eviction after batch operations
+        /// </summary>
+        private void PerformBatchEviction()
+        {
+            // Only evict if we're over the normal capacity (not the max capacity)
+            while (_cache.Count > _capacity || _approximateMemoryUsage > _maxMemoryUsage)
+            {
+                EvictLeastRecentlyUsedBatch();
+            }
+        }
+
+        /// <summary>
+        /// Optimized batch eviction that removes multiple items at once
+        /// </summary>
+        private void EvictLeastRecentlyUsedBatch()
+        {
+            // Calculate how many items to evict (5% of capacity or at least 10)
+            int evictCount = Math.Max(10, _capacity / 20);
+            var itemsToEvict = new List<string>();
+            
+            // Collect items to evict from the end of the access list
+            var current = _accessList.Last;
+            while (current != null && itemsToEvict.Count < evictCount)
+            {
+                itemsToEvict.Add(current.Value.Key);
+                current = current.Previous;
+            }
+            
+            // Evict collected items
+            foreach (var key in itemsToEvict)
+            {
+                RemoveItemInternal(key, EvictionReason.CapacityExceeded);
             }
         }
 
@@ -192,9 +284,12 @@ namespace ExplorerPro.UI.FileTree.Services
                 _approximateMemoryUsage = 0;
                 
                 // Notify after clearing to avoid deadlocks
-                foreach (var kvp in itemsToNotify)
+                if (!_batchMode)
                 {
-                    OnItemEvicted(kvp.Key, kvp.Value.Item, EvictionReason.Cleared);
+                    foreach (var kvp in itemsToNotify)
+                    {
+                        OnItemEvicted(kvp.Key, kvp.Value.Item, EvictionReason.Cleared);
+                    }
                 }
             }
             finally
@@ -265,6 +360,14 @@ namespace ExplorerPro.UI.FileTree.Services
         #region Private Methods
 
         /// <summary>
+        /// Checks if we should evict items immediately (not in batch mode)
+        /// </summary>
+        private bool ShouldEvictImmediate()
+        {
+            return _cache.Count >= _maxCapacity || _approximateMemoryUsage >= _maxMemoryUsage;
+        }
+
+        /// <summary>
         /// Checks if we should evict items based on capacity or memory constraints
         /// </summary>
         private bool ShouldEvict()
@@ -316,8 +419,11 @@ namespace ExplorerPro.UI.FileTree.Services
                 
                 _approximateMemoryUsage -= node.EstimatedSize;
                 
-                // Raise removed event
-                OnItemEvicted(key, node.Item, reason);
+                // Raise removed event only if not in batch mode
+                if (!_batchMode)
+                {
+                    OnItemEvicted(key, node.Item, reason);
+                }
                 return true;
             }
             return false;
@@ -346,7 +452,7 @@ namespace ExplorerPro.UI.FileTree.Services
 
         protected virtual void OnItemEvicted(string key, FileTreeItem item, EvictionReason reason)
         {
-            if (!_disposed)
+            if (!_disposed && !_batchMode)
             {
                 try
                 {
@@ -407,6 +513,7 @@ namespace ExplorerPro.UI.FileTree.Services
                         _cache?.Clear();
                         _accessOrder?.Clear();
                         _accessList?.Clear();
+                        _pendingBatch?.Clear();
                         
                         // Clear event handlers
                         ItemEvicted = null;

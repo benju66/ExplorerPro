@@ -1,4 +1,4 @@
-// UI/FileTree/Services/FileTreeService.cs
+// UI/FileTree/Services/FileTreeService.cs - Enhanced with batch operations and optimized HasChildren
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -14,6 +14,7 @@ namespace ExplorerPro.UI.FileTree.Services
 {
     /// <summary>
     /// Service for file tree operations with proper memory management and async support
+    /// Enhanced with batch operations and optimized HasChildren check
     /// </summary>
     public class FileTreeService : IFileTreeService, IDisposable
     {
@@ -61,6 +62,14 @@ namespace ExplorerPro.UI.FileTree.Services
                 });
 
                 List<FileTreeItem> items = new List<FileTreeItem>();
+                
+                // Collect all paths for batch metadata retrieval
+                var allPaths = new List<string>();
+                allPaths.AddRange(directories);
+                allPaths.AddRange(files);
+                
+                // Get metadata for all items in one batch operation
+                var metadataBatch = _metadataManager.GetBatchMetadata(allPaths);
 
                 // Add directories
                 foreach (var dir in directories)
@@ -72,6 +81,13 @@ namespace ExplorerPro.UI.FileTree.Services
 
                         // Use async version for better performance on network drives
                         var dirItem = await CreateFileTreeItemAsync(dir, level, showHiddenFiles);
+                        
+                        // Apply batch metadata
+                        if (metadataBatch.TryGetValue(dir, out var metadata))
+                        {
+                            ApplyBatchMetadataStyling(dirItem, metadata);
+                        }
+                        
                         items.Add(dirItem);
                     }
                     catch (UnauthorizedAccessException)
@@ -95,6 +111,13 @@ namespace ExplorerPro.UI.FileTree.Services
                             continue;
 
                         var fileItem = CreateFileTreeItem(file, level);
+                        
+                        // Apply batch metadata
+                        if (metadataBatch.TryGetValue(file, out var metadata))
+                        {
+                            ApplyBatchMetadataStyling(fileItem, metadata);
+                        }
+                        
                         items.Add(fileItem);
                     }
                     catch (UnauthorizedAccessException)
@@ -261,6 +284,10 @@ namespace ExplorerPro.UI.FileTree.Services
             }
         }
 
+        /// <summary>
+        /// Optimized async method to check if directory has children
+        /// Uses early exit and minimal file system operations
+        /// </summary>
         public async Task<bool> DirectoryHasAccessibleChildrenAsync(string directoryPath, bool showHiddenFiles = false, CancellationToken cancellationToken = default)
         {
             if (_disposed)
@@ -275,19 +302,35 @@ namespace ExplorerPro.UI.FileTree.Services
                     {
                         cancellationToken.ThrowIfCancellationRequested();
 
-                        // Use EnumerateFileSystemInfos for a single pass through the directory
                         var directoryInfo = new DirectoryInfo(directoryPath);
                         
-                        foreach (var entry in directoryInfo.EnumerateFileSystemInfos())
+                        // Use EnumerateFileSystemInfos for a single pass through the directory
+                        // This is more efficient than separate calls to EnumerateDirectories and EnumerateFiles
+                        var enumerator = directoryInfo.EnumerateFileSystemInfos().GetEnumerator();
+                        
+                        try
                         {
-                            cancellationToken.ThrowIfCancellationRequested();
-                            
-                            // Skip hidden entries if needed
-                            if (!showHiddenFiles && (entry.Attributes & FileAttributes.Hidden) == FileAttributes.Hidden)
-                                continue;
-                            
-                            // Found at least one visible entry
-                            return true;
+                            while (enumerator.MoveNext())
+                            {
+                                cancellationToken.ThrowIfCancellationRequested();
+                                
+                                var entry = enumerator.Current;
+                                
+                                // Skip hidden entries if needed
+                                if (!showHiddenFiles && (entry.Attributes & FileAttributes.Hidden) == FileAttributes.Hidden)
+                                    continue;
+                                
+                                // Skip system entries that might cause issues
+                                if ((entry.Attributes & FileAttributes.System) == FileAttributes.System)
+                                    continue;
+                                
+                                // Found at least one visible, non-system entry
+                                return true;
+                            }
+                        }
+                        finally
+                        {
+                            enumerator?.Dispose();
                         }
                         
                         return false;
@@ -369,6 +412,42 @@ namespace ExplorerPro.UI.FileTree.Services
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to apply metadata styling: {ex.Message}");
+                // Continue without styling
+            }
+        }
+
+        /// <summary>
+        /// Applies metadata styling from batch metadata info
+        /// </summary>
+        private void ApplyBatchMetadataStyling(FileTreeItem item, MetadataInfo metadata)
+        {
+            if (item == null || metadata == null)
+                return;
+
+            try
+            {
+                // Apply text color if set
+                if (!string.IsNullOrEmpty(metadata.Color))
+                {
+                    try
+                    {
+                        item.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(metadata.Color));
+                    }
+                    catch
+                    {
+                        // Ignore color conversion errors
+                    }
+                }
+
+                // Apply bold if set
+                if (metadata.IsBold)
+                {
+                    item.FontWeight = System.Windows.FontWeights.Bold;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to apply batch metadata styling: {ex.Message}");
                 // Continue without styling
             }
         }
