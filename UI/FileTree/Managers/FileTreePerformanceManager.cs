@@ -102,11 +102,13 @@ namespace ExplorerPro.UI.FileTree.Managers
 
         private void FindScrollViewer()
         {
-            // Find the ScrollViewer within the TreeView's template
+            // Find the ScrollViewer within the TreeView's template - but don't attach events if it's working properly
             _scrollViewer = VisualTreeHelperEx.FindScrollViewer(_treeView);
             
+            // Only attach if we found it and it's not disposed, but let it handle its own scrolling behavior
             if (_scrollViewer != null && !_disposed)
             {
+                // Only attach scroll changed event for performance tracking, not manipulation
                 _scrollViewer.ScrollChanged += OnScrollChanged;
             }
         }
@@ -290,7 +292,7 @@ namespace ExplorerPro.UI.FileTree.Managers
         private void ClearHitTestCache()
         {
             _hitTestCache.Clear();
-            _hitTestCacheQueue.Clear();
+            _cacheKeyQueue.Clear();
         }
 
         private CachedHitTestResult GetCachedHitTestResult(Point point)
@@ -320,9 +322,9 @@ namespace ExplorerPro.UI.FileTree.Managers
         private void CacheHitTestResult(Point point, FileTreeItem item)
         {
             // Remove old entries if cache is full
-            while (_hitTestCacheQueue.Count >= HIT_TEST_CACHE_SIZE)
+            while (_cacheKeyQueue.Count >= HIT_TEST_CACHE_SIZE)
             {
-                var oldPoint = _hitTestCacheQueue.Dequeue();
+                var oldPoint = _cacheKeyQueue.Dequeue();
                 _hitTestCache.Remove(oldPoint);
             }
             
@@ -334,7 +336,7 @@ namespace ExplorerPro.UI.FileTree.Managers
             };
             
             _hitTestCache[point] = result;
-            _hitTestCacheQueue.Enqueue(point);
+            _cacheKeyQueue.Enqueue(point);
         }
 
         private IEnumerable<TreeViewItem> GetExpandedTreeViewItems(ItemsControl parent)

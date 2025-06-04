@@ -128,61 +128,26 @@
                   BorderThickness="0"
                   Background="{DynamicResource TreeViewBackground}"
                   VirtualizingStackPanel.IsVirtualizing="True"
-                  VirtualizingStackPanel.VirtualizationMode="Recycling"
-                  ScrollViewer.CanContentScroll="True"
+                  VirtualizingStackPanel.VirtualizationMode="Standard"
+                  ScrollViewer.CanContentScroll="False"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
                   ScrollViewer.VerticalScrollBarVisibility="Auto"
-                  ScrollViewer.PanningMode="VerticalOnly"
+                  ScrollViewer.PanningMode="Both"
                   Tag="{Binding SelectionService.IsMultiSelectMode, Converter={StaticResource BoolToMultiSelectTagConverter}}"
                   ItemsSource="{Binding RootItems}">
             
-            <!-- Add explicit ScrollViewer style to ensure proper appearance -->
+            <!-- Enhance ScrollViewer appearance without overriding template -->
             <TreeView.Resources>
-                <Style TargetType="{x:Type ScrollViewer}">
-                    <Setter Property="Template">
-                        <Setter.Value>
-                            <ControlTemplate TargetType="{x:Type ScrollViewer}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
-                                    
-                                    <ScrollContentPresenter Grid.Column="0" Grid.Row="0" 
-                                                          CanContentScroll="{TemplateBinding CanContentScroll}"/>
-                                    
-                                    <ScrollBar x:Name="PART_VerticalScrollBar"
-                                             Grid.Row="0" Grid.Column="1"
-                                             Value="{TemplateBinding VerticalOffset}"
-                                             Maximum="{TemplateBinding ScrollableHeight}"
-                                             ViewportSize="{TemplateBinding ViewportHeight}"
-                                             Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
-                                    
-                                    <ScrollBar x:Name="PART_HorizontalScrollBar"
-                                             Orientation="Horizontal"
-                                             Grid.Row="1" Grid.Column="0"
-                                             Value="{TemplateBinding HorizontalOffset}"
-                                             Maximum="{TemplateBinding ScrollableWidth}"
-                                             ViewportSize="{TemplateBinding ViewportWidth}"
-                                             Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"/>
-                                    
-                                    <Rectangle Grid.Row="1" Grid.Column="1"
-                                             Fill="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"/>
-                                </Grid>
-                            </ControlTemplate>
-                        </Setter.Value>
-                    </Setter>
+                <Style TargetType="{x:Type ScrollViewer}" BasedOn="{StaticResource BaseScrollViewerStyle}">
+                    <Setter Property="Focusable" Value="False"/>
                 </Style>
             </TreeView.Resources>
             
             <TreeView.ItemContainerStyle>
                 <Style TargetType="TreeViewItem" BasedOn="{StaticResource TreeViewItemWithLines}">
                     <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
-                    <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling"/>
+                    <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Standard"/>
+                    <Setter Property="VirtualizingPanel.ScrollUnit" Value="Item"/>
                 </Style>
             </TreeView.ItemContainerStyle>
             

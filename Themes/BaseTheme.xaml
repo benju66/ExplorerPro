@@ -273,14 +273,17 @@
     <!-- ScrollBar Base Style -->
     <Style x:Key="BaseScrollBarStyle" TargetType="{x:Type ScrollBar}">
         <Setter Property="Background" Value="{DynamicResource ScrollBarTrackBackground}"/>
+        <Setter Property="Stylus.IsPressAndHoldEnabled" Value="False"/>
+        <Setter Property="Stylus.IsFlicksEnabled" Value="False"/>
+        <Setter Property="Foreground" Value="{DynamicResource ScrollBarThumbBackground}"/>
         <Style.Triggers>
             <Trigger Property="Orientation" Value="Horizontal">
-                <Setter Property="Height" Value="12"/>
-                <Setter Property="MinHeight" Value="12"/>
+                <Setter Property="Height" Value="14"/>
+                <Setter Property="MinHeight" Value="14"/>
             </Trigger>
             <Trigger Property="Orientation" Value="Vertical">
-                <Setter Property="Width" Value="12"/>
-                <Setter Property="MinWidth" Value="12"/>
+                <Setter Property="Width" Value="14"/>
+                <Setter Property="MinWidth" Value="14"/>
             </Trigger>
         </Style.Triggers>
     </Style>
