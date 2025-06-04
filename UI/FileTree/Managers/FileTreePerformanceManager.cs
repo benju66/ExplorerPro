@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Threading;
 using ExplorerPro.Models;
 using ExplorerPro.UI.FileTree.Utilities;
 
@@ -27,6 +28,12 @@ namespace ExplorerPro.UI.FileTree.Managers
         
         // Cache for TreeViewItem lookups to avoid repeated visual tree traversal
         private readonly Dictionary<FileTreeItem, WeakReference> _treeViewItemCache = new Dictionary<FileTreeItem, WeakReference>();
+        private readonly ReaderWriterLockSlim _cacheLock = new ReaderWriterLockSlim();
+        
+        // Cleanup timer and statistics
+        private readonly DispatcherTimer _cleanupTimer;
+        private readonly object _cleanupStatsLock = new object();
+        private CleanupStatistics _cleanupStats = new CleanupStatistics();
         
         // Track currently visible TreeViewItems for efficient updates
         private readonly HashSet<TreeViewItem> _visibleTreeViewItems = new HashSet<TreeViewItem>();
@@ -44,12 +51,17 @@ namespace ExplorerPro.UI.FileTree.Managers
         
         private bool _disposed = false;
 
+        // Cleanup configuration
+        private const int CLEANUP_INTERVAL_SECONDS = 45; // 45 seconds - middle of requested range
+        private const int INITIAL_CLEANUP_DELAY_SECONDS = 60; // Wait 1 minute before first cleanup
+
         #endregion
 
         #region Events
 
         public event EventHandler VisibleItemsCacheUpdated;
         public event EventHandler SelectionUpdateRequested;
+        public event EventHandler<CleanupCompletedEventArgs> CleanupCompleted;
 
         #endregion
 
@@ -74,6 +86,13 @@ namespace ExplorerPro.UI.FileTree.Managers
                 }
             }
             
+            // Initialize cleanup timer
+            _cleanupTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(CLEANUP_INTERVAL_SECONDS)
+            };
+            _cleanupTimer.Tick += OnCleanupTimer;
+            
             Initialize();
         }
 
@@ -92,6 +111,32 @@ namespace ExplorerPro.UI.FileTree.Managers
             {
                 _treeView.ItemContainerGenerator.StatusChanged += OnContainerGeneratorStatusChanged;
             }
+            
+            // Start cleanup timer with initial delay
+            ScheduleFirstCleanup();
+            
+            LogDebug("FileTreePerformanceManager initialized with cleanup timer");
+        }
+
+        private void ScheduleFirstCleanup()
+        {
+            // Use a one-time timer for the initial delay
+            var initialTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(INITIAL_CLEANUP_DELAY_SECONDS)
+            };
+            
+            initialTimer.Tick += (sender, e) =>
+            {
+                initialTimer.Stop();
+                if (!_disposed)
+                {
+                    _cleanupTimer.Start();
+                    LogDebug("Cleanup timer started after initial delay");
+                }
+            };
+            
+            initialTimer.Start();
         }
 
         private void OnTreeViewLoaded(object sender, RoutedEventArgs e)
@@ -124,23 +169,40 @@ namespace ExplorerPro.UI.FileTree.Managers
         {
             if (dataItem == null) return null;
             
-            // Check cache first
-            if (_treeViewItemCache.TryGetValue(dataItem, out WeakReference weakRef) && 
-                weakRef.Target is TreeViewItem cachedItem && 
-                cachedItem.DataContext == dataItem)
+            // Thread-safe cache access
+            _cacheLock.EnterReadLock();
+            try
             {
-                _cacheHitCount++;
-                return cachedItem;
+                // Check cache first
+                if (_treeViewItemCache.TryGetValue(dataItem, out WeakReference weakRef) && 
+                    weakRef.Target is TreeViewItem cachedItem && 
+                    cachedItem.DataContext == dataItem)
+                {
+                    Interlocked.Increment(ref _cacheHitCount);
+                    return cachedItem;
+                }
+            }
+            finally
+            {
+                _cacheLock.ExitReadLock();
             }
             
             // Not in cache or stale, find it
-            _cacheMissCount++;
+            Interlocked.Increment(ref _cacheMissCount);
             var treeViewItem = VisualTreeHelperEx.FindTreeViewItemOptimized(_treeView, dataItem);
             
-            // Update cache
+            // Update cache with thread safety
             if (treeViewItem != null)
             {
-                _treeViewItemCache[dataItem] = new WeakReference(treeViewItem);
+                _cacheLock.EnterWriteLock();
+                try
+                {
+                    _treeViewItemCache[dataItem] = new WeakReference(treeViewItem);
+                }
+                finally
+                {
+                    _cacheLock.ExitWriteLock();
+                }
             }
             
             return treeViewItem;
@@ -160,8 +222,8 @@ namespace ExplorerPro.UI.FileTree.Managers
             
             // Perform hit test
             var hitTestResult = VisualTreeHelper.HitTest(_treeView, point);
-            var treeViewItem = VisualTreeHelperEx.FindAncestor<TreeViewItem>(hitTestResult?.VisualHit);
-            var item = treeViewItem?.DataContext as FileTreeItem;
+            var treeViewItem = hitTestResult != null ? VisualTreeHelperEx.FindAncestor<TreeViewItem>(hitTestResult.VisualHit) : null;
+            var item = treeViewItem != null ? treeViewItem.DataContext as FileTreeItem : null;
             
             // Cache the result
             CacheHitTestResult(point, item);
@@ -221,7 +283,10 @@ namespace ExplorerPro.UI.FileTree.Managers
             }
             
             _lastCacheUpdate = DateTime.Now;
-            VisibleItemsCacheUpdated?.Invoke(this, EventArgs.Empty);
+            if (VisibleItemsCacheUpdated != null)
+            {
+                VisibleItemsCacheUpdated.Invoke(this, EventArgs.Empty);
+            }
             
             System.Diagnostics.Debug.WriteLine($"[PERF] Visible items cache updated: {_visibleTreeViewItems.Count} items");
         }
@@ -236,10 +301,27 @@ namespace ExplorerPro.UI.FileTree.Managers
         }
 
         /// <summary>
-        /// Gets performance statistics
+        /// Gets performance statistics including cleanup stats
         /// </summary>
         public PerformanceStats GetPerformanceStats()
         {
+            CleanupStatistics cleanupStatsCopy;
+            lock (_cleanupStatsLock)
+            {
+                cleanupStatsCopy = _cleanupStats.Clone();
+            }
+            
+            int cacheCount;
+            _cacheLock.EnterReadLock();
+            try
+            {
+                cacheCount = _treeViewItemCache.Count;
+            }
+            finally
+            {
+                _cacheLock.ExitReadLock();
+            }
+            
             return new PerformanceStats
             {
                 CacheHitCount = _cacheHitCount,
@@ -247,9 +329,32 @@ namespace ExplorerPro.UI.FileTree.Managers
                 CacheHitRatio = _cacheHitCount + _cacheMissCount > 0 ? 
                     (double)_cacheHitCount / (_cacheHitCount + _cacheMissCount) : 0.0,
                 VisibleItemsCount = _visibleTreeViewItems.Count,
-                CachedItemsCount = _treeViewItemCache.Count,
-                LastCacheUpdate = _lastCacheUpdate
+                CachedItemsCount = cacheCount,
+                LastCacheUpdate = _lastCacheUpdate,
+                CleanupStats = cleanupStatsCopy
             };
+        }
+
+        /// <summary>
+        /// Gets current cleanup statistics
+        /// </summary>
+        public CleanupStatistics GetCleanupStatistics()
+        {
+            lock (_cleanupStatsLock)
+            {
+                return _cleanupStats.Clone();
+            }
+        }
+
+        /// <summary>
+        /// Forces an immediate cleanup of dead cache entries
+        /// </summary>
+        public void ForceCleanup()
+        {
+            if (_disposed) return;
+            
+            LogDebug("Manual cleanup requested");
+            PerformCacheCleanup();
         }
 
         /// <summary>
@@ -257,7 +362,10 @@ namespace ExplorerPro.UI.FileTree.Managers
         /// </summary>
         public void ScheduleSelectionUpdate()
         {
-            SelectionUpdateRequested?.Invoke(this, EventArgs.Empty);
+            if (SelectionUpdateRequested != null)
+            {
+                SelectionUpdateRequested.Invoke(this, EventArgs.Empty);
+            }
         }
 
         /// <summary>
@@ -267,16 +375,156 @@ namespace ExplorerPro.UI.FileTree.Managers
         {
             if (string.IsNullOrEmpty(directoryPath)) return;
             
-            var itemsToRemove = _treeViewItemCache.Keys
-                .Where(item => item?.Path?.StartsWith(directoryPath, StringComparison.OrdinalIgnoreCase) == true)
-                .ToList();
-            
-            foreach (var item in itemsToRemove)
+            _cacheLock.EnterWriteLock();
+            try
             {
-                _treeViewItemCache.Remove(item);
+                var itemsToRemove = _treeViewItemCache.Keys
+                    .Where(item => item != null && item.Path != null && item.Path.StartsWith(directoryPath, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                
+                foreach (var item in itemsToRemove)
+                {
+                    _treeViewItemCache.Remove(item);
+                }
+                
+                LogDebug($"Invalidated cache for directory: {directoryPath} ({itemsToRemove.Count} items removed)");
             }
+            finally
+            {
+                _cacheLock.ExitWriteLock();
+            }
+        }
+
+        #endregion
+
+        #region Cache Cleanup Implementation
+
+        private void OnCleanupTimer(object sender, EventArgs e)
+        {
+            if (_disposed) return;
             
-            System.Diagnostics.Debug.WriteLine($"[PERF] Invalidated cache for directory: {directoryPath}");
+            // Perform cleanup on a background thread to avoid blocking UI
+            ThreadPool.QueueUserWorkItem(_ => PerformCacheCleanup());
+        }
+
+        private void PerformCacheCleanup()
+        {
+            if (_disposed) return;
+            
+            var startTime = DateTime.Now;
+            var initialCount = 0;
+            var deadKeysRemoved = 0;
+            var liveCacheUpdated = 0;
+            
+            try
+            {
+                var deadKeys = new List<FileTreeItem>();
+                var liveEntriesToUpdate = new List<KeyValuePair<FileTreeItem, WeakReference>>();
+                
+                // First pass: collect information under read lock
+                _cacheLock.EnterReadLock();
+                try
+                {
+                    initialCount = _treeViewItemCache.Count;
+                    
+                    foreach (var kvp in _treeViewItemCache)
+                    {
+                        if (kvp.Value == null || !kvp.Value.IsAlive)
+                        {
+                            deadKeys.Add(kvp.Key);
+                        }
+                        else if (kvp.Value.Target is TreeViewItem tvi && tvi.DataContext != kvp.Key)
+                        {
+                            // TreeViewItem exists but DataContext doesn't match - stale entry
+                            deadKeys.Add(kvp.Key);
+                        }
+                        else
+                        {
+                            // This is a live entry, keep it
+                            liveEntriesToUpdate.Add(kvp);
+                        }
+                    }
+                }
+                finally
+                {
+                    _cacheLock.ExitReadLock();
+                }
+                
+                // Second pass: remove dead entries under write lock
+                if (deadKeys.Count > 0)
+                {
+                    _cacheLock.EnterWriteLock();
+                    try
+                    {
+                        foreach (var deadKey in deadKeys)
+                        {
+                            if (_treeViewItemCache.Remove(deadKey))
+                            {
+                                deadKeysRemoved++;
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        _cacheLock.ExitWriteLock();
+                    }
+                }
+                
+                var duration = DateTime.Now - startTime;
+                
+                // Update statistics
+                lock (_cleanupStatsLock)
+                {
+                    _cleanupStats.TotalCleanupsPerformed++;
+                    _cleanupStats.TotalDeadEntriesRemoved += deadKeysRemoved;
+                    _cleanupStats.LastCleanupTime = startTime;
+                    _cleanupStats.LastCleanupDuration = duration;
+                    _cleanupStats.AverageCleanupDuration = TimeSpan.FromMilliseconds(
+                        (_cleanupStats.AverageCleanupDuration.TotalMilliseconds * (_cleanupStats.TotalCleanupsPerformed - 1) + 
+                         duration.TotalMilliseconds) / _cleanupStats.TotalCleanupsPerformed);
+                    
+                    if (deadKeysRemoved > _cleanupStats.MaxEntriesRemovedInSingleCleanup)
+                    {
+                        _cleanupStats.MaxEntriesRemovedInSingleCleanup = deadKeysRemoved;
+                    }
+                }
+                
+                LogDebug($"Cache cleanup completed: {deadKeysRemoved}/{initialCount} dead entries removed in {duration.TotalMilliseconds:F1}ms");
+                
+                // Fire cleanup completed event on UI thread
+                if (CleanupCompleted != null)
+                {
+                    if (Application.Current != null)
+                    {
+                        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                        {
+                            if (!_disposed)
+                            {
+                                if (CleanupCompleted != null)
+                                {
+                                    CleanupCompleted.Invoke(this, new CleanupCompletedEventArgs
+                                    {
+                                        DeadEntriesRemoved = deadKeysRemoved,
+                                        InitialCacheSize = initialCount,
+                                        CleanupDuration = duration,
+                                        TotalCleanupsPerformed = GetCleanupStatistics().TotalCleanupsPerformed
+                                    });
+                                }
+                            }
+                        }));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log error but don't crash the application
+                LogDebug($"Error during cache cleanup: {ex.Message}");
+                
+                lock (_cleanupStatsLock)
+                {
+                    _cleanupStats.CleanupErrors++;
+                }
+            }
         }
 
         #endregion
@@ -285,8 +533,19 @@ namespace ExplorerPro.UI.FileTree.Managers
 
         public void ClearTreeViewItemCache()
         {
-            _treeViewItemCache.Clear();
-            _visibleTreeViewItems.Clear();
+            _cacheLock.EnterWriteLock();
+            try
+            {
+                var count = _treeViewItemCache.Count;
+                _treeViewItemCache.Clear();
+                _visibleTreeViewItems.Clear();
+                
+                LogDebug($"TreeViewItem cache cleared: {count} items removed");
+            }
+            finally
+            {
+                _cacheLock.ExitWriteLock();
+            }
         }
 
         private void ClearHitTestCache()
@@ -369,6 +628,11 @@ namespace ExplorerPro.UI.FileTree.Managers
             }
         }
 
+        private void LogDebug(string message)
+        {
+            System.Diagnostics.Debug.WriteLine($"[PERF-CACHE] {DateTime.Now:HH:mm:ss.fff} - {message}");
+        }
+
         #endregion
 
         #region Event Handlers
@@ -410,6 +674,15 @@ namespace ExplorerPro.UI.FileTree.Managers
             {
                 _disposed = true;
                 
+                LogDebug("Disposing FileTreePerformanceManager");
+                
+                // Stop and dispose cleanup timer
+                if (_cleanupTimer != null)
+                {
+                    _cleanupTimer.Stop();
+                    _cleanupTimer.Tick -= OnCleanupTimer;
+                }
+                
                 if (_treeView != null)
                 {
                     _treeView.Loaded -= OnTreeViewLoaded;
@@ -420,14 +693,24 @@ namespace ExplorerPro.UI.FileTree.Managers
                     _scrollViewer.ScrollChanged -= OnScrollChanged;
                 }
                 
-                if (_treeView?.ItemContainerGenerator != null)
+                if (_treeView != null && _treeView.ItemContainerGenerator != null)
                 {
                     _treeView.ItemContainerGenerator.StatusChanged -= OnContainerGeneratorStatusChanged;
                 }
                 
                 ClearAllCaches();
+                
+                // Dispose the read-write lock
+                if (_cacheLock != null)
+                {
+                    _cacheLock.Dispose();
+                }
+                
                 VisibleItemsCacheUpdated = null;
                 SelectionUpdateRequested = null;
+                CleanupCompleted = null;
+                
+                LogDebug("FileTreePerformanceManager disposed");
             }
         }
 
@@ -450,6 +733,40 @@ namespace ExplorerPro.UI.FileTree.Managers
             public int VisibleItemsCount { get; set; }
             public int CachedItemsCount { get; set; }
             public DateTime LastCacheUpdate { get; set; }
+            public CleanupStatistics CleanupStats { get; set; }
+        }
+
+        public class CleanupStatistics
+        {
+            public int TotalCleanupsPerformed { get; set; }
+            public int TotalDeadEntriesRemoved { get; set; }
+            public DateTime LastCleanupTime { get; set; }
+            public TimeSpan LastCleanupDuration { get; set; }
+            public TimeSpan AverageCleanupDuration { get; set; }
+            public int MaxEntriesRemovedInSingleCleanup { get; set; }
+            public int CleanupErrors { get; set; }
+            
+            public CleanupStatistics Clone()
+            {
+                return new CleanupStatistics
+                {
+                    TotalCleanupsPerformed = this.TotalCleanupsPerformed,
+                    TotalDeadEntriesRemoved = this.TotalDeadEntriesRemoved,
+                    LastCleanupTime = this.LastCleanupTime,
+                    LastCleanupDuration = this.LastCleanupDuration,
+                    AverageCleanupDuration = this.AverageCleanupDuration,
+                    MaxEntriesRemovedInSingleCleanup = this.MaxEntriesRemovedInSingleCleanup,
+                    CleanupErrors = this.CleanupErrors
+                };
+            }
+        }
+
+        public class CleanupCompletedEventArgs : EventArgs
+        {
+            public int DeadEntriesRemoved { get; set; }
+            public int InitialCacheSize { get; set; }
+            public TimeSpan CleanupDuration { get; set; }
+            public int TotalCleanupsPerformed { get; set; }
         }
 
         #endregion
