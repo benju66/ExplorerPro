@@ -23,7 +23,7 @@ namespace ExplorerPro.UI.FileTree.Managers
         public event EventHandler<string> ItemDoubleClicked;
         public event EventHandler<string> ItemClicked;
         public event EventHandler<FileTreeItem> ItemExpanded;
-        public event EventHandler<ContextMenuEventArgs> ContextMenuRequested;
+        public event EventHandler<FileTreeContextMenuEventArgs> ContextMenuRequested;
         public event EventHandler<MouseEventArgs> MouseEvent;
         public event EventHandler<KeyEventArgs> KeyboardEvent;
 
@@ -95,7 +95,26 @@ namespace ExplorerPro.UI.FileTree.Managers
         private void OnContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
             if (_disposed) return;
-            ContextMenuRequested?.Invoke(this, e);
+            
+            // Extract the clicked item information
+            var treeViewItem = e.Source as TreeViewItem;
+            var fileItem = treeViewItem?.DataContext as FileTreeItem;
+            
+            // Create event args with proper context
+            var eventArgs = new FileTreeContextMenuEventArgs(e)
+            {
+                ClickedItem = fileItem,
+                ClickedTreeViewItem = treeViewItem,
+                SelectedPaths = _selectionService.SelectedPaths
+            };
+            
+            ContextMenuRequested?.Invoke(this, eventArgs);
+            
+            // If a handler set Handled to true, we honor that
+            if (eventArgs.Handled)
+            {
+                e.Handled = true;
+            }
         }
 
         private void OnTreeViewItemExpanded(object sender, RoutedEventArgs e)
@@ -144,13 +163,20 @@ namespace ExplorerPro.UI.FileTree.Managers
         }
     }
 
+    /// <summary>
+    /// Event arguments for file tree context menu requests
+    /// </summary>
     public class FileTreeContextMenuEventArgs : EventArgs
     {
         public ContextMenuEventArgs OriginalArgs { get; }
+        public FileTreeItem ClickedItem { get; set; }
+        public TreeViewItem ClickedTreeViewItem { get; set; }
+        public IReadOnlyList<string> SelectedPaths { get; set; }
+        public bool Handled { get; set; }
         
         public FileTreeContextMenuEventArgs(ContextMenuEventArgs originalArgs)
         {
             OriginalArgs = originalArgs;
         }
     }
-} 
+}

@@ -579,7 +579,14 @@ namespace ExplorerPro.UI.FileTree
                 _metadataManager.SetItemColor(path, colorHex);
                 _metadataManager.AddRecentColor(colorHex);
             }
-            _fileTree.RefreshView();
+            
+            // Use RefreshDirectory on the parent directory instead of RefreshView
+            // to avoid changing the current root directory
+            string directoryToRefresh = Directory.Exists(path) ? path : Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directoryToRefresh))
+            {
+                _fileTree.RefreshDirectory(directoryToRefresh);
+            }
         }
 
         private void AddSendToOptions(MenuItem parentMenu, string path)
@@ -660,9 +667,36 @@ namespace ExplorerPro.UI.FileTree
 
         private void SetMultipleItemsColor(IReadOnlyList<string> paths, string colorHex)
         {
+            // Update metadata for all items first
             foreach (var path in paths)
             {
-                SetItemColor(path, colorHex);
+                if (colorHex == null)
+                {
+                    _metadataManager.SetItemColor(path, string.Empty);
+                }
+                else
+                {
+                    _metadataManager.SetItemColor(path, colorHex);
+                }
+            }
+            
+            // Add to recent colors only once if setting a color
+            if (colorHex != null)
+            {
+                _metadataManager.AddRecentColor(colorHex);
+            }
+            
+            // Collect unique directories to refresh
+            var directoriesToRefresh = paths
+                .Select(path => Directory.Exists(path) ? path : Path.GetDirectoryName(path))
+                .Where(dir => !string.IsNullOrEmpty(dir))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            
+            // Refresh each unique directory once
+            foreach (var directory in directoriesToRefresh)
+            {
+                _fileTree.RefreshDirectory(directory);
             }
         }
 

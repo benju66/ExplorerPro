@@ -67,7 +67,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
 
         public event PropertyChangedEventHandler PropertyChanged;
         public event EventHandler<string> LocationChanged;
-        public event EventHandler<Tuple<string, string>> ContextMenuActionTriggered;
+        public event EventHandler<FileTreeContextMenuEventArgs> ContextMenuRequested;
         public event EventHandler FileTreeClicked;
 
         #endregion
@@ -348,16 +348,14 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             if (_disposed || string.IsNullOrEmpty(path))
                 return;
 
+            // Only change the current folder path for directory clicks, not file selection
+            // This prevents navigation changes when files are selected via context menu
             if (Directory.Exists(path))
             {
                 _currentFolderPath = path;
-            }
-            else
-            {
-                _currentFolderPath = Path.GetDirectoryName(path) ?? string.Empty;
+                LocationChanged?.Invoke(this, path);
             }
 
-            LocationChanged?.Invoke(this, path);
             FileTreeClicked?.Invoke(this, EventArgs.Empty);
         }
 
@@ -390,10 +388,10 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             }
         }
 
-        private void OnContextMenuRequested(object sender, ContextMenuEventArgs e)
+        private void OnContextMenuRequested(object sender, FileTreeContextMenuEventArgs e)
         {
-            // Context menu handling can be implemented here
-            // For now, let the original event bubble up
+            // Forward the event to the view
+            ContextMenuRequested?.Invoke(this, e);
         }
 
         private void OnMouseEvent(object sender, MouseEventArgs e)
@@ -975,7 +973,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
 
                 // Clear event handlers - FIXED: Set to null to break references
                 LocationChanged = null;
-                ContextMenuActionTriggered = null;
+                ContextMenuRequested = null;
                 FileTreeClicked = null;
                 PropertyChanged = null;
             }

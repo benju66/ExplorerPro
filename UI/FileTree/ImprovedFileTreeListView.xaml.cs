@@ -216,6 +216,9 @@ namespace ExplorerPro.UI.FileTree
             _coordinator.LocationChanged += (s, path) => LocationChanged?.Invoke(this, path);
             _coordinator.FileTreeClicked += (s, e) => FileTreeClicked?.Invoke(this, e);
             
+            // FIXED: Wire up context menu event from coordinator
+            _coordinator.ContextMenuRequested += OnContextMenuRequested;
+            
             // Wire up performance manager events
             _performanceManager.VisibleItemsCacheUpdated += OnVisibleItemsCacheUpdated;
         }
@@ -223,7 +226,7 @@ namespace ExplorerPro.UI.FileTree
         private void SetupUI()
         {
             fileTreeView.ItemsSource = _rootItems;
-            fileTreeView.ContextMenuOpening += OnContextMenuOpening;
+            // NOTE: We don't attach ContextMenuOpening here anymore - it goes through the event manager chain
             
             this.Loaded += OnLoaded;
             this.Unloaded += OnUnloaded;
@@ -315,7 +318,8 @@ namespace ExplorerPro.UI.FileTree
             ScheduleSelectionUpdate();
         }
 
-        private void OnContextMenuOpening(object sender, ContextMenuEventArgs e)
+        // FIXED: Handle context menu request from coordinator
+        private void OnContextMenuRequested(object sender, FileTreeContextMenuEventArgs e)
         {
             if (_disposed) return;
             
@@ -326,22 +330,39 @@ namespace ExplorerPro.UI.FileTree
                 this
             );
 
-            var treeViewItem = e.Source as TreeViewItem;
-            var fileItem = treeViewItem?.DataContext as FileTreeItem;
-            
             ContextMenu contextMenu = null;
-            if (fileItem != null)
+            
+            // If we have a clicked item, build a context menu for it
+            if (e.ClickedItem != null)
             {
-                contextMenu = contextMenuProvider.BuildContextMenu(fileItem.Path);
+                // Check if this item is part of multi-selection
+                if (_coordinator.SelectionService.HasMultipleSelection && 
+                    _coordinator.SelectionService.SelectedPaths.Contains(e.ClickedItem.Path))
+                {
+                    // Build multi-select context menu
+                    contextMenu = contextMenuProvider.BuildMultiSelectContextMenu(e.SelectedPaths);
+                }
+                else
+                {
+                    // Build single item context menu
+                    contextMenu = contextMenuProvider.BuildContextMenu(e.ClickedItem.Path);
+                }
+            }
+            else if (_coordinator.SelectionService.HasSelection)
+            {
+                // No specific item clicked, but we have selection - use multi-select menu
+                contextMenu = contextMenuProvider.BuildMultiSelectContextMenu(e.SelectedPaths);
             }
             
             if (contextMenu != null)
             {
                 contextMenu.PlacementTarget = fileTreeView;
                 contextMenu.IsOpen = true;
+                e.Handled = true;
             }
             else
             {
+                // No context menu to show
                 e.Handled = true;
             }
         }
@@ -646,9 +667,11 @@ namespace ExplorerPro.UI.FileTree
 
                 this.Loaded -= OnLoaded;
                 this.Unloaded -= OnUnloaded;
-                if (fileTreeView != null)
+                
+                // FIXED: Unsubscribe from coordinator context menu event
+                if (_coordinator != null)
                 {
-                    fileTreeView.ContextMenuOpening -= OnContextMenuOpening;
+                    _coordinator.ContextMenuRequested -= OnContextMenuRequested;
                 }
 
                 // Dispose all managers

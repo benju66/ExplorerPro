@@ -1,3 +1,4 @@
+// UI/FileTree/Managers/FileTreeLoadChildrenManager.cs
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -7,6 +8,8 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using ExplorerPro.Models;
 using ExplorerPro.UI.FileTree.Services;
 
@@ -217,6 +220,7 @@ namespace ExplorerPro.UI.FileTree.Managers
         /// <summary>
         /// FIXED: Added defensive checks and ensured single subscription per item
         /// OPTIMIZED: Added ConfigureAwait(false) for better async performance
+        /// FIXED: Maintains scroll position during loading
         /// </summary>
         public async Task LoadDirectoryContentsAsync(FileTreeItem parentItem)
         {
@@ -254,9 +258,25 @@ namespace ExplorerPro.UI.FileTree.Managers
                 // FIXED: Check disposed again before continuing
                 if (_disposed || cancellationToken.IsCancellationRequested) return;
                 
-                // Clear children and add loading indicator on UI thread
+                // Get the TreeView to preserve scroll position
+                TreeView treeView = null;
+                ScrollViewer scrollViewer = null;
+                double? scrollPosition = null;
+                
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
+                    // Find the TreeView that contains this item
+                    treeView = FindParentTreeView(parentItem);
+                    if (treeView != null)
+                    {
+                        scrollViewer = GetScrollViewer(treeView);
+                        if (scrollViewer != null)
+                        {
+                            scrollPosition = scrollViewer.VerticalOffset;
+                        }
+                    }
+                    
+                    // Clear children and add loading indicator
                     parentItem.ClearChildren();
                     parentItem.Children.Add(new FileTreeItem { Name = "Loading...", Level = childLevel });
                 });
@@ -303,6 +323,12 @@ namespace ExplorerPro.UI.FileTree.Managers
                     }
                     
                     parentItem.HasChildren = parentItem.Children.Count > 0;
+                    
+                    // FIXED: Restore scroll position after loading
+                    if (scrollViewer != null && scrollPosition.HasValue)
+                    {
+                        scrollViewer.ScrollToVerticalOffset(scrollPosition.Value);
+                    }
                 });
                 
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] Loaded {parentItem.Children.Count} items for directory: {path}");
@@ -393,6 +419,73 @@ namespace ExplorerPro.UI.FileTree.Managers
                     });
                 }
             }
+        }
+
+        #endregion
+
+        #region Helper Methods
+
+        /// <summary>
+        /// Finds the parent TreeView for a FileTreeItem
+        /// </summary>
+        private TreeView FindParentTreeView(FileTreeItem item)
+        {
+            // This is a simplified approach - in a real implementation,
+            // you might need to walk up the visual tree or maintain a reference
+            var app = Application.Current;
+            if (app?.MainWindow != null)
+            {
+                return FindTreeView(app.MainWindow);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Finds a TreeView in the visual tree
+        /// </summary>
+        private TreeView FindTreeView(DependencyObject parent)
+        {
+            if (parent == null) return null;
+            
+            if (parent is TreeView treeView)
+                return treeView;
+            
+            int childCount = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < childCount; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                var result = FindTreeView(child);
+                if (result != null)
+                    return result;
+            }
+            
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the ScrollViewer from a control
+        /// </summary>
+        private ScrollViewer GetScrollViewer(DependencyObject element)
+        {
+            if (element == null) return null;
+
+            ScrollViewer scrollViewer = null;
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(element); i++)
+            {
+                var child = VisualTreeHelper.GetChild(element, i);
+                if (child is ScrollViewer)
+                {
+                    scrollViewer = (ScrollViewer)child;
+                    break;
+                }
+                else
+                {
+                    scrollViewer = GetScrollViewer(child);
+                    if (scrollViewer != null)
+                        break;
+                }
+            }
+            return scrollViewer;
         }
 
         #endregion
@@ -538,4 +631,4 @@ namespace ExplorerPro.UI.FileTree.Managers
     }
 
     #endregion
-} 
+}
