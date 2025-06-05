@@ -84,7 +84,7 @@ namespace ExplorerPro.UI.Panels.ToDoPanel {
                 return;
             }
             _contentLoaded = true;
-            System.Uri resourceLocater = new System.Uri("/ExplorerPro;V1.0.0.0;component/ui/panels/todopanel/todopanel.xaml", System.UriKind.Relative);
+            System.Uri resourceLocater = new System.Uri("/ExplorerPro;component/ui/panels/todopanel/todopanel.xaml", System.UriKind.Relative);
             
             #line 1 "..\..\..\..\..\..\UI\Panels\ToDoPanel\ToDoPanel.xaml"
             System.Windows.Application.LoadComponent(this, resourceLocater);

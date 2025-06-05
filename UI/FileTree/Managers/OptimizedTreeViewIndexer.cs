@@ -547,13 +547,21 @@ namespace ExplorerPro.UI.FileTree.Managers
             
             try
             {
-                _treeView.Dispatcher.Invoke(() =>
+                _treeView.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                 {
-                    if (!_disposed)
+                    // Add disposal check AFTER getting on UI thread
+                    if (_disposed || _treeView == null || _scrollViewer == null) 
+                        return;
+                        
+                    try
                     {
                         UpdateVisibilityState();
                     }
-                });
+                    catch (ObjectDisposedException)
+                    {
+                        // Silently handle if objects were disposed during execution
+                    }
+                }));
             }
             catch (Exception ex)
             {

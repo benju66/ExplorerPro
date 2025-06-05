@@ -115,7 +115,7 @@ namespace ExplorerPro.UI.FileTree.Services
         public static async Task<ExtractionResult> ExtractOutlookFilesAsync(IDataObject dataObject, string targetPath)
         {
             // Execute the synchronous method on a background thread
-            return await Task.Run(() => ExtractOutlookFiles(dataObject, targetPath));
+            return await Task.Run(() => ExtractOutlookFiles(dataObject, targetPath)).ConfigureAwait(false);
         }
         
         /// <summary>

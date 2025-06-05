@@ -107,7 +107,7 @@ namespace ExplorerPro.UI.FileTree.Helpers
                     return;
                 }
 
-                await _fileOperationHandler.PasteItemsAsync(targetPath);
+                await _fileOperationHandler.PasteItemsAsync(targetPath).ConfigureAwait(false);
                 System.Diagnostics.Debug.WriteLine($"[FILEOP] Paste operation completed to: {targetPath}");
             }
             catch (Exception ex)
@@ -130,7 +130,7 @@ namespace ExplorerPro.UI.FileTree.Helpers
             try
             {
                 var selectedPaths = _selectionService.SelectedPaths.ToList();
-                await _fileOperationHandler.DeleteMultipleItemsAsync(selectedPaths, _fileTree);
+                await _fileOperationHandler.DeleteMultipleItemsAsync(selectedPaths, _fileTree).ConfigureAwait(false);
                 
                 System.Diagnostics.Debug.WriteLine($"[FILEOP] Deleted {selectedPaths.Count} items");
             }

@@ -1,5 +1,6 @@
 // UI/FileTree/FileTreeItem.cs - Fixed version with proper memory management
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -40,7 +41,10 @@ namespace ExplorerPro.UI.FileTree
         // Store event handler to allow proper cleanup
         private EventHandler _loadChildrenHandler;
         private NotifyCollectionChangedEventHandler _childrenChangedHandler;
-
+        
+                // List to store weak references to event handlers to prevent memory leaks
+        private readonly List<WeakReference> _loadChildrenHandlers = new List<WeakReference>();
+        
         #endregion
 
         #region Properties
@@ -190,7 +194,7 @@ namespace ExplorerPro.UI.FileTree
                     if (value && IsDirectory && !_disposed)
                     {
                         System.Diagnostics.Debug.WriteLine($"Expanding: {Name}, Path: {Path}");
-                        LoadChildren?.Invoke(this, EventArgs.Empty);
+                        OnLoadChildren();
                     }
                 }
             }
@@ -334,7 +338,28 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Event raised when children need to be loaded
         /// </summary>
-        public event EventHandler LoadChildren;
+        public event EventHandler LoadChildren
+        {
+            add 
+            { 
+                if (value != null)
+                    _loadChildrenHandlers.Add(new WeakReference(value)); 
+            }
+            remove 
+            { 
+                if (value != null)
+                {
+                    for (int i = _loadChildrenHandlers.Count - 1; i >= 0; i--)
+                    {
+                        var handler = _loadChildrenHandlers[i].Target as EventHandler;
+                        if (handler == null || handler.Equals(value))
+                        {
+                            _loadChildrenHandlers.RemoveAt(i);
+                        }
+                    }
+                }
+            }
+        }
 
         #endregion
 
@@ -483,6 +508,40 @@ namespace ExplorerPro.UI.FileTree
 
         #endregion
 
+        #region Weak Event Management
+
+        /// <summary>
+        /// Raises the LoadChildren event using weak references to prevent memory leaks
+        /// </summary>
+        private void OnLoadChildren()
+        {
+            // Clean up dead references and invoke living handlers
+            for (int i = _loadChildrenHandlers.Count - 1; i >= 0; i--)
+            {
+                var handler = _loadChildrenHandlers[i].Target as EventHandler;
+                if (handler == null)
+                {
+                    // Remove dead reference
+                    _loadChildrenHandlers.RemoveAt(i);
+                }
+                else
+                {
+                    // Invoke the handler
+                    try
+                    {
+                        handler(this, EventArgs.Empty);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log error but continue with other handlers
+                        System.Diagnostics.Debug.WriteLine($"Error invoking LoadChildren handler: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        #endregion
+
         #region Event Handlers
 
         /// <summary>
@@ -548,7 +607,7 @@ namespace ExplorerPro.UI.FileTree
                 if (disposing)
                 {
                     // Clear event handlers
-                    LoadChildren = null;
+                    _loadChildrenHandlers.Clear();
                     PropertyChanged = null;
                     
                     // Unsubscribe from collection events

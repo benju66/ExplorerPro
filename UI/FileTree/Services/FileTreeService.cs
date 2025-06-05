@@ -81,12 +81,12 @@ namespace ExplorerPro.UI.FileTree.Services
                             continue;
 
                         // Use async version for better performance on network drives
-                        var dirItem = await CreateFileTreeItemAsync(dir, level, showHiddenFiles);
+                        var dirItem = await CreateFileTreeItemAsync(dir, level, showHiddenFiles).ConfigureAwait(false);
                         
                         // Apply batch metadata - FIXED: styling applied on UI thread
                         if (metadataBatch.TryGetValue(dir, out var metadata))
                         {
-                            await ApplyBatchMetadataStylingAsync(dirItem, metadata);
+                            await ApplyBatchMetadataStylingAsync(dirItem, metadata).ConfigureAwait(false);
                         }
                         
                         items.Add(dirItem);
@@ -111,12 +111,12 @@ namespace ExplorerPro.UI.FileTree.Services
                         if (!showHiddenFiles && IsHidden(file))
                             continue;
 
-                        var fileItem = await CreateFileTreeItemInternalAsync(file, level);
+                        var fileItem = await CreateFileTreeItemInternalAsync(file, level).ConfigureAwait(false);
                         
                         // Apply batch metadata - FIXED: styling applied on UI thread
                         if (metadataBatch.TryGetValue(file, out var metadata))
                         {
-                            await ApplyBatchMetadataStylingAsync(fileItem, metadata);
+                            await ApplyBatchMetadataStylingAsync(fileItem, metadata).ConfigureAwait(false);
                         }
                         
                         items.Add(fileItem);
@@ -212,10 +212,10 @@ namespace ExplorerPro.UI.FileTree.Services
             if (_disposed)
                 throw new ObjectDisposedException(nameof(FileTreeService));
 
-            var item = await CreateFileTreeItemInternalAsync(path, level, showHiddenFiles, cancellationToken);
+            var item = await CreateFileTreeItemInternalAsync(path, level, showHiddenFiles, cancellationToken).ConfigureAwait(false);
             
             // FIXED: Apply styling on UI thread
-            await ApplyMetadataStylingAsync(item);
+            await ApplyMetadataStylingAsync(item).ConfigureAwait(false);
             
             return item;
         }
@@ -224,16 +224,16 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             try
             {
-                var item = await Task.Run(() => FileTreeItem.FromPath(path), cancellationToken);
+                var item = await Task.Run(() => FileTreeItem.FromPath(path), cancellationToken).ConfigureAwait(false);
                 item.Level = level;
 
                 // FIXED: Set icon on UI thread
-                await SetIconAsync(item, path);
+                await SetIconAsync(item, path).ConfigureAwait(false);
 
                 // For directories, use async check for better performance
                 if (item.IsDirectory)
                 {
-                    item.HasChildren = await DirectoryHasAccessibleChildrenAsync(path, showHiddenFiles, cancellationToken);
+                    item.HasChildren = await DirectoryHasAccessibleChildrenAsync(path, showHiddenFiles, cancellationToken).ConfigureAwait(false);
                 }
 
                 return item;

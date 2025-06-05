@@ -84,7 +84,7 @@ namespace ExplorerPro.UI.Panels.BookmarksPanel {
                 return;
             }
             _contentLoaded = true;
-            System.Uri resourceLocater = new System.Uri("/ExplorerPro;V1.0.0.0;component/ui/panels/bookmarkspanel/bookmarkspanel.xaml", System.UriKind.Relative);
+            System.Uri resourceLocater = new System.Uri("/ExplorerPro;component/ui/panels/bookmarkspanel/bookmarkspanel.xaml", System.UriKind.Relative);
             
             #line 1 "..\..\..\..\..\..\UI\Panels\BookmarksPanel\BookmarksPanel.xaml"
             System.Windows.Application.LoadComponent(this, resourceLocater);

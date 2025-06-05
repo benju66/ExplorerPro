@@ -196,7 +196,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
                 _loadChildrenManager.CancelActiveOperations();
                 
                 // Clear existing data on UI thread
-                Application.Current.Dispatcher.Invoke(() => ClearCurrentData());
+                await Application.Current.Dispatcher.InvokeAsync(() => ClearCurrentData());
                 
                 // Normalize the path
                 directory = Path.GetFullPath(directory);
@@ -465,7 +465,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
         private void OnDirectoryRefreshRequested(object sender, DirectoryRefreshEventArgs e)
         {
             if (_disposed) return;
-            Application.Current.Dispatcher.Invoke(() => _ = RefreshDirectoryAsync(e.DirectoryPath));
+            Application.Current.Dispatcher.InvokeAsync(() => _ = RefreshDirectoryAsync(e.DirectoryPath)).Wait(TimeSpan.FromSeconds(5));
         }
 
         private void OnMultipleDirectoriesRefreshRequested(object sender, MultipleDirectoriesRefreshEventArgs e)
@@ -473,7 +473,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             if (_disposed) return;
             foreach (var directory in e.DirectoryPaths)
             {
-                Application.Current.Dispatcher.Invoke(() => _ = RefreshDirectoryAsync(directory));
+                Application.Current.Dispatcher.InvokeAsync(() => _ = RefreshDirectoryAsync(directory)).Wait(TimeSpan.FromSeconds(5));
             }
         }
 
@@ -485,7 +485,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
         private void OnPasteCompleted(object sender, PasteCompletedEventArgs e)
         {
             if (_disposed) return;
-            Application.Current.Dispatcher.Invoke(() => _ = RefreshDirectoryAsync(e.TargetPath));
+            Application.Current.Dispatcher.InvokeAsync(() => _ = RefreshDirectoryAsync(e.TargetPath)).Wait(TimeSpan.FromSeconds(5));
         }
 
         private async void OnFilesDropped(object sender, FilesDroppedEventArgs e)
@@ -537,15 +537,15 @@ namespace ExplorerPro.UI.FileTree.Coordinators
         private void OnDragDropError(object sender, string error)
         {
             if (_disposed) return;
-            Application.Current.Dispatcher.Invoke(() => 
-                MessageBox.Show(error, "Drag/Drop Error", MessageBoxButton.OK, MessageBoxImage.Warning));
+            Application.Current.Dispatcher.InvokeAsync(() => 
+                MessageBox.Show(error, "Drag/Drop Error", MessageBoxButton.OK, MessageBoxImage.Warning)).Wait(TimeSpan.FromSeconds(5));
         }
 
         private void OnOutlookExtractionCompleted(object sender, OutlookExtractionCompletedEventArgs e)
         {
             if (_disposed) return;
             
-            Application.Current.Dispatcher.Invoke(() => 
+            Application.Current.Dispatcher.InvokeAsync(() => 
             {
                 if (!e.Result.Success && !string.IsNullOrEmpty(e.Result.ErrorMessage))
                 {
@@ -558,7 +558,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
                 }
                 
                 _ = RefreshDirectoryAsync(e.TargetPath);
-            });
+            }).Wait(TimeSpan.FromSeconds(5));
         }
 
         #endregion
@@ -857,7 +857,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
                         // Yield control periodically to keep UI responsive
                         if (processed % batchSize == 0)
                         {
-                            Application.Current.Dispatcher.Invoke(DispatcherPriority.Background, new Action(() => { }));
+                            Application.Current.Dispatcher.InvokeAsync(() => { }).Wait(TimeSpan.FromSeconds(5));
                         }
                     }
                     

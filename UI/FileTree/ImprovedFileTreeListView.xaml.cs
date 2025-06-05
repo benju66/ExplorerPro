@@ -471,7 +471,7 @@ namespace ExplorerPro.UI.FileTree
         public async void SetRootDirectory(string directory) 
         {
             if (_coordinator != null)
-                await _coordinator.SetRootDirectoryAsync(directory);
+                await _coordinator.SetRootDirectoryAsync(directory).ConfigureAwait(false);
         }
 
         public void NavigateAndHighlight(string path)
