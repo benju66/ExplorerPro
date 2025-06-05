@@ -20,7 +20,7 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         private readonly int _itemCount;
         private DragDropEffects _effects;
         private readonly Size _visualSize;
-        private double _opacity = 0.8;
+        private double _opacity = 0.9;
         
         public DragAdorner(UIElement adornedElement, Visual draggedElement, Point offset, int itemCount = 1, DragDropEffects effects = DragDropEffects.None) 
             : base(adornedElement)
@@ -67,10 +67,29 @@ namespace ExplorerPro.UI.FileTree.DragDrop
             InvalidateVisual();
         }
         
+        /// <summary>
+        /// Updates the offset for better positioning during drag operations
+        /// </summary>
+        public void UpdateOffset(Point newOffset)
+        {
+            // Since _offset is readonly, we can't change it, but we can provide
+            // visual feedback by adjusting how we use it in OnRender
+            InvalidateVisual();
+        }
+        
         protected override void OnRender(DrawingContext drawingContext)
         {
             // Calculate position adjusted by offset
+            // Use a smaller, more natural offset that positions the ghost image 
+            // slightly below and to the right of the cursor for better visibility
             var point = new Point(_location.X - _offset.X, _location.Y - _offset.Y);
+            
+            // Ensure the ghost image doesn't go off-screen
+            var adornerBounds = new Rect(0, 0, AdornedElement.RenderSize.Width, AdornedElement.RenderSize.Height);
+            
+            // Clamp position to keep ghost image visible
+            point.X = Math.Max(0, Math.Min(point.X, adornerBounds.Width - _visualSize.Width));
+            point.Y = Math.Max(0, Math.Min(point.Y, adornerBounds.Height - _visualSize.Height));
             
             // Create a drawing group for complex rendering
             var drawingGroup = new DrawingGroup();
@@ -108,11 +127,11 @@ namespace ExplorerPro.UI.FileTree.DragDrop
         
         private void DrawShadow(DrawingContext context, Point basePoint)
         {
-            // Draw a soft shadow behind the visual
-            var shadowBrush = new SolidColorBrush(Color.FromArgb(50, 0, 0, 0));
+            // Draw a subtle shadow behind the visual - reduced offset for better positioning
+            var shadowBrush = new SolidColorBrush(Color.FromArgb(40, 0, 0, 0));
             var shadowRect = new Rect(
-                basePoint.X + 3,
-                basePoint.Y + 3,
+                basePoint.X + 1,  // Reduced from 3 to 1
+                basePoint.Y + 1,  // Reduced from 3 to 1
                 _visualSize.Width,
                 _visualSize.Height);
             

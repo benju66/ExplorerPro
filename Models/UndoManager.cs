@@ -113,5 +113,54 @@ namespace ExplorerPro.Models
             _redoStack.Clear();
             _logger?.LogInformation("Undo/redo history cleared");
         }
+
+        /// <summary>
+        /// Gets the name of the operation that can be undone.
+        /// </summary>
+        /// <returns>The operation name or empty string if no undo available.</returns>
+        public string GetUndoOperationName()
+        {
+            if (_undoStack.Count > 0)
+            {
+                var command = _undoStack.Peek();
+                return GetOperationName(command);
+            }
+            return "";
+        }
+
+        /// <summary>
+        /// Gets the name of the operation that can be redone.
+        /// </summary>
+        /// <returns>The operation name or empty string if no redo available.</returns>
+        public string GetRedoOperationName()
+        {
+            if (_redoStack.Count > 0)
+            {
+                var command = _redoStack.Peek();
+                return GetOperationName(command);
+            }
+            return "";
+        }
+
+        /// <summary>
+        /// Gets a friendly name for the command type.
+        /// </summary>
+        /// <param name="command">The command to get the name for.</param>
+        /// <returns>A user-friendly operation name.</returns>
+        private string GetOperationName(Command command)
+        {
+            return command.GetType().Name switch
+            {
+                "RenameCommand" => "Rename",
+                "DeleteItemCommand" => "Delete",
+                "MoveItemCommand" => "Move",
+                "CopyItemCommand" => "Copy",
+                "CreateFileCommand" => "Create File",
+                "CreateFolderCommand" => "Create Folder",
+                "DragDropCommand" => "Drag & Drop",
+                "DragCopyCommand" => "Drag Copy",
+                _ => "Operation"
+            };
+        }
     }
 }

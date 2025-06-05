@@ -37,6 +37,7 @@ namespace ExplorerPro.UI.FileTree
         private bool _hasChildren;
         private WeakReference _parentRef;
         private bool _disposed;
+        private bool _isInEditMode;
         
         // Store event handler to allow proper cleanup
         private EventHandler _loadChildrenHandler;
@@ -201,14 +202,13 @@ namespace ExplorerPro.UI.FileTree
         }
 
         /// <summary>
-        /// Gets whether this item is selected.
-        /// This property can only be set by SelectionService through SetSelectionState method.
-        /// This ensures SelectionService remains the single source of truth for selection.
+        /// Gets or sets whether this item is selected.
+        /// Supports two-way data binding for proper UI synchronization.
         /// </summary>
         public bool IsSelected
         {
             get => _isSelected;
-            private set
+            set
             {
                 if (_isSelected != value)
                 {
@@ -238,6 +238,22 @@ namespace ExplorerPro.UI.FileTree
                 {
                     _foreground = value;
                     OnPropertyChanged(nameof(Foreground));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets whether this item is in edit mode for inline renaming
+        /// </summary>
+        public bool IsInEditMode
+        {
+            get => _isInEditMode;
+            set
+            {
+                if (_isInEditMode != value)
+                {
+                    _isInEditMode = value;
+                    OnPropertyChanged(nameof(IsInEditMode));
                 }
             }
         }

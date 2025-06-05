@@ -64,6 +64,11 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         public event PropertyChangedEventHandler PropertyChanged;
         
+        /// <summary>
+        /// Raised when multi-select mode changes
+        /// </summary>
+        public event EventHandler MultiSelectModeChanged;
+        
         #endregion
         
         #region Properties
@@ -140,6 +145,7 @@ namespace ExplorerPro.UI.FileTree.Services
                         IsMultiSelectMode = true;
                     }
                     OnPropertyChanged();
+                    MultiSelectModeChanged?.Invoke(this, EventArgs.Empty);
                 }
             }
         }

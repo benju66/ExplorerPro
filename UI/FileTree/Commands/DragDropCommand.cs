@@ -11,13 +11,14 @@ namespace ExplorerPro.UI.FileTree.Commands
 {
     /// <summary>
     /// Command for undoable drag and drop operations
-    /// Updated to work with the new selection system
+    /// Updated to work with the new selection system and preserve metadata
     /// </summary>
     public class DragDropCommand : Command
     {
         #region Fields
         
         private readonly IFileOperations _fileOperations;
+        private readonly MetadataManager _metadataManager;
         private readonly List<DragDropOperation> _operations;
         private readonly DragDropEffects _effect;
         
@@ -25,9 +26,10 @@ namespace ExplorerPro.UI.FileTree.Commands
         
         #region Constructor
         
-        public DragDropCommand(IFileOperations fileOperations, IEnumerable<string> sourcePaths, string targetPath, DragDropEffects effect)
+        public DragDropCommand(IFileOperations fileOperations, IEnumerable<string> sourcePaths, string targetPath, DragDropEffects effect, MetadataManager metadataManager = null)
         {
             _fileOperations = fileOperations ?? throw new ArgumentNullException(nameof(fileOperations));
+            _metadataManager = metadataManager ?? MetadataManager.Instance;
             _effect = effect;
             _operations = new List<DragDropOperation>();
             
@@ -163,6 +165,17 @@ namespace ExplorerPro.UI.FileTree.Commands
             {
                 throw new FileNotFoundException($"Source not found: {op.SourcePath}");
             }
+            
+            // Transfer metadata (colors, tags, pinned status, etc.) from old path to new path
+            try
+            {
+                _metadataManager.UpdatePathReferences(op.SourcePath, op.TargetPath);
+            }
+            catch (Exception ex)
+            {
+                // Don't fail the entire operation if metadata transfer fails
+                System.Diagnostics.Debug.WriteLine($"[WARNING] Failed to transfer metadata for {op.SourcePath}: {ex.Message}");
+            }
         }
         
         private void UndoMove(DragDropOperation op)
@@ -175,6 +188,16 @@ namespace ExplorerPro.UI.FileTree.Commands
             else
             {
                 File.Move(op.TargetPath, op.SourcePath);
+            }
+            
+            // Restore metadata to original path
+            try
+            {
+                _metadataManager.UpdatePathReferences(op.TargetPath, op.SourcePath);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[WARNING] Failed to restore metadata for {op.TargetPath}: {ex.Message}");
             }
         }
         
@@ -200,6 +223,23 @@ namespace ExplorerPro.UI.FileTree.Commands
             {
                 throw new FileNotFoundException($"Source not found: {op.SourcePath}");
             }
+            
+            // For copy operations, copy metadata to the new path (keep original metadata intact)
+            try
+            {
+                var metadata = _metadataManager.GetBatchMetadata(new[] { op.SourcePath });
+                if (metadata.TryGetValue(op.SourcePath, out var sourceMetadata))
+                {
+                    // Copy the metadata to the new path
+                    sourceMetadata.Path = op.TargetPath;
+                    _metadataManager.SetBatchMetadata(new[] { sourceMetadata });
+                }
+            }
+            catch (Exception ex)
+            {
+                // Don't fail the entire operation if metadata copy fails
+                System.Diagnostics.Debug.WriteLine($"[WARNING] Failed to copy metadata for {op.SourcePath}: {ex.Message}");
+            }
         }
         
         private void UndoCopy(DragDropOperation op)
@@ -212,6 +252,16 @@ namespace ExplorerPro.UI.FileTree.Commands
             else if (!op.WasDirectory && File.Exists(op.TargetPath))
             {
                 File.Delete(op.TargetPath);
+            }
+            
+            // Remove metadata for the copied item
+            try
+            {
+                _metadataManager.RemoveAllMetadataForPath(op.TargetPath);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[WARNING] Failed to remove metadata for {op.TargetPath}: {ex.Message}");
             }
         }
         
@@ -231,6 +281,20 @@ namespace ExplorerPro.UI.FileTree.Commands
             
             op.TargetPath = linkPath;
             CreateShortcut(op.SourcePath, linkPath);
+            
+            // For shortcuts, optionally copy some metadata like color to make them visually distinct
+            try
+            {
+                var sourceColor = _metadataManager.GetItemColor(op.SourcePath);
+                if (!string.IsNullOrEmpty(sourceColor))
+                {
+                    _metadataManager.SetItemColor(op.TargetPath, sourceColor);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[WARNING] Failed to apply metadata to shortcut {op.TargetPath}: {ex.Message}");
+            }
         }
         
         private void UndoLink(DragDropOperation op)
@@ -239,6 +303,16 @@ namespace ExplorerPro.UI.FileTree.Commands
             if (File.Exists(op.TargetPath))
             {
                 File.Delete(op.TargetPath);
+            }
+            
+            // Remove metadata for the shortcut
+            try
+            {
+                _metadataManager.RemoveAllMetadataForPath(op.TargetPath);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[WARNING] Failed to remove metadata for shortcut {op.TargetPath}: {ex.Message}");
             }
         }
         

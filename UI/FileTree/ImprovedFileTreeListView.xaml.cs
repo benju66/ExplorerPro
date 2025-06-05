@@ -208,6 +208,7 @@ namespace ExplorerPro.UI.FileTree
             // Wire up selection changes to update debouncing
             _coordinator.SelectionService.SelectionChanged += OnSelectionChanged;
             _coordinator.SelectionService.PropertyChanged += OnSelectionService_PropertyChanged;
+            _coordinator.SelectionService.MultiSelectModeChanged += OnMultiSelectModeChanged;
             
             // Wire up coordinator property changes
             _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
@@ -306,6 +307,24 @@ namespace ExplorerPro.UI.FileTree
             {
                 OnPropertyChanged(nameof(SelectionCount));
             }
+        }
+
+        private void OnMultiSelectModeChanged(object sender, EventArgs e)
+        {
+            if (_disposed) return;
+            
+            // Update the TreeView tag to trigger checkbox visibility binding
+            fileTreeView.Tag = _coordinator.SelectionService.IsMultiSelectMode ? "MultiSelect" : "SingleSelect";
+            
+            // Force visual update for all visible items
+            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+            {
+                if (!_disposed)
+                {
+                    // This forces WPF to re-evaluate the bindings
+                    fileTreeView.Items.Refresh();
+                }
+            }));
         }
 
         private void OnCoordinatorPropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -557,6 +576,123 @@ namespace ExplorerPro.UI.FileTree
 
         #endregion
 
+        #region Inline Editing Event Handlers
+
+        /// <summary>
+        /// Handles when the edit TextBox is loaded - focus and select all text
+        /// </summary>
+        private void EditNameTextBox_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is TextBox textBox)
+            {
+                textBox.Focus();
+                textBox.SelectAll();
+            }
+        }
+
+        /// <summary>
+        /// Handles key presses in the edit TextBox
+        /// </summary>
+        private void EditNameTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (sender is TextBox textBox && textBox.DataContext is FileTreeItem item)
+            {
+                switch (e.Key)
+                {
+                    case Key.Enter:
+                        // Commit the rename
+                        CommitRename(item, textBox.Text);
+                        e.Handled = true;
+                        break;
+                        
+                    case Key.Escape:
+                        // Cancel the rename
+                        CancelRename(item);
+                        e.Handled = true;
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Handles when the edit TextBox loses focus - commit the rename
+        /// </summary>
+        private void EditNameTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (sender is TextBox textBox && textBox.DataContext is FileTreeItem item)
+            {
+                CommitRename(item, textBox.Text);
+            }
+        }
+
+        /// <summary>
+        /// Commits the rename operation
+        /// </summary>
+        private void CommitRename(FileTreeItem item, string newName)
+        {
+            if (item == null || string.IsNullOrWhiteSpace(newName))
+            {
+                CancelRename(item);
+                return;
+            }
+
+            // Trim whitespace
+            newName = newName.Trim();
+
+            // Check if name actually changed
+            if (newName == item.Name)
+            {
+                CancelRename(item);
+                return;
+            }
+
+            // Validate the new name
+            if (newName.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
+            {
+                MessageBox.Show("The name contains invalid characters.", "Invalid Name", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                CancelRename(item);
+                return;
+            }
+
+            try
+            {
+                // Perform the rename using the file operation handler
+                var fileOperationHandler = CreateFileOperationHandler();
+                bool success = fileOperationHandler.RenameItem(item.Path, newName, this);
+
+                if (success)
+                {
+                    // Update the item name (this will be updated by the file system watcher)
+                    // but we can update it immediately for better UX
+                    item.Name = newName;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to rename: {ex.Message}", "Rename Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                // Always exit edit mode
+                item.IsInEditMode = false;
+            }
+        }
+
+        /// <summary>
+        /// Cancels the rename operation
+        /// </summary>
+        private void CancelRename(FileTreeItem item)
+        {
+            if (item != null)
+            {
+                item.IsInEditMode = false;
+            }
+        }
+
+        #endregion
+
         #region Helper Methods
 
         private void HandleDoubleClick(string path)
@@ -672,6 +808,12 @@ namespace ExplorerPro.UI.FileTree
                 if (_coordinator != null)
                 {
                     _coordinator.ContextMenuRequested -= OnContextMenuRequested;
+                }
+
+                // Unsubscribe from selection service events
+                if (_coordinator?.SelectionService != null)
+                {
+                    _coordinator.SelectionService.MultiSelectModeChanged -= OnMultiSelectModeChanged;
                 }
 
                 // Dispose all managers

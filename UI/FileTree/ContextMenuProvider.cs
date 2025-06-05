@@ -2,12 +2,15 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using IOPath = System.IO.Path;
 using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using ExplorerPro.Models;
 using ExplorerPro.UI.FileTree.Commands;
 using ExplorerPro.UI.Dialogs;
@@ -24,6 +27,11 @@ namespace ExplorerPro.UI.FileTree
         private readonly UndoManager _undoManager;
         private readonly FileOperationHandler _fileOperationHandler;
         private readonly IFileTree _fileTree;
+        
+        // Menu item caching for performance
+        private readonly Dictionary<string, MenuItem> _menuItemCache = new Dictionary<string, MenuItem>();
+        private readonly Dictionary<string, BitmapImage> _iconCache = new Dictionary<string, BitmapImage>();
+        private bool _disposed = false;
         
         public ContextMenuProvider(
             MetadataManager metadataManager, 
@@ -56,8 +64,8 @@ namespace ExplorerPro.UI.FileTree
                     () => OpenWith(selectedPath));
                     
                 // Add "Open with" submenu for common programs
-                var openWithMenu = AddSubMenu(contextMenu, "Open with", iconPath + "apps.png");
-                AddOpenWithOptions(openWithMenu, selectedPath);
+                AddLazySubMenu(contextMenu, "Open with", iconPath + "apps.png", 
+                    (menu) => AddOpenWithOptions(menu, selectedPath));
             }
             
             if (isDirectory)
@@ -74,19 +82,59 @@ namespace ExplorerPro.UI.FileTree
 
             contextMenu.Items.Add(new Separator());
 
-            // Clipboard operations
+            // Clipboard operations - enhanced with submenu
+            var clipboardMenu = AddSubMenu(contextMenu, "Clip_board", iconPath + "clipboard.png");
+
+            AddMenuItem(clipboardMenu, "Cu_t", iconPath + "cut.png", 
+                () => CutItem(selectedPath), Key.X, ModifierKeys.Control);
+                
+            AddMenuItem(clipboardMenu, "_Copy", iconPath + "copy.png", 
+                () => CopyItem(selectedPath), Key.C, ModifierKeys.Control);
+                
+            AddDynamicMenuItem(clipboardMenu, "_Paste", iconPath + "paste.png", 
+                () => PasteItems(selectedPath), 
+                () => Clipboard.ContainsFileDropList(),
+                Key.V, ModifierKeys.Control);
+
+            clipboardMenu.Items.Add(new Separator());
+
+            // New advanced clipboard features
+            AddMenuItem(clipboardMenu, "Copy as Pat_h", iconPath + "copy-path.png", 
+                () => CopyAsPath(selectedPath), Key.C, ModifierKeys.Control | ModifierKeys.Shift);
+                
+            AddMenuItem(clipboardMenu, "Copy _File Name", iconPath + "copy-name.png", 
+                () => CopyFileName(selectedPath));
+                
+            AddMenuItem(clipboardMenu, "Copy Fol_der Path", iconPath + "folder-path.png", 
+                () => CopyFolderPath(selectedPath));
+
+            // Keep the main menu items for quick access
             AddMenuItem(contextMenu, "Cu_t", iconPath + "cut.png", 
                 () => CutItem(selectedPath), Key.X, ModifierKeys.Control);
                 
             AddMenuItem(contextMenu, "_Copy", iconPath + "copy.png", 
                 () => CopyItem(selectedPath), Key.C, ModifierKeys.Control);
                 
-            AddMenuItem(contextMenu, "_Paste", iconPath + "paste.png", 
-                () => PasteItems(selectedPath), Key.V, ModifierKeys.Control,
-                isEnabled: Clipboard.ContainsFileDropList());
-                
+            AddDynamicMenuItem(contextMenu, "_Paste", iconPath + "paste.png", 
+                () => PasteItems(selectedPath), 
+                () => Clipboard.ContainsFileDropList(),
+                Key.V, ModifierKeys.Control);
+
             AddMenuItem(contextMenu, "_Duplicate", iconPath + "copy-plus.png", 
                 () => DuplicateItem(selectedPath), Key.D, ModifierKeys.Control);
+
+            contextMenu.Items.Add(new Separator());
+
+            // Add Undo/Redo
+            AddDynamicMenuItem(contextMenu, "_Undo", iconPath + "undo.png",
+                () => _undoManager.Undo(),
+                () => _undoManager.CanUndo,
+                Key.Z, ModifierKeys.Control);
+
+            AddDynamicMenuItem(contextMenu, "_Redo", iconPath + "redo.png",
+                () => _undoManager.Redo(),
+                () => _undoManager.CanRedo,
+                Key.Y, ModifierKeys.Control);
 
             contextMenu.Items.Add(new Separator());
 
@@ -126,39 +174,40 @@ namespace ExplorerPro.UI.FileTree
             contextMenu.Items.Add(new Separator());
 
             // Organization
-            var organizeMenu = AddSubMenu(contextMenu, "Organize", iconPath + "folder-cog.png");
-            
-            bool isPinned = _metadataManager.GetPinnedItems().Contains(selectedPath);
-            AddMenuItem(organizeMenu, isPinned ? "Unpin from Quick Access" : "Pin to Quick Access", 
-                iconPath + "pin.png", () => TogglePin(selectedPath));
-            
-            organizeMenu.Items.Add(new Separator());
-            
-            AddMenuItem(organizeMenu, "Add _Tag...", iconPath + "tag.png", 
-                () => ShowAddTagDialog(selectedPath));
-            
-            var tags = _metadataManager.GetTags(selectedPath);
-            if (tags.Count > 0)
+            AddLazySubMenu(contextMenu, "Organize", iconPath + "folder-cog.png", (organizeMenu) =>
             {
-                var removeTagMenu = AddSubMenu(organizeMenu, "Remove Tag", iconPath + "tag-remove.png");
-                foreach (var tag in tags)
+                bool isPinned = _metadataManager.GetPinnedItems().Contains(selectedPath);
+                AddMenuItem(organizeMenu, isPinned ? "Unpin from Quick Access" : "Pin to Quick Access", 
+                    iconPath + "pin.png", () => TogglePin(selectedPath));
+                
+                organizeMenu.Items.Add(new Separator());
+                
+                AddMenuItem(organizeMenu, "Add _Tag...", iconPath + "tag.png", 
+                    () => ShowAddTagDialog(selectedPath));
+                
+                var tags = _metadataManager.GetTags(selectedPath);
+                if (tags.Count > 0)
                 {
-                    AddMenuItem(removeTagMenu, tag, null, () => RemoveTag(selectedPath, tag));
+                    var removeTagMenu = AddSubMenu(organizeMenu, "Remove Tag", iconPath + "tag-remove.png");
+                    foreach (var tag in tags)
+                    {
+                        AddMenuItem(removeTagMenu, tag, null, () => RemoveTag(selectedPath, tag));
+                    }
                 }
-            }
-            
-            organizeMenu.Items.Add(new Separator());
-            
-            var colorMenu = AddSubMenu(organizeMenu, "Set Color", iconPath + "palette.png");
-            AddColorOptions(colorMenu, selectedPath);
+                
+                organizeMenu.Items.Add(new Separator());
+                
+                var colorMenu = AddSubMenu(organizeMenu, "Set Color", iconPath + "palette.png");
+                AddColorOptions(colorMenu, selectedPath);
+            });
             
             // Archive operations (if applicable)
-            string extension = Path.GetExtension(selectedPath).ToLower();
+            string extension = IOPath.GetExtension(selectedPath).ToLower();
             if (IsArchive(extension))
             {
                 contextMenu.Items.Add(new Separator());
                 AddMenuItem(contextMenu, "E_xtract Here", iconPath + "archive-extract.png", 
-                    () => ExtractArchive(selectedPath, Path.GetDirectoryName(selectedPath)));
+                    () => ExtractArchive(selectedPath, IOPath.GetDirectoryName(selectedPath)));
                     
                 AddMenuItem(contextMenu, "Extract to...", iconPath + "archive-extract.png", 
                     () => ExtractArchiveTo(selectedPath));
@@ -181,6 +230,8 @@ namespace ExplorerPro.UI.FileTree
             AddMenuItem(contextMenu, "P_roperties", iconPath + "info.png", 
                 () => ShowProperties(selectedPath), Key.Enter, ModifierKeys.Alt);
 
+            SetupDynamicUpdates(contextMenu);
+
             return contextMenu;
         }
 
@@ -194,7 +245,7 @@ namespace ExplorerPro.UI.FileTree
             
             bool allDirectories = selectedPaths.All(p => Directory.Exists(p));
             bool allFiles = selectedPaths.All(p => File.Exists(p));
-            bool hasArchives = selectedPaths.Any(p => File.Exists(p) && IsArchive(Path.GetExtension(p)));
+            bool hasArchives = selectedPaths.Any(p => File.Exists(p) && IsArchive(IOPath.GetExtension(p)));
 
             // Open operations
             if (selectedPaths.Count <= 10) // Limit to prevent too many windows
@@ -205,7 +256,25 @@ namespace ExplorerPro.UI.FileTree
 
             contextMenu.Items.Add(new Separator());
 
-            // Clipboard operations
+            // Clipboard operations - enhanced with submenu
+            var clipboardMenu = AddSubMenu(contextMenu, "Clip_board", iconPath + "clipboard.png");
+
+            AddMenuItem(clipboardMenu, "Cu_t", iconPath + "cut.png", 
+                () => CutMultipleItems(selectedPaths), Key.X, ModifierKeys.Control);
+                
+            AddMenuItem(clipboardMenu, "_Copy", iconPath + "copy.png", 
+                () => _fileOperationHandler.CopyMultipleItems(selectedPaths), Key.C, ModifierKeys.Control);
+
+            clipboardMenu.Items.Add(new Separator());
+
+            // Advanced clipboard features for multi-select
+            AddMenuItem(clipboardMenu, "Copy as Pat_hs", iconPath + "copy-path.png", 
+                () => CopyMultipleAsPath(selectedPaths), Key.C, ModifierKeys.Control | ModifierKeys.Shift);
+                
+            AddMenuItem(clipboardMenu, "Copy _File Names", iconPath + "copy-name.png", 
+                () => CopyMultipleFileNames(selectedPaths));
+
+            // Keep the main menu items for quick access
             AddMenuItem(contextMenu, "Cu_t", iconPath + "cut.png", 
                 () => CutMultipleItems(selectedPaths), Key.X, ModifierKeys.Control);
                 
@@ -260,6 +329,8 @@ namespace ExplorerPro.UI.FileTree
             AddMenuItem(contextMenu, $"P_roperties ({selectedPaths.Count} items)", iconPath + "info.png", 
                 () => ShowMultipleProperties(selectedPaths), Key.Enter, ModifierKeys.Alt);
 
+            SetupDynamicUpdates(contextMenu);
+
             return contextMenu;
         }
 
@@ -281,7 +352,7 @@ namespace ExplorerPro.UI.FileTree
                 {
                     var image = new Image
                     {
-                        Source = new BitmapImage(new Uri(Path.GetFullPath(iconPath))),
+                        Source = new BitmapImage(new Uri(IOPath.GetFullPath(iconPath))),
                         Width = 16,
                         Height = 16
                     };
@@ -313,6 +384,19 @@ namespace ExplorerPro.UI.FileTree
             return menuItem;
         }
 
+        private MenuItem AddDynamicMenuItem(ItemsControl parent, string header, string iconPath,
+            Action clickHandler, Func<bool> canExecute, Key? gestureKey = null, 
+            ModifierKeys? gestureModifiers = null)
+        {
+            var menuItem = AddMenuItem(parent, header, iconPath, clickHandler, 
+                gestureKey, gestureModifiers, canExecute?.Invoke() ?? true);
+            
+            // Store the canExecute function for later updates
+            menuItem.Tag = canExecute;
+            
+            return menuItem;
+        }
+
         private MenuItem AddSubMenu(ItemsControl parent, string header, string iconPath)
         {
             var menuItem = new MenuItem { Header = header };
@@ -323,7 +407,7 @@ namespace ExplorerPro.UI.FileTree
                 {
                     var image = new Image
                     {
-                        Source = new BitmapImage(new Uri(Path.GetFullPath(iconPath))),
+                        Source = new BitmapImage(new Uri(IOPath.GetFullPath(iconPath))),
                         Width = 16,
                         Height = 16
                     };
@@ -334,6 +418,145 @@ namespace ExplorerPro.UI.FileTree
             
             parent.Items.Add(menuItem);
             return menuItem;
+        }
+
+        private MenuItem AddLazySubMenu(ItemsControl parent, string header, string iconPath, 
+            Action<MenuItem> buildMenuAction)
+        {
+            var menuItem = new MenuItem { Header = header };
+            var isBuilt = false;
+            
+            // Set icon if available
+            if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
+            {
+                menuItem.Icon = GetCachedIcon(iconPath);
+            }
+            
+            // Build submenu on first open
+            menuItem.SubmenuOpened += (s, e) =>
+            {
+                if (!isBuilt && !_disposed)
+                {
+                    isBuilt = true;
+                    menuItem.Items.Clear(); // Remove placeholder
+                    
+                    try
+                    {
+                        Mouse.OverrideCursor = Cursors.Wait;
+                        buildMenuAction(menuItem);
+                    }
+                    finally
+                    {
+                        Mouse.OverrideCursor = null;
+                    }
+                }
+            };
+            
+            // Add loading placeholder
+            menuItem.Items.Add(new MenuItem 
+            { 
+                Header = "Loading...", 
+                IsEnabled = false,
+                FontStyle = FontStyles.Italic 
+            });
+            
+            parent.Items.Add(menuItem);
+            return menuItem;
+        }
+
+        private Image GetCachedIcon(string iconPath)
+        {
+            if (!_iconCache.TryGetValue(iconPath, out var cachedImage))
+            {
+                try
+                {
+                    cachedImage = new BitmapImage(new Uri(IOPath.GetFullPath(iconPath)));
+                    cachedImage.Freeze(); // Important for performance
+                    _iconCache[iconPath] = cachedImage;
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+            
+            return new Image
+            {
+                Source = cachedImage,
+                Width = 16,
+                Height = 16
+            };
+        }
+
+        private void SetupDynamicUpdates(ContextMenu menu)
+        {
+            menu.Opened += (s, e) =>
+            {
+                UpdateDynamicMenuItems(menu);
+            };
+        }
+
+        private void UpdateDynamicMenuItems(ItemsControl parent)
+        {
+            foreach (var item in parent.Items)
+            {
+                if (item is MenuItem menuItem)
+                {
+                    // Update if it has a canExecute function
+                    if (menuItem.Tag is Func<bool> canExecute)
+                    {
+                        menuItem.IsEnabled = canExecute();
+                        
+                        // Update header for context-aware items
+                        UpdateDynamicHeader(menuItem);
+                    }
+                    
+                    // Recursively update submenus
+                    if (menuItem.Items.Count > 0)
+                    {
+                        UpdateDynamicMenuItems(menuItem);
+                    }
+                }
+            }
+        }
+
+        private void UpdateDynamicHeader(MenuItem menuItem)
+        {
+            var header = menuItem.Header?.ToString() ?? "";
+            
+            // Update Undo/Redo with operation names
+            if (header.StartsWith("_Undo"))
+            {
+                if (_undoManager.CanUndo)
+                {
+                    menuItem.Header = $"_Undo {GetUndoOperationName()}";
+                }
+                else
+                {
+                    menuItem.Header = "_Undo";
+                }
+            }
+            else if (header.StartsWith("_Redo"))
+            {
+                if (_undoManager.CanRedo)
+                {
+                    menuItem.Header = $"_Redo {GetRedoOperationName()}";
+                }
+                else
+                {
+                    menuItem.Header = "_Redo";
+                }
+            }
+        }
+
+        private string GetUndoOperationName()
+        {
+            return _undoManager.GetUndoOperationName();
+        }
+
+        private string GetRedoOperationName()
+        {
+            return _undoManager.GetRedoOperationName();
         }
 
         #endregion
@@ -412,24 +635,112 @@ namespace ExplorerPro.UI.FileTree
             _fileOperationHandler.CopyItem(path);
         }
 
+        private void CopyAsPath(string path)
+        {
+            try
+            {
+                // Add quotes around the path (Windows standard)
+                string quotedPath = $"\"{path}\"";
+                Clipboard.SetText(quotedPath);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to copy path:\n{ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void CopyMultipleAsPath(IReadOnlyList<string> paths)
+        {
+            try
+            {
+                // Join multiple paths with newlines, each quoted
+                var quotedPaths = paths.Select(p => $"\"{p}\"");
+                var allPaths = string.Join(Environment.NewLine, quotedPaths);
+                Clipboard.SetText(allPaths);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to copy paths:\n{ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void CopyFileName(string path)
+        {
+            try
+            {
+                string fileName = IOPath.GetFileName(path);
+                Clipboard.SetText(fileName);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to copy file name:\n{ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void CopyFolderPath(string path)
+        {
+            try
+            {
+                string folderPath = Directory.Exists(path) ? path : IOPath.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(folderPath))
+                {
+                    Clipboard.SetText(folderPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to copy folder path:\n{ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // Multi-select versions
+        private void CopyMultipleFileNames(IReadOnlyList<string> paths)
+        {
+            try
+            {
+                var fileNames = paths.Select(p => IOPath.GetFileName(p));
+                var allNames = string.Join(Environment.NewLine, fileNames);
+                Clipboard.SetText(allNames);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to copy file names:\n{ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void PasteItems(string targetPath)
         {
-            string target = Directory.Exists(targetPath) ? targetPath : Path.GetDirectoryName(targetPath);
+            string target = Directory.Exists(targetPath) ? targetPath : IOPath.GetDirectoryName(targetPath);
             _fileOperationHandler.PasteItemsAsync(target).ConfigureAwait(false);
         }
 
         private void DuplicateItem(string path)
         {
             _fileOperationHandler.CopyItem(path);
-            string target = Directory.Exists(path) ? path : Path.GetDirectoryName(path);
+            string target = Directory.Exists(path) ? path : IOPath.GetDirectoryName(path);
             _fileOperationHandler.PasteItemsAsync(target).ConfigureAwait(false);
         }
 
         private void RenameItem(string path)
         {
-            // This could show an inline rename UI in the tree
-            // For now, use the input dialog
-            string currentName = Path.GetFileName(path);
+            // Start inline editing mode for the selected item
+            if (_fileTree is ImprovedFileTreeListView fileTreeView)
+            {
+                var item = fileTreeView.FindItemByPath(path);
+                if (item != null)
+                {
+                    item.IsInEditMode = true;
+                    return;
+                }
+            }
+            
+            // Fallback to dialog if inline editing is not available
+            string currentName = IOPath.GetFileName(path);
             string newName = Microsoft.VisualBasic.Interaction.InputBox(
                 "Enter new name:", 
                 "Rename", 
@@ -507,7 +818,7 @@ namespace ExplorerPro.UI.FileTree
         private void AddOpenWithOptions(MenuItem parentMenu, string filePath)
         {
             // Add common programs based on file type
-            string extension = Path.GetExtension(filePath).ToLower();
+            string extension = IOPath.GetExtension(filePath).ToLower();
             
             switch (extension)
             {
@@ -561,11 +872,104 @@ namespace ExplorerPro.UI.FileTree
             
             foreach (var (name, hex) in colors)
             {
-                AddMenuItem(parentMenu, name, null, () => SetItemColor(path, hex));
+                var menuItem = new MenuItem { Header = name };
+                
+                // Create color swatch
+                var stackPanel = new StackPanel { Orientation = Orientation.Horizontal };
+                
+                // Color rectangle
+                var colorRect = new Rectangle
+                {
+                    Width = 16,
+                    Height = 16,
+                    Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)),
+                    Stroke = new SolidColorBrush(Colors.DarkGray),
+                    StrokeThickness = 1,
+                    Margin = new Thickness(0, 0, 8, 0),
+                    RadiusX = 2,
+                    RadiusY = 2
+                };
+                
+                // Color name
+                var textBlock = new TextBlock 
+                { 
+                    Text = name,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                
+                stackPanel.Children.Add(colorRect);
+                stackPanel.Children.Add(textBlock);
+                
+                menuItem.Header = stackPanel;
+                menuItem.Click += (s, e) => SetItemColor(path, hex);
+                
+                parentMenu.Items.Add(menuItem);
             }
             
             parentMenu.Items.Add(new Separator());
-            AddMenuItem(parentMenu, "Remove Color", null, () => SetItemColor(path, null));
+            
+            // Recent colors section
+            var recentColors = _metadataManager.GetRecentColors();
+            if (recentColors.Any())
+            {
+                parentMenu.Items.Add(new MenuItem 
+                { 
+                    Header = "Recent Colors", 
+                    IsEnabled = false,
+                    FontWeight = FontWeights.Bold 
+                });
+                
+                foreach (var hex in recentColors)
+                {
+                    var menuItem = new MenuItem();
+                    
+                    var stackPanel = new StackPanel { Orientation = Orientation.Horizontal };
+                    
+                    var colorRect = new Rectangle
+                    {
+                        Width = 16,
+                        Height = 16,
+                        Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)),
+                        Stroke = new SolidColorBrush(Colors.DarkGray),
+                        StrokeThickness = 1,
+                        Margin = new Thickness(0, 0, 8, 0),
+                        RadiusX = 2,
+                        RadiusY = 2
+                    };
+                    
+                    var textBlock = new TextBlock 
+                    { 
+                        Text = hex,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        FontFamily = new FontFamily("Consolas")
+                    };
+                    
+                    stackPanel.Children.Add(colorRect);
+                    stackPanel.Children.Add(textBlock);
+                    
+                    menuItem.Header = stackPanel;
+                    menuItem.Click += (s, e) => SetItemColor(path, hex);
+                    
+                    parentMenu.Items.Add(menuItem);
+                }
+                
+                parentMenu.Items.Add(new Separator());
+            }
+            
+            // Remove color option with icon
+            var removeItem = new MenuItem { Header = "Remove Color" };
+            try
+            {
+                removeItem.Icon = new Image
+                {
+                    Source = new BitmapImage(new Uri("pack://application:,,,/Assets/Icons/remove-color.png")),
+                    Width = 16,
+                    Height = 16
+                };
+            }
+            catch { }
+            removeItem.Click += (s, e) => SetItemColor(path, null);
+            parentMenu.Items.Add(removeItem);
         }
 
         private void SetItemColor(string path, string colorHex)
@@ -582,7 +986,7 @@ namespace ExplorerPro.UI.FileTree
             
             // Use RefreshDirectory on the parent directory instead of RefreshView
             // to avoid changing the current root directory
-            string directoryToRefresh = Directory.Exists(path) ? path : Path.GetDirectoryName(path);
+            string directoryToRefresh = Directory.Exists(path) ? path : IOPath.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(directoryToRefresh))
             {
                 _fileTree.RefreshDirectory(directoryToRefresh);
@@ -658,11 +1062,54 @@ namespace ExplorerPro.UI.FileTree
             
             foreach (var (name, hex) in colors)
             {
-                AddMenuItem(parentMenu, name, null, () => SetMultipleItemsColor(paths, hex));
+                var menuItem = new MenuItem();
+                
+                // Create the same visual stack panel as single selection
+                var stackPanel = new StackPanel { Orientation = Orientation.Horizontal };
+                
+                var colorRect = new Rectangle
+                {
+                    Width = 16,
+                    Height = 16,
+                    Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)),
+                    Stroke = new SolidColorBrush(Colors.DarkGray),
+                    StrokeThickness = 1,
+                    Margin = new Thickness(0, 0, 8, 0),
+                    RadiusX = 2,
+                    RadiusY = 2
+                };
+                
+                var textBlock = new TextBlock 
+                { 
+                    Text = name,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                
+                stackPanel.Children.Add(colorRect);
+                stackPanel.Children.Add(textBlock);
+                
+                menuItem.Header = stackPanel;
+                menuItem.Click += (s, e) => SetMultipleItemsColor(paths, hex);
+                
+                parentMenu.Items.Add(menuItem);
             }
             
             parentMenu.Items.Add(new Separator());
-            AddMenuItem(parentMenu, "Remove Color", null, () => SetMultipleItemsColor(paths, null));
+            
+            // Remove color option with icon
+            var removeItem = new MenuItem { Header = "Remove Color" };
+            try
+            {
+                removeItem.Icon = new Image
+                {
+                    Source = new BitmapImage(new Uri("pack://application:,,,/Assets/Icons/remove-color.png")),
+                    Width = 16,
+                    Height = 16
+                };
+            }
+            catch { }
+            removeItem.Click += (s, e) => SetMultipleItemsColor(paths, null);
+            parentMenu.Items.Add(removeItem);
         }
 
         private void SetMultipleItemsColor(IReadOnlyList<string> paths, string colorHex)
@@ -688,7 +1135,7 @@ namespace ExplorerPro.UI.FileTree
             
             // Collect unique directories to refresh
             var directoriesToRefresh = paths
-                .Select(path => Directory.Exists(path) ? path : Path.GetDirectoryName(path))
+                .Select(path => Directory.Exists(path) ? path : IOPath.GetDirectoryName(path))
                 .Where(dir => !string.IsNullOrEmpty(dir))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -702,10 +1149,10 @@ namespace ExplorerPro.UI.FileTree
 
         private void ExtractMultipleArchives(IReadOnlyList<string> paths)
         {
-            var archives = paths.Where(p => File.Exists(p) && IsArchive(Path.GetExtension(p)));
+            var archives = paths.Where(p => File.Exists(p) && IsArchive(IOPath.GetExtension(p)));
             foreach (var archive in archives)
             {
-                ExtractArchive(archive, Path.GetDirectoryName(archive));
+                ExtractArchive(archive, IOPath.GetDirectoryName(archive));
             }
         }
 
@@ -722,10 +1169,18 @@ namespace ExplorerPro.UI.FileTree
 
         private void ShowMultipleProperties(IReadOnlyList<string> paths)
         {
-            // Could show a custom properties dialog for multiple items
-            MessageBox.Show($"Properties for {paths.Count} items", "Properties");
+            // This would show a properties dialog for multiple items
+            MessageBox.Show($"Properties for {paths.Count} items", "Properties", 
+                MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         #endregion
+
+        public void Dispose()
+        {
+            _menuItemCache.Clear();
+            _iconCache.Clear();
+            _disposed = true;
+        }
     }
 }

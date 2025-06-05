@@ -468,8 +468,8 @@ namespace ExplorerPro.UI.FileTree.Services
                 // Create visual element for the adorner
                 var visual = CreateDragVisual();
                 
-                // Calculate proper offset
-                Point offset = new Point(20, 20); // Default offset
+                // Calculate proper offset based on initial click position
+                Point offset = CalculateDragOffset(visual);
                 
                 _dragAdorner = new DragAdorner(_control, visual, offset, _selectionService.SelectionCount);
                 _adornerLayer.Add(_dragAdorner);
@@ -479,14 +479,63 @@ namespace ExplorerPro.UI.FileTree.Services
             }
         }
         
+        /// <summary>
+        /// Calculates the drag offset based on where the user initially clicked
+        /// </summary>
+        private Point CalculateDragOffset(Visual dragVisual)
+        {
+            if (!_dragStartPoint.HasValue)
+                return new Point(10, 10); // Fallback offset
+            
+            // Calculate offset from the drag visual size
+            double offsetX = 10; // Small offset to show the ghost image slightly offset from cursor
+            double offsetY = 5;  // Reduced Y offset for better positioning
+            
+            // If we have the visual size, we can position it more intelligently
+            if (dragVisual is FrameworkElement fe)
+            {
+                // Make sure the visual is measured
+                fe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                
+                // Position the ghost so the cursor appears near the icon/beginning of the text
+                // This makes it feel like you're "holding" the file item
+                offsetX = Math.Max(5, Math.Min(fe.DesiredSize.Width * 0.15, 15)); 
+                offsetY = Math.Max(3, Math.Min(fe.DesiredSize.Height * 0.3, 10));
+            }
+            
+            // If we have information about the tree view item that was clicked,
+            // we could further refine the offset based on the click position within that item
+            if (_potentialDragItem != null)
+            {
+                // Try to find the actual tree view item to get more precise positioning
+                var treeViewItem = FindTreeViewItemForData(_potentialDragItem);
+                if (treeViewItem != null)
+                {
+                    // Get the relative position within the tree view item
+                    var relativePosition = treeViewItem.TranslatePoint(new Point(0, 0), _control);
+                    var clickOffsetInItem = new Point(
+                        _dragStartPoint.Value.X - relativePosition.X,
+                        _dragStartPoint.Value.Y - relativePosition.Y
+                    );
+                    
+                    // Adjust offset to maintain the visual relationship
+                    // Keep the ghost image positioned relative to where they clicked
+                    offsetX = Math.Max(5, Math.Min(clickOffsetInItem.X, 25));
+                    offsetY = Math.Max(2, Math.Min(clickOffsetInItem.Y, 12));
+                }
+            }
+            
+            return new Point(offsetX, offsetY);
+        }
+        
         private Visual CreateDragVisual()
         {
             // Create a visual based on SelectionService's selected items
             var panel = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                Background = new SolidColorBrush(Color.FromArgb(200, 240, 240, 240)),
-                Margin = new Thickness(2)
+                Background = new SolidColorBrush(Color.FromArgb(220, 248, 248, 248)), // Slightly more opaque background
+                Margin = new Thickness(2)  // Adjusted margin for spacing
             };
             
             // Add icon from first selected item
@@ -498,35 +547,46 @@ namespace ExplorerPro.UI.FileTree.Services
                     Source = firstItem.Icon,
                     Width = 16,
                     Height = 16,
-                    Margin = new Thickness(4, 2, 2, 2)
+                    Margin = new Thickness(2, 1, 4, 1)  // Adjusted margins
                 };
                 panel.Children.Add(icon);
             }
             
             // Add text
+            var fileName = _selectionService?.SelectionCount == 1 
+                ? Path.GetFileName(_selectionService.FirstSelectedPath ?? "")
+                : $"{_selectionService?.SelectionCount ?? 0} items";
+                
             var textBlock = new TextBlock
             {
-                Text = _selectionService?.SelectionCount == 1 
-                    ? Path.GetFileName(_selectionService.FirstSelectedPath ?? "")
-                    : $"{_selectionService?.SelectionCount ?? 0} items",
-                Padding = new Thickness(4, 2, 4, 2),
-                VerticalAlignment = VerticalAlignment.Center
+                Text = fileName,
+                Padding = new Thickness(0, 1, 4, 1),  // Adjusted padding
+                VerticalAlignment = VerticalAlignment.Center,
+                FontSize = 12,  // Explicit font size
+                Foreground = new SolidColorBrush(Color.FromRgb(40, 40, 40))  // Darker text for better contrast
             };
             panel.Children.Add(textBlock);
             
-            // Create border
+            // Create border with more subtle styling
             var border = new Border
             {
                 Child = panel,
-                BorderBrush = new SolidColorBrush(Colors.Gray),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(180, 160, 160, 160)),  // More subtle border
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(2),
-                Background = new SolidColorBrush(Color.FromArgb(240, 255, 255, 255))
+                CornerRadius = new CornerRadius(3),  // Slightly more rounded
+                Background = new SolidColorBrush(Color.FromArgb(245, 255, 255, 255)),
+                Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = Colors.Gray,
+                    BlurRadius = 3,
+                    ShadowDepth = 1,  // Reduced shadow depth
+                    Opacity = 0.3
+                }
             };
             
-            // Force layout
-            border.Measure(new Size(300, 100));
-            border.Arrange(new Rect(border.DesiredSize));
+            // Force layout with more reasonable constraints
+            border.Measure(new Size(200, 50));  // Smaller max size
+            border.Arrange(new Rect(new Point(0, 0), border.DesiredSize));
             
             return border;
         }
@@ -789,7 +849,7 @@ namespace ExplorerPro.UI.FileTree.Services
                 if (!files.Any()) return false;
                 
                 // Create and execute command for undo support
-                var command = new DragDropCommand(_fileOperations, files, targetPath, effects);
+                var command = new DragDropCommand(_fileOperations, files, targetPath, effects, MetadataManager.Instance);
                 _undoManager.ExecuteCommand(command);
                 
                 // Raise appropriate events

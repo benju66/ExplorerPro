@@ -205,22 +205,17 @@ namespace ExplorerPro.UI.FileTree.Helpers
                     return;
                 }
 
-                var directory = Path.GetDirectoryName(selectedPath);
-                var newPath = Path.Combine(directory, newName);
-
-                if (File.Exists(selectedPath))
-                {
-                    File.Move(selectedPath, newPath);
-                }
-                else if (Directory.Exists(selectedPath))
-                {
-                    Directory.Move(selectedPath, newPath);
-                }
-
-                // Refresh the tree to show the renamed item
-                _fileTree.RefreshDirectory(directory);
+                // Use the FileOperationHandler to ensure metadata preservation
+                bool success = _fileOperationHandler.RenameItem(selectedPath, newName, _fileTree);
                 
-                System.Diagnostics.Debug.WriteLine($"[FILEOP] Renamed '{selectedPath}' to '{newPath}'");
+                if (success)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[FILEOP] Successfully renamed '{selectedPath}' to '{newName}'");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[FILEOP] Failed to rename '{selectedPath}' to '{newName}'");
+                }
             }
             catch (Exception ex)
             {

@@ -164,7 +164,7 @@ namespace ExplorerPro.UI.Dialogs {
                 return;
             }
             _contentLoaded = true;
-            System.Uri resourceLocater = new System.Uri("/ExplorerPro;V1.0.0.0;component/ui/dialogs/filepropertiesdialog.xaml", System.UriKind.Relative);
+            System.Uri resourceLocater = new System.Uri("/ExplorerPro;component/ui/dialogs/filepropertiesdialog.xaml", System.UriKind.Relative);
             
             #line 1 "..\..\..\..\..\UI\Dialogs\FilePropertiesDialog.xaml"
             System.Windows.Application.LoadComponent(this, resourceLocater);

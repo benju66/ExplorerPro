@@ -76,6 +76,7 @@ namespace ExplorerPro.UI.FileTree.Managers
             _treeView.PreviewMouseLeftButtonUp += OnTreeViewPreviewMouseLeftButtonUp;
             _treeView.PreviewMouseMove += OnTreeViewPreviewMouseMove;
             _treeView.PreviewKeyDown += OnTreeViewPreviewKeyDown;
+            _treeView.PreviewMouseRightButtonDown += OnTreeViewPreviewMouseRightButtonDown;
             
             if (_treeView.ItemContainerGenerator != null)
             {
@@ -91,6 +92,7 @@ namespace ExplorerPro.UI.FileTree.Managers
             _treeView.PreviewMouseLeftButtonUp -= OnTreeViewPreviewMouseLeftButtonUp;
             _treeView.PreviewMouseMove -= OnTreeViewPreviewMouseMove;
             _treeView.PreviewKeyDown -= OnTreeViewPreviewKeyDown;
+            _treeView.PreviewMouseRightButtonDown -= OnTreeViewPreviewMouseRightButtonDown;
             
             if (_treeView.ItemContainerGenerator != null)
             {
@@ -147,6 +149,23 @@ namespace ExplorerPro.UI.FileTree.Managers
                 
                 if (e.NewValue is FileTreeItem newItem)
                 {
+                    // Sync selection service with TreeView selection
+                    if (!_selectionService.IsMultiSelectMode)
+                    {
+                        // In single-select mode, update selection service to match TreeView
+                        _selectionService.SelectSingle(newItem);
+                    }
+                    else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+                    {
+                        // In multi-select with Ctrl, toggle the item
+                        _selectionService.ToggleSelection(newItem);
+                    }
+                    else if (!_selectionService.IsItemSelected(newItem))
+                    {
+                        // In multi-select without modifier, select only this item
+                        _selectionService.SelectSingle(newItem);
+                    }
+                    
                     // Notify that an item was clicked/selected
                     ItemClicked?.Invoke(this, newItem);
                 }
@@ -287,6 +306,18 @@ namespace ExplorerPro.UI.FileTree.Managers
         {
             if (_disposed) return;
             
+            // Handle F2 for inline rename
+            if (e.Key == Key.F2 && _selectionService.HasSelection && _selectionService.SelectionCount == 1)
+            {
+                var selectedItem = _selectionService.SelectedItems.FirstOrDefault();
+                if (selectedItem != null)
+                {
+                    selectedItem.IsInEditMode = true;
+                    e.Handled = true;
+                    return;
+                }
+            }
+            
             // Delegate keyboard shortcuts to selection service
             if (_selectionService.HandleKeyboardShortcut(e.Key, Keyboard.Modifiers, _fileTree.RootItems))
             {
@@ -297,6 +328,37 @@ namespace ExplorerPro.UI.FileTree.Managers
                 // Ctrl+Shift+A - Open select by pattern dialog
                 ShowSelectByPatternDialog();
                 e.Handled = true;
+            }
+        }
+
+        private void OnTreeViewPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (_disposed) return;
+            
+            var position = e.GetPosition(_treeView);
+            var item = _performanceManager.GetItemFromPoint(position);
+            
+            if (item != null)
+            {
+                // Check if the item is already selected
+                if (!_selectionService.IsItemSelected(item))
+                {
+                    // If not selected, select it (following Windows standard behavior)
+                    if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && 
+                        !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+                    {
+                        // No modifier keys: clear selection and select only this item
+                        _selectionService.SelectSingle(item);
+                    }
+                    else
+                    {
+                        // With modifier keys: add to selection
+                        _selectionService.ToggleSelection(item);
+                    }
+                    
+                    // Update visual selection immediately
+                    item.IsSelected = _selectionService.IsItemSelected(item);
+                }
             }
         }
 
