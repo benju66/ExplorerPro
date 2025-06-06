@@ -14,7 +14,7 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 ├── TestWindow.xaml.cs                        # Test window code-behind
 ├── structure.txt                             # Project structure documentation
 │
-├── Documentation/                            # Project Documentation
+├── Documentation/                            # Project Documentation (located in root)
 │   ├── PROJECT_FOLDER_TREE.md               # This file - project structure overview
 │   ├── CONTEXT_MENU_COLOR_FIX.md            # Context menu color fix documentation
 │   ├── README_TreeView_Selection_Optimization.md  # TreeView selection optimization guide
@@ -27,6 +27,9 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 │   ├── REFACTORING_COMPLETE.md              # Refactoring completion summary
 │   ├── REFACTORING_NEXT_STEPS.md            # Next steps for refactoring
 │   └── REFACTORING_SUMMARY.md               # Refactoring summary
+│
+├── Tests/                                     # Unit and Integration Tests
+│   └── DragDropMetadataTest.cs               # Drag and drop metadata testing
 │
 ├── UI/                                        # User Interface Components
 │   ├── MainWindow/                           # Main application window
@@ -50,6 +53,8 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 │   │   ├── FileTreeDemo.xaml                # File tree demo window XAML
 │   │   ├── FileTreeDemo.xaml.cs             # File tree demo window logic
 │   │   ├── Example_OptimizedTreeViewIntegration.cs # TreeView optimization example
+│   │   │
+│   │   ├── Models/                          # File tree models (empty)
 │   │   │
 │   │   ├── Managers/                        # File tree managers
 │   │   │   ├── OptimizedTreeViewIndexer.cs  # Optimized tree view indexing
@@ -170,7 +175,15 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 │
 ├── Assets/                                  # Static Resources
 │   └── Icons/                              # Application icons and imagery
-│       └── app.ico                         # Main application icon
+│       ├── app.ico                         # Main application icon
+│       ├── app_48x48.ico                   # 48x48 application icon
+│       ├── app_32x32.ico                   # 32x32 application icon
+│       ├── app_24x24.ico                   # 24x24 application icon
+│       ├── app_16x16.ico                   # 16x16 application icon
+│       ├── list-todo.svg                   # To-do list icon
+│       ├── link.svg                        # Link icon
+│       ├── star.svg                        # Star/favorite icon
+│       └── pin.svg                         # Pin icon
 │
 ├── Data/                                    # Application Data Files
 │   ├── settings.json                       # User preferences and configuration
@@ -203,6 +216,7 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 - **Optimized TreeView** with performance enhancements and selection optimization
 - **Comprehensive drag-and-drop** support with file operations
 - **Extensible architecture** with service-oriented design
+- **Comprehensive test suite** for ensuring code quality and reliability
 
 ## Key Dependencies
 - MahApps.Metro (Modern WPF UI)
@@ -217,4 +231,8 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 - **Comprehensive theming system** supporting light and dark modes
 - **Modular UI components** with reusable panels and controls
 - **Advanced file operations** with undo/redo support
-- **Extensible preview system** for various file types 
+- **Extensible preview system** for various file types
+- **Test-driven development** with unit and integration tests
+
+## Current Status
+**Note**: Documentation files are currently located in the project root directory rather than in a separate `Documentation/` folder as shown in the tree structure above. The project includes comprehensive documentation covering performance optimizations, refactoring efforts, and implementation details. 
