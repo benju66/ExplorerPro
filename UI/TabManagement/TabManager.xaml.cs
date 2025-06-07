@@ -464,6 +464,8 @@ namespace ExplorerPro.UI.TabManagement
             public DateTime LastAccessed { get; set; }
             public double ScrollPosition { get; set; }
             public List<string> SelectedItems { get; set; } = new List<string>();
+            public bool IsPinned { get; set; } = false;
+            public bool HasUnsavedChanges { get; set; } = false;
         }
 
         /// <summary>
@@ -1422,6 +1424,78 @@ namespace ExplorerPro.UI.TabManagement
                 element = VisualTreeHelper.GetParent(element);
             }
             return element as T;
+        }
+
+        /// <summary>
+        /// Handles middle-click on tab items for closing
+        /// </summary>
+        private void TabItem_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == MouseButton.Middle && e.ButtonState == MouseButtonState.Pressed)
+            {
+                // Find the TabItem ancestor
+                var textBlock = sender as TextBlock;
+                var tabItem = FindAncestorOfType<TabItem>(textBlock);
+                
+                if (tabItem != null)
+                {
+                    int index = TabControl.Items.IndexOf(tabItem);
+                    if (index >= 0)
+                    {
+                        CloseTab(index);
+                    }
+                }
+                
+                e.Handled = true;
+            }
+        }
+        
+        /// <summary>
+        /// Handles pin/unpin button click
+        /// </summary>
+        private void PinTabButton_Click(object sender, RoutedEventArgs e)
+        {
+            var button = sender as Button;
+            var tabItem = FindAncestorOfType<TabItem>(button);
+            
+            if (tabItem?.Tag is TabMetadata metadata)
+            {
+                metadata.IsPinned = !metadata.IsPinned;
+                
+                // Update visual state
+                if (metadata.IsPinned)
+                {
+                    tabItem.MinWidth = 100; // Smaller pinned tabs
+                    tabItem.MaxWidth = 140;
+                }
+                else
+                {
+                    tabItem.MinWidth = 140; // Normal tab size
+                    tabItem.MaxWidth = 280;
+                }
+                
+                // Move pinned tabs to the beginning
+                if (metadata.IsPinned)
+                {
+                    int currentIndex = TabControl.Items.IndexOf(tabItem);
+                    TabControl.Items.RemoveAt(currentIndex);
+                    
+                    // Find the position after all pinned tabs
+                    int insertIndex = 0;
+                    for (int i = 0; i < TabControl.Items.Count; i++)
+                    {
+                        var tab = TabControl.Items[i] as TabItem;
+                        if (tab?.Tag is TabMetadata meta && meta.IsPinned)
+                        {
+                            insertIndex = i + 1;
+                        }
+                        else break;
+                    }
+                    
+                    TabControl.Items.Insert(insertIndex, tabItem);
+                    TabControl.SelectedItem = tabItem;
+                }
+            }
         }
 
         #endregion

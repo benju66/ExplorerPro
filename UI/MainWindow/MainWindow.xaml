@@ -243,7 +243,7 @@
                                                 </TextBlock.Effect>
                                             </TextBlock>
                                             
-                                            <!-- Enhanced close button -->
+                                            <!-- Enhanced close button (hover-to-show) -->
                                             <Button x:Name="CloseButton"
                                                   Grid.Column="2" 
                                                   Content="✕" 
@@ -256,8 +256,8 @@
                                                   Foreground="#656D76"
                                                   VerticalAlignment="Center"
                                                   Click="TabCloseButton_Click"
-                                                  ToolTip="Close Tab"
-                                                  Visibility="{Binding RelativeSource={RelativeSource AncestorType=TabControl}, Path=Items.Count, Converter={StaticResource CountToVisibilityConverter}}"
+                                                  ToolTip="Close Tab (Middle-click also closes)"
+                                                  Opacity="0"
                                                   Style="{x:Null}">
                                                 <Button.Template>
                                                     <ControlTemplate TargetType="Button">
@@ -318,16 +318,41 @@
                                             <Setter Property="Panel.ZIndex" Value="100"/>
                                         </Trigger>
                                         
-                                        <!-- Enhanced hover effect -->
+                                        <!-- Enhanced hover effect with close button -->
                                         <Trigger Property="IsMouseOver" Value="True">
                                             <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource TabHoverGradient}"/>
                                             <Trigger.EnterActions>
                                                 <BeginStoryboard Storyboard="{StaticResource TabHoverStoryboard}"/>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <!-- Show close button on hover -->
+                                                        <DoubleAnimation Storyboard.TargetName="CloseButton"
+                                                                       Storyboard.TargetProperty="Opacity"
+                                                                       To="1" Duration="0:0:0.2"
+                                                                       BeginTime="0:0:0.1"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
                                             </Trigger.EnterActions>
                                             <Trigger.ExitActions>
                                                 <BeginStoryboard Storyboard="{StaticResource TabHoverExitStoryboard}"/>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <!-- Hide close button when not hovering -->
+                                                        <DoubleAnimation Storyboard.TargetName="CloseButton"
+                                                                       Storyboard.TargetProperty="Opacity"
+                                                                       To="0" Duration="0:0:0.15"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
                                             </Trigger.ExitActions>
                                         </Trigger>
+                                        
+                                        <!-- Always show close button when selected -->
+                                        <MultiTrigger>
+                                            <MultiTrigger.Conditions>
+                                                <Condition Property="IsSelected" Value="True"/>
+                                            </MultiTrigger.Conditions>
+                                            <Setter TargetName="CloseButton" Property="Opacity" Value="0.7"/>
+                                        </MultiTrigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </Setter.Value>
