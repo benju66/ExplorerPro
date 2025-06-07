@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -7,17 +8,31 @@ using System.Windows.Input;
 using System.Windows.Data;
 using System.IO;
 using System.Globalization;
+using System.Windows.Threading;
+using System.Windows.Media.Animation;
 using ExplorerPro.UI.FileTree;
 using ExplorerPro.UI.Converters;
 
 namespace ExplorerPro.UI.MainWindow
 {
     /// <summary>
+    /// Hibernation state for tabs
+    /// </summary>
+    public class TabHibernationState
+    {
+        public MainWindowContainer? Container { get; set; }
+        public string Title { get; set; } = "";
+        public string LastPath { get; set; } = "";
+        public DateTime LastAccessTime { get; set; }
+        public long MemoryUsage { get; set; }
+    }
+
+    /// <summary>
     /// Interaction logic for MainWindowTabs.xaml
     /// Tab widget that contains MainWindowContainer instances.
-    /// Handles tab management, detachment, and panel toggling.
+    /// Handles tab management, detachment, hibernation, and panel toggling.
     /// </summary>
-    public partial class MainWindowTabs : UserControl
+    public partial class MainWindowTabs : UserControl, IDisposable
     {
         #region Fields
 
@@ -25,6 +40,11 @@ namespace ExplorerPro.UI.MainWindow
         private Point _dragStartPoint;
         private bool _isDragging;
         private TabItem? _draggedItem;
+        
+        // Tab hibernation fields
+        private readonly Dictionary<TabItem, TabHibernationState> _hibernatedTabs = new();
+        private DispatcherTimer? _hibernationTimer;
+        private readonly TimeSpan _hibernationTimeout = TimeSpan.FromMinutes(10);
         
         #endregion
 
@@ -55,8 +75,8 @@ namespace ExplorerPro.UI.MainWindow
             TabControl.DragEnter += TabControl_DragEnter;
             TabControl.DragOver += TabControl_DragOver;
 
-            // Removed automatic tab creation to prevent null reference exceptions
-            // AddNewMainWindowTab();
+            // Initialize hibernation timer
+            InitializeHibernationTimer();
 
             // Delay tab creation until control is fully loaded
             this.Loaded += (s, e) =>
@@ -66,7 +86,246 @@ namespace ExplorerPro.UI.MainWindow
                     AddNewMainWindowTab();
                 }
             };
+        }
 
+        #endregion
+
+        #region Tab Hibernation
+
+        /// <summary>
+        /// Initialize the hibernation timer
+        /// </summary>
+        private void InitializeHibernationTimer()
+        {
+            _hibernationTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMinutes(5) // Check every 5 minutes
+            };
+            _hibernationTimer.Tick += HibernationTimer_Tick;
+            _hibernationTimer.Start();
+        }
+
+        /// <summary>
+        /// Timer tick handler for automatic hibernation
+        /// </summary>
+        private void HibernationTimer_Tick(object sender, EventArgs e)
+        {
+            try
+            {
+                var currentTime = DateTime.Now;
+                var tabsToHibernate = new List<TabItem>();
+
+                foreach (TabItem tab in TabControl.Items)
+                {
+                    if (tab == TabControl.SelectedItem) continue; // Don't hibernate active tab
+                    if (_hibernatedTabs.ContainsKey(tab)) continue; // Already hibernated
+                    if (tab.Tag?.ToString() == "Hibernated") continue; // Already marked
+
+                    var container = tab.Content as MainWindowContainer;
+                    if (container == null) continue;
+
+                    // Check if tab has been inactive for hibernation timeout
+                    if (currentTime - GetTabLastAccessTime(tab) > _hibernationTimeout)
+                    {
+                        tabsToHibernate.Add(tab);
+                    }
+                }
+
+                foreach (var tab in tabsToHibernate)
+                {
+                    HibernateTab(tab);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in hibernation timer: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Get the last access time for a tab
+        /// </summary>
+        private DateTime GetTabLastAccessTime(TabItem tab)
+        {
+            // For now, use a simple heuristic - could be enhanced with actual tracking
+            return DateTime.Now - TimeSpan.FromMinutes(15); // Simulate inactivity
+        }
+
+        /// <summary>
+        /// Hibernate a specific tab
+        /// </summary>
+        /// <param name="tab">Tab to hibernate</param>
+        private void HibernateTab(TabItem tab)
+        {
+            try
+            {
+                var container = tab.Content as MainWindowContainer;
+                if (container == null) return;
+
+                // Save state
+                var state = new TabHibernationState
+                {
+                    Container = container,
+                    Title = tab.Header?.ToString() ?? "",
+                    LastPath = GetContainerPath(container),
+                    LastAccessTime = DateTime.Now,
+                    MemoryUsage = GetEstimatedMemoryUsage(container)
+                };
+
+                _hibernatedTabs[tab] = state;
+
+                // Create hibernation placeholder
+                var placeholder = new Grid
+                {
+                    Background = new SolidColorBrush(Color.FromRgb(248, 248, 248))
+                };
+
+                var stackPanel = new StackPanel
+                {
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Orientation = Orientation.Vertical
+                };
+
+                var icon = new TextBlock
+                {
+                    Text = "💤",
+                    FontSize = 48,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 0, 0, 10)
+                };
+
+                var message = new TextBlock
+                {
+                    Text = "Tab hibernated to save memory",
+                    FontSize = 16,
+                    Foreground = new SolidColorBrush(Color.FromRgb(102, 102, 102)),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 0, 0, 5)
+                };
+
+                var clickText = new TextBlock
+                {
+                    Text = "Click to restore",
+                    FontSize = 14,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0, 120, 212)),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    TextDecorations = TextDecorations.Underline,
+                    Cursor = Cursors.Hand
+                };
+
+                stackPanel.Children.Add(icon);
+                stackPanel.Children.Add(message);
+                stackPanel.Children.Add(clickText);
+                placeholder.Children.Add(stackPanel);
+
+                // Add click handler to restore
+                placeholder.MouseLeftButtonUp += (s, e) => RestoreTab(tab);
+
+                // Replace content with placeholder
+                tab.Content = placeholder;
+                tab.Tag = "Hibernated";
+
+                // Apply hibernation animation
+                var storyboard = FindResource("TabHibernateFadeStoryboard") as Storyboard;
+                if (storyboard != null)
+                {
+                    Storyboard.SetTarget(storyboard, tab);
+                    storyboard.Begin();
+                }
+
+                Console.WriteLine($"Hibernated tab: {state.Title}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error hibernating tab: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Restore a hibernated tab
+        /// </summary>
+        /// <param name="tab">Tab to restore</param>
+        private void RestoreTab(TabItem tab)
+        {
+            try
+            {
+                if (!_hibernatedTabs.TryGetValue(tab, out var state)) return;
+
+                // Restore original content
+                if (state.Container != null)
+                {
+                    tab.Content = state.Container;
+                    tab.Tag = null;
+                    _hibernatedTabs.Remove(tab);
+
+                    // Apply restore animation
+                    var storyboard = FindResource("TabRestoreStoryboard") as Storyboard;
+                    if (storyboard != null)
+                    {
+                        Storyboard.SetTarget(storyboard, tab);
+                        storyboard.Begin();
+                    }
+
+                    // Make this tab active
+                    TabControl.SelectedItem = tab;
+
+                    Console.WriteLine($"Restored tab: {state.Title}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error restoring tab: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Get container path for hibernation state
+        /// </summary>
+        private string GetContainerPath(MainWindowContainer container)
+        {
+            try
+            {
+                var fileTree = container.FindFileTree();
+                return fileTree?.GetCurrentPath() ?? "";
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        /// <summary>
+        /// Get estimated memory usage for container
+        /// </summary>
+        private long GetEstimatedMemoryUsage(MainWindowContainer container)
+        {
+            // Simple estimation - could be enhanced with actual memory profiling
+            return 50 * 1024 * 1024; // 50MB estimate
+        }
+
+        /// <summary>
+        /// Menu handler for hibernating current tab
+        /// </summary>
+        private void HibernateTabMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            var selectedTab = TabControl.SelectedItem as TabItem;
+            if (selectedTab != null && TabControl.Items.Count > 1)
+            {
+                HibernateTab(selectedTab);
+            }
+        }
+
+        /// <summary>
+        /// Menu handler for restoring hibernated tab
+        /// </summary>
+        private void RestoreTabMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            var selectedTab = TabControl.SelectedItem as TabItem;
+            if (selectedTab != null && selectedTab.Tag?.ToString() == "Hibernated")
+            {
+                RestoreTab(selectedTab);
+            }
         }
 
         #endregion
@@ -111,12 +370,19 @@ namespace ExplorerPro.UI.MainWindow
                 TabItem newTab = new TabItem
                 {
                     Header = tabTitle,
-                    Content = container
+                    Content = container,
+                    RenderTransform = new TransformGroup
+                    {
+                        Children = { new ScaleTransform(), new TranslateTransform() }
+                    }
                 };
 
                 // Add to TabControl
                 TabControl.Items.Add(newTab);
                 TabControl.SelectedItem = newTab;
+
+                // Apply fade-in animation
+                ApplyTabFadeInAnimation(newTab);
 
                 // Raise event
                 NewTabAdded?.Invoke(this, container);
@@ -128,6 +394,26 @@ namespace ExplorerPro.UI.MainWindow
                 MessageBox.Show($"Error creating new tab: {ex.Message}", 
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// Apply fade-in animation to new tab
+        /// </summary>
+        private void ApplyTabFadeInAnimation(TabItem tab)
+        {
+            try
+            {
+                var storyboard = FindResource("TabFadeInStoryboard") as Storyboard;
+                if (storyboard != null)
+                {
+                    Storyboard.SetTarget(storyboard, tab);
+                    storyboard.Begin();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error applying fade-in animation: {ex.Message}");
             }
         }
 
@@ -249,13 +535,38 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Handler for tab selection changed
+        /// Handler for tab selection changed - Enhanced with hibernation support
         /// </summary>
         private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            // Notify parent window of tab change
-            MainWindow? mainWindow = Window.GetWindow(this) as MainWindow;
-            mainWindow?.UpdateAddressBarOnTabChange();
+            try
+            {
+                // Restore hibernated tab if selected
+                var selectedTab = TabControl.SelectedItem as TabItem;
+                if (selectedTab?.Tag?.ToString() == "Hibernated")
+                {
+                    RestoreTab(selectedTab);
+                }
+
+                // Update last access time for newly selected tab
+                if (selectedTab != null)
+                {
+                    // Mark access time - in a real implementation, you'd track this properly
+                    selectedTab.SetValue(FrameworkElement.TagProperty, DateTime.Now);
+                }
+
+                // Notify parent window of tab change
+                MainWindow? mainWindow = Window.GetWindow(this) as MainWindow;
+                mainWindow?.UpdateAddressBarOnTabChange();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in tab selection changed: {ex.Message}");
+                
+                // Fallback to basic functionality
+                MainWindow? mainWindow = Window.GetWindow(this) as MainWindow;
+                mainWindow?.UpdateAddressBarOnTabChange();
+            }
         }
 
         /// <summary>
@@ -288,7 +599,7 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Handler for mouse move to drag tabs
+        /// Handler for mouse move to drag tabs with visual feedback
         /// </summary>
         private void TabControl_MouseMove(object sender, MouseEventArgs e)
         {
@@ -301,9 +612,15 @@ namespace ExplorerPro.UI.MainWindow
                 if (Math.Abs(dragDelta.X) > SystemParameters.MinimumHorizontalDragDistance ||
                     Math.Abs(dragDelta.Y) > SystemParameters.MinimumVerticalDragDistance)
                 {
+                    // Apply visual feedback - make tab slightly transparent
+                    _draggedItem.Opacity = 0.7;
+                    
                     // Start drag-drop operation
                     DataObject dragData = new DataObject("TabItem", _draggedItem);
-                    DragDrop.DoDragDrop(_draggedItem, dragData, DragDropEffects.Move);
+                    var result = DragDrop.DoDragDrop(_draggedItem, dragData, DragDropEffects.Move);
+                    
+                    // Restore opacity after drag
+                    _draggedItem.Opacity = 1.0;
                     
                     _isDragging = false;
                     _draggedItem = null;
@@ -345,22 +662,36 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Handler for drop
+        /// Handler for drop - Enhanced for cross-window support
         /// </summary>
         private void TabControl_Drop(object sender, DragEventArgs e)
         {
             if (e.Data.GetDataPresent("TabItem"))
             {
-                // Handle tab reordering
+                // Handle tab reordering and cross-window moves
                 TabItem? draggedItem = e.Data.GetData("TabItem") as TabItem;
                 TabItem? targetItem = GetTabItemFromPoint(e.GetPosition(TabControl));
                 
-                if (draggedItem != null && targetItem != null && draggedItem != targetItem)
+                if (draggedItem != null)
                 {
-                    int sourceIndex = TabControl.Items.IndexOf(draggedItem);
-                    int targetIndex = TabControl.Items.IndexOf(targetItem);
-                    
-                    MoveTab(sourceIndex, targetIndex);
+                    // Check if this is a cross-window drop
+                    var sourceTabControl = FindParent<TabControl>(draggedItem);
+                    if (sourceTabControl != null && sourceTabControl != TabControl)
+                    {
+                        // Cross-window move
+                        HandleCrossWindowTabMove(draggedItem, sourceTabControl, targetItem);
+                    }
+                    else if (targetItem != null && draggedItem != targetItem)
+                    {
+                        // Same window reordering
+                        int sourceIndex = TabControl.Items.IndexOf(draggedItem);
+                        int targetIndex = TabControl.Items.IndexOf(targetItem);
+                        
+                        if (sourceIndex >= 0 && targetIndex >= 0)
+                        {
+                            MoveTab(sourceIndex, targetIndex);
+                        }
+                    }
                 }
                 
                 e.Handled = true;
@@ -440,6 +771,137 @@ namespace ExplorerPro.UI.MainWindow
             TabControl.SelectedItem = item;
         }
 
+        /// <summary>
+        /// Handle cross-window tab move
+        /// </summary>
+        /// <param name="draggedTab">Tab being moved</param>
+        /// <param name="sourceTabControl">Source TabControl</param>
+        /// <param name="targetTab">Target tab (or null for append)</param>
+        private void HandleCrossWindowTabMove(TabItem draggedTab, TabControl sourceTabControl, TabItem? targetTab)
+        {
+            try
+            {
+                // Get the container from the dragged tab
+                var container = draggedTab.Content as MainWindowContainer;
+                if (container == null) return;
+
+                // Get tab title
+                string tabTitle = draggedTab.Header?.ToString() ?? "Moved Tab";
+
+                // Remove from source tab control
+                int sourceIndex = sourceTabControl.Items.IndexOf(draggedTab);
+                if (sourceIndex >= 0)
+                {
+                    sourceTabControl.Items.RemoveAt(sourceIndex);
+                }
+
+                // Create new tab item for this window
+                TabItem newTab = new TabItem
+                {
+                    Header = tabTitle,
+                    Content = container,
+                    RenderTransform = new TransformGroup
+                    {
+                        Children = { new ScaleTransform(), new TranslateTransform() }
+                    }
+                };
+
+                // Add to this tab control
+                int insertIndex = targetTab != null ? TabControl.Items.IndexOf(targetTab) : TabControl.Items.Count;
+                if (insertIndex < 0) insertIndex = TabControl.Items.Count;
+                
+                TabControl.Items.Insert(insertIndex, newTab);
+                TabControl.SelectedItem = newTab;
+
+                // Apply fade-in animation
+                ApplyTabFadeInAnimation(newTab);
+
+                Console.WriteLine($"Moved tab '{tabTitle}' between windows");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in cross-window tab move: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Detach tab to a new window
+        /// </summary>
+        /// <param name="tab">Tab to detach</param>
+        /// <returns>New MainWindow instance</returns>
+        public MainWindow? DetachTabToNewWindow(TabItem tab)
+        {
+            try
+            {
+                var container = tab.Content as MainWindowContainer;
+                if (container == null) return null;
+
+                string tabTitle = tab.Header?.ToString() ?? "Detached";
+
+                // Remove tab from current window
+                int index = TabControl.Items.IndexOf(tab);
+                if (index >= 0)
+                {
+                    TabControl.Items.RemoveAt(index);
+                }
+
+                // Create new window
+                MainWindow newWindow = new MainWindow();
+                _detachedWindows.Add(newWindow);
+
+                // Clear existing tabs in new window
+                while (newWindow.MainTabs.Items.Count > 0)
+                {
+                    newWindow.MainTabs.Items.RemoveAt(0);
+                }
+
+                // Create new tab item for detached container
+                TabItem newTabItem = new TabItem
+                {
+                    Header = tabTitle,
+                    Content = container,
+                    RenderTransform = new TransformGroup
+                    {
+                        Children = { new ScaleTransform(), new TranslateTransform() }
+                    }
+                };
+
+                // Add to new window
+                newWindow.MainTabs.Items.Add(newTabItem);
+                newWindow.MainTabs.SelectedItem = newTabItem;
+
+                // Configure new window
+                newWindow.Title = $"ExplorerPro - {tabTitle}";
+                newWindow.Width = 1000;
+                newWindow.Height = 700;
+
+                // Position offset from parent
+                MainWindow? parentWindow = Window.GetWindow(this) as MainWindow;
+                if (parentWindow != null)
+                {
+                    newWindow.Left = parentWindow.Left + 50;
+                    newWindow.Top = parentWindow.Top + 50;
+                }
+
+                // Show the new window
+                newWindow.Show();
+                newWindow.Activate();
+
+                // Connect pinned panel signals
+                if (container.PinnedPanel != null)
+                {
+                    newWindow.ConnectPinnedPanelSignals(container.PinnedPanel);
+                }
+
+                return newWindow;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error detaching tab to new window: {ex.Message}");
+                return null;
+            }
+        }
+
         #endregion
 
         #region Detached Tabs
@@ -486,62 +948,13 @@ namespace ExplorerPro.UI.MainWindow
                 TabItem? tabItem = TabControl.Items[index] as TabItem;
                 if (tabItem == null) return;
 
-                // Get the container
-                MainWindowContainer? container = tabItem.Content as MainWindowContainer;
-                if (container == null) return;
-
-                string tabTitle = tabItem.Header?.ToString() ?? "Detached";
-
-                // Create new window
-                MainWindow newWindow = new MainWindow();
-                _detachedWindows.Add(newWindow);
-
-                // Remove tab from current window
-                tabItem.Content = null; // Detach container from tab item
-                TabControl.Items.RemoveAt(index);
-
-                // Clear tabs in new window
-                while (newWindow.MainTabs.Items.Count > 0)
+                // Use the new DetachTabToNewWindow method
+                var newWindow = DetachTabToNewWindow(tabItem);
+                if (newWindow != null)
                 {
-                    newWindow.MainTabs.Items.RemoveAt(0);
+                    // Trim detached windows list (remove closed windows)
+                    _detachedWindows.RemoveAll(w => !w.IsVisible);
                 }
-
-                // Create new tab item for detached container
-                TabItem newTabItem = new TabItem
-                {
-                    Header = tabTitle,
-                    Content = container
-                };
-
-                // Add to new window
-                newWindow.MainTabs.Items.Add(newTabItem);
-                newWindow.MainTabs.SelectedItem = newTabItem;
-
-                // Configure new window
-                newWindow.Title = $"Detached - {tabTitle}";
-                newWindow.Width = 1000;
-                newWindow.Height = 700;
-
-                // Position offset from parent
-                MainWindow? parentWindow = Window.GetWindow(this) as MainWindow;
-                if (parentWindow != null)
-                {
-                    newWindow.Left = parentWindow.Left + 50;
-                    newWindow.Top = parentWindow.Top + 50;
-                }
-
-                // Show the new window
-                newWindow.Show();
-                newWindow.Activate();
-
-                // Connect pinned panel signals
-                if (container.PinnedPanel != null)
-                {
-                    newWindow.ConnectPinnedPanelSignals(container.PinnedPanel);
-                }
-
-                // Trim detached windows list (remove closed windows)
-                _detachedWindows.RemoveAll(w => !w.IsVisible);
             }
             catch (Exception ex)
             {
@@ -685,6 +1098,57 @@ namespace ExplorerPro.UI.MainWindow
             }
             
             return parent as T;
+        }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Dispose resources
+        /// </summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Protected dispose method
+        /// </summary>
+        /// <param name="disposing">True if disposing</param>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                // Stop and dispose hibernation timer
+                if (_hibernationTimer != null)
+                {
+                    _hibernationTimer.Stop();
+                    _hibernationTimer.Tick -= HibernationTimer_Tick;
+                    _hibernationTimer = null;
+                }
+
+                // Clear hibernated tabs
+                _hibernatedTabs.Clear();
+
+                // Clean up detached windows
+                foreach (var window in _detachedWindows.ToList())
+                {
+                    try
+                    {
+                        if (window.IsVisible)
+                        {
+                            window.Close();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error closing detached window: {ex.Message}");
+                    }
+                }
+                _detachedWindows.Clear();
+            }
         }
 
         #endregion
