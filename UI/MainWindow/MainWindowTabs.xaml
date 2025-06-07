@@ -18,26 +18,52 @@
         <!-- Converter that returns false when count is 1, true otherwise -->
         <converters:CountToEnableConverter x:Key="CountToEnableConverter" />
 
-        <!-- Animation Storyboards -->
+        <!-- Modern Gradients and Brushes -->
+        <LinearGradientBrush x:Key="TabActiveGradient" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#FFFFFF" Offset="0"/>
+            <GradientStop Color="#F8F9FA" Offset="1"/>
+        </LinearGradientBrush>
+        
+        <LinearGradientBrush x:Key="TabHoverGradient" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#F0F7FF" Offset="0"/>
+            <GradientStop Color="#E3F2FD" Offset="1"/>
+        </LinearGradientBrush>
+        
+        <LinearGradientBrush x:Key="TabInactiveGradient" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#FAFAFA" Offset="0"/>
+            <GradientStop Color="#F0F0F0" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Enhanced Animation Storyboards -->
         <Storyboard x:Key="TabHoverStoryboard">
             <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" 
-                           To="1.05" Duration="0:0:0.15" />
-            <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                          To="#E8F4F8" Duration="0:0:0.15" />
+                           To="1.08" Duration="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <QuadraticEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <!-- DropShadowEffect animations removed to prevent dependency object errors -->
         </Storyboard>
         
         <Storyboard x:Key="TabHoverExitStoryboard">
             <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" 
-                           To="1.0" Duration="0:0:0.15" />
-            <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                          To="Transparent" Duration="0:0:0.15" />
+                           To="1.0" Duration="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <QuadraticEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <!-- DropShadowEffect animations removed to prevent dependency object errors -->
         </Storyboard>
 
         <Storyboard x:Key="TabFadeInStoryboard">
             <DoubleAnimation Storyboard.TargetProperty="Opacity" 
-                           From="0" To="1" Duration="0:0:0.3" />
+                           From="0" To="1" Duration="0:0:0.4">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
             <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" 
-                           From="30" To="0" Duration="0:0:0.3">
+                           From="40" To="0" Duration="0:0:0.4">
                 <DoubleAnimation.EasingFunction>
                     <CubicEase EasingMode="EaseOut"/>
                 </DoubleAnimation.EasingFunction>
@@ -46,13 +72,40 @@
 
         <Storyboard x:Key="TabHibernateFadeStoryboard">
             <DoubleAnimation Storyboard.TargetProperty="Opacity" 
-                           To="0.6" Duration="0:0:0.4" />
+                           To="0.5" Duration="0:0:0.5">
+                <DoubleAnimation.EasingFunction>
+                    <QuadraticEase EasingMode="EaseInOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
         </Storyboard>
 
         <Storyboard x:Key="TabRestoreStoryboard">
             <DoubleAnimation Storyboard.TargetProperty="Opacity" 
-                           To="1.0" Duration="0:0:0.3" />
+                           To="1.0" Duration="0:0:0.4">
+                <DoubleAnimation.EasingFunction>
+                    <QuadraticEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
         </Storyboard>
+
+        <!-- Modern Icon Resources -->
+        <DrawingImage x:Key="FolderIcon">
+            <DrawingImage.Drawing>
+                <DrawingGroup ClipGeometry="M0,0 V16 H16 V0 H0 Z">
+                    <GeometryDrawing Brush="#FFD700" Geometry="F1 M16,16z M0,0z M2,2L14,2 14,4 2,4z M1,5L15,5 15,14 1,14z"/>
+                    <GeometryDrawing Brush="#FFA500" Geometry="F1 M16,16z M0,0z M2,2L14,2 14,3 2,3z"/>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
+        <DrawingImage x:Key="FileIcon">
+            <DrawingImage.Drawing>
+                <DrawingGroup ClipGeometry="M0,0 V16 H16 V0 H0 Z">
+                    <GeometryDrawing Brush="#4A90E2" Geometry="F1 M16,16z M0,0z M3,1L10,1 13,4 13,15 3,15z M10,1L10,4 13,4"/>
+                    <GeometryDrawing Brush="#357ABD" Geometry="F1 M16,16z M0,0z M10,1L10,4 13,4z"/>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
     </UserControl.Resources>
     
     <Grid>
@@ -64,19 +117,27 @@
                   AllowDrop="True"
                   SelectionChanged="TabControl_SelectionChanged">
             <TabControl.Resources>
-                <!-- Modern Chrome-style TabItem -->
+                <!-- Ultra-Modern Chrome-style TabItem -->
                 <Style TargetType="{x:Type TabItem}">
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="{x:Type TabItem}">
                                 <Border x:Name="TabBorder"
-                                      Background="Transparent"
-                                      BorderBrush="#CCCCCC"
+                                      Background="{StaticResource TabInactiveGradient}"
+                                      BorderBrush="#D0D7DE"
                                       BorderThickness="1,1,1,0"
-                                      CornerRadius="8,8,0,0"
-                                      Margin="0,2,2,0"
+                                      CornerRadius="12,12,0,0"
+                                      Margin="2,4,2,0"
                                       Padding="0"
                                       RenderTransformOrigin="0.5,0.5">
+                                    <Border.Effect>
+                                        <DropShadowEffect x:Name="TabShadow" 
+                                                        Color="#FF000000" 
+                                                        Direction="270" 
+                                                        ShadowDepth="2" 
+                                                        BlurRadius="6" 
+                                                        Opacity="0.1"/>
+                                    </Border.Effect>
                                     <Border.RenderTransform>
                                         <TransformGroup>
                                             <ScaleTransform/>
@@ -86,43 +147,61 @@
                                     
                                     <Grid>
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         
-                                        <!-- Hibernation indicator -->
-                                        <Ellipse x:Name="HibernationIndicator" 
-                                               Grid.Column="0"
-                                               Width="4" Height="4"
-                                               Fill="#FFA500"
-                                               Margin="2,0,0,0"
-                                               VerticalAlignment="Center"
-                                               Visibility="Collapsed"/>
+                                        <!-- Hibernation indicator with glow effect -->
+                                        <Border x:Name="HibernationIndicator" 
+                                              Grid.Column="0"
+                                              Width="8" Height="8"
+                                              CornerRadius="4"
+                                              Background="#FF6B35"
+                                              Margin="8,0,4,0"
+                                              VerticalAlignment="Center"
+                                              Visibility="Collapsed">
+                                            <Border.Effect>
+                                                <DropShadowEffect Color="#FF6B35" BlurRadius="4" ShadowDepth="0" Opacity="0.6"/>
+                                            </Border.Effect>
+                                        </Border>
                                         
-                                        <!-- Tab title -->
+                                        <!-- Tab type icon -->
+                                        <Image x:Name="TabIcon"
+                                             Grid.Column="1" 
+                                             Width="16" Height="16"
+                                             Margin="4,0,6,0"
+                                             VerticalAlignment="Center"
+                                             Source="{StaticResource FolderIcon}"/>
+                                        
+                                        <!-- Tab title with better typography -->
                                         <TextBlock x:Name="TabTitle"
-                                                 Grid.Column="1" 
+                                                 Grid.Column="2" 
                                                  Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" 
-                                                 Margin="8,8,4,8"
+                                                 Margin="0,10,8,10"
                                                  VerticalAlignment="Center"
                                                  FontSize="13"
-                                                 FontWeight="Normal"
-                                                 Foreground="#333333"
-                                                 TextTrimming="CharacterEllipsis"/>
+                                                 FontWeight="Medium"
+                                                 Foreground="#24292F"
+                                                 TextTrimming="CharacterEllipsis">
+                                            <TextBlock.Effect>
+                                                <DropShadowEffect Color="White" BlurRadius="1" ShadowDepth="0.5" Opacity="0.8"/>
+                                            </TextBlock.Effect>
+                                        </TextBlock>
                                         
-                                        <!-- Close button -->
+                                        <!-- Enhanced close button -->
                                         <Button x:Name="CloseButton"
-                                              Grid.Column="2" 
-                                              Content="×" 
-                                              FontSize="14"
+                                              Grid.Column="3" 
+                                              Content="✕" 
+                                              FontSize="12"
                                               FontWeight="Bold"
-                                              Width="20" Height="20"
-                                              Margin="4,0,4,0"
+                                              Width="24" Height="24"
+                                              Margin="4,0,8,0"
                                               BorderThickness="0"
                                               Background="Transparent"
-                                              Foreground="#666666"
+                                              Foreground="#656D76"
                                               VerticalAlignment="Center"
                                               Click="TabCloseButton_Click"
                                               ToolTip="Close Tab"
@@ -133,15 +212,44 @@
                                                 <ControlTemplate TargetType="Button">
                                                     <Border x:Name="CloseButtonBorder"
                                                           Background="Transparent"
-                                                          CornerRadius="10"
-                                                          Padding="2">
+                                                          CornerRadius="12"
+                                                          Padding="4">
                                                         <ContentPresenter HorizontalAlignment="Center" 
                                                                         VerticalAlignment="Center"/>
+                                                        <Border.Effect>
+                                                            <DropShadowEffect x:Name="CloseButtonShadow" 
+                                                                            Color="#FF000000" 
+                                                                            BlurRadius="3" 
+                                                                            ShadowDepth="1" 
+                                                                            Opacity="0"/>
+                                                        </Border.Effect>
                                                     </Border>
                                                     <ControlTemplate.Triggers>
                                                         <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="CloseButtonBorder" Property="Background" Value="#E81123"/>
-                                                            <Setter Property="Foreground" Value="White"/>
+                                                            <Trigger.EnterActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard>
+                                                                        <ColorAnimation Storyboard.TargetName="CloseButtonBorder"
+                                                                                      Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                                      To="#E53E3E" Duration="0:0:0.15"/>
+                                                                        <ColorAnimation Storyboard.TargetProperty="(TextBlock.Foreground).(SolidColorBrush.Color)"
+                                                                                      To="White" Duration="0:0:0.15"/>
+                                                                                                                                <!-- Shadow animation removed to prevent dependency object errors -->
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </Trigger.EnterActions>
+                                                            <Trigger.ExitActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard>
+                                                                        <ColorAnimation Storyboard.TargetName="CloseButtonBorder"
+                                                                                      Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                                      To="Transparent" Duration="0:0:0.15"/>
+                                                                        <ColorAnimation Storyboard.TargetProperty="(TextBlock.Foreground).(SolidColorBrush.Color)"
+                                                                                      To="#656D76" Duration="0:0:0.15"/>
+                                                                                                                                <!-- Shadow animation removed to prevent dependency object errors -->
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </Trigger.ExitActions>
                                                         </Trigger>
                                                     </ControlTemplate.Triggers>
                                                 </ControlTemplate>
@@ -151,18 +259,20 @@
                                 </Border>
                                 
                                 <ControlTemplate.Triggers>
-                                    <!-- Selected tab -->
+                                    <!-- Selected tab with enhanced styling -->
                                     <Trigger Property="IsSelected" Value="True">
-                                        <Setter TargetName="TabBorder" Property="Background" Value="White"/>
-                                        <Setter TargetName="TabBorder" Property="BorderBrush" Value="#0078D4"/>
-                                        <Setter TargetName="TabBorder" Property="BorderThickness" Value="1,2,1,0"/>
-                                        <Setter TargetName="TabTitle" Property="Foreground" Value="#0078D4"/>
+                                        <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource TabActiveGradient}"/>
+                                        <Setter TargetName="TabBorder" Property="BorderBrush" Value="#0969DA"/>
+                                        <Setter TargetName="TabBorder" Property="BorderThickness" Value="1,3,1,0"/>
+                                        <Setter TargetName="TabTitle" Property="Foreground" Value="#0969DA"/>
                                         <Setter TargetName="TabTitle" Property="FontWeight" Value="SemiBold"/>
-                                        <Setter Property="Panel.ZIndex" Value="1"/>
+                                        <!-- Enhanced shadow effects applied to the border's effect -->
+                                        <Setter Property="Panel.ZIndex" Value="100"/>
                                     </Trigger>
                                     
-                                    <!-- Hover effect -->
+                                    <!-- Enhanced hover effect -->
                                     <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource TabHoverGradient}"/>
                                         <Trigger.EnterActions>
                                             <BeginStoryboard Storyboard="{StaticResource TabHoverStoryboard}"/>
                                         </Trigger.EnterActions>
@@ -171,11 +281,18 @@
                                         </Trigger.ExitActions>
                                     </Trigger>
                                     
-                                    <!-- Hibernated tab -->
+                                    <!-- Hibernated tab with enhanced styling -->
                                     <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="Hibernated">
                                         <Setter TargetName="HibernationIndicator" Property="Visibility" Value="Visible"/>
-                                        <Setter TargetName="TabTitle" Property="Foreground" Value="#999999"/>
+                                        <Setter TargetName="TabTitle" Property="Foreground" Value="#8B949E"/>
                                         <Setter TargetName="TabTitle" Property="FontStyle" Value="Italic"/>
+                                        <Setter TargetName="TabBorder" Property="Opacity" Value="0.7"/>
+                                        <DataTrigger.EnterActions>
+                                            <BeginStoryboard Storyboard="{StaticResource TabHibernateFadeStoryboard}"/>
+                                        </DataTrigger.EnterActions>
+                                        <DataTrigger.ExitActions>
+                                            <BeginStoryboard Storyboard="{StaticResource TabRestoreStoryboard}"/>
+                                        </DataTrigger.ExitActions>
                                     </DataTrigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
@@ -183,9 +300,9 @@
                     </Setter>
                     <Setter Property="Padding" Value="0"/>
                     <Setter Property="Margin" Value="0"/>
-                    <Setter Property="MinWidth" Value="120"/>
-                    <Setter Property="MaxWidth" Value="240"/>
-                    <Setter Property="Height" Value="32"/>
+                    <Setter Property="MinWidth" Value="140"/>
+                    <Setter Property="MaxWidth" Value="280"/>
+                    <Setter Property="Height" Value="38"/>
                     <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
                     <Setter Property="RenderTransform">
                         <Setter.Value>
@@ -198,7 +315,7 @@
                 </Style>
             </TabControl.Resources>
 
-            <!-- Tab Control Header (Right-Side Controls) -->
+            <!-- Tab Control Header with Modern Design -->
             <TabControl.Template>
                 <ControlTemplate TargetType="{x:Type TabControl}">
                     <Grid>
@@ -207,150 +324,229 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
-                        <!-- Tab Header with Extra Buttons -->
-                        <Grid Grid.Row="0" Background="#F3F3F3">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
+                        <!-- Enhanced Tab Header with Glass Effect -->
+                        <Border Grid.Row="0" 
+                              Background="#F6F8FA"
+                              BorderBrush="#D0D7DE"
+                              BorderThickness="0,0,0,1">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="1" BlurRadius="3" Opacity="0.08"/>
+                            </Border.Effect>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
 
-                            <!-- Tab Headers -->
-                            <TabPanel x:Name="HeaderPanel" 
-                                     Grid.Column="0"
-                                     Panel.ZIndex="1" 
-                                     IsItemsHost="True" 
-                                     KeyboardNavigation.TabIndex="1"
-                                     Background="Transparent" />
+                                <!-- Tab Headers -->
+                                <TabPanel x:Name="HeaderPanel" 
+                                         Grid.Column="0"
+                                         Panel.ZIndex="1" 
+                                         IsItemsHost="True" 
+                                         KeyboardNavigation.TabIndex="1"
+                                         Background="Transparent" 
+                                         Margin="8,0,0,0"/>
 
-                            <!-- Right-side Buttons -->
-                            <StackPanel Grid.Column="1" 
-                                       Orientation="Horizontal" 
-                                       VerticalAlignment="Center" 
-                                       Margin="5,2">
-                                <!-- Add Tab Button -->
-                                <Button x:Name="AddTabButton" 
-                                       Content="+" 
-                                       ToolTip="Open a new tab"
-                                       Click="AddTabButton_Click"
-                                       Width="28" 
-                                       Height="28" 
-                                       Margin="3,0"
-                                       BorderThickness="1"
-                                       BorderBrush="#CCCCCC"
-                                       Background="White"
-                                       FontSize="16"
-                                       FontWeight="Bold"
-                                       Foreground="#666666">
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="#E8F4F8"/>
-                                                    <Setter Property="BorderBrush" Value="#0078D4"/>
-                                                </Trigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
+                                <!-- Enhanced Right-side Buttons -->
+                                <StackPanel Grid.Column="1" 
+                                           Orientation="Horizontal" 
+                                           VerticalAlignment="Center" 
+                                           Margin="8,6">
+                                    <!-- Ultra-Modern Add Tab Button -->
+                                    <Button x:Name="AddTabButton" 
+                                           Content="＋" 
+                                           ToolTip="Open a new tab"
+                                           Click="AddTabButton_Click"
+                                           Width="32" 
+                                           Height="32" 
+                                           Margin="4,0"
+                                           FontSize="16"
+                                           FontWeight="Normal"
+                                           Style="{x:Null}">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="ButtonBorder"
+                                                      Background="#FFFFFF"
+                                                      BorderBrush="#D0D7DE"
+                                                      BorderThickness="1.5"
+                                                      CornerRadius="8"
+                                                      Padding="0">
+                                                    <Border.Effect>
+                                                        <DropShadowEffect x:Name="ButtonShadow" 
+                                                                        Color="#FF000000" 
+                                                                        Direction="270" 
+                                                                        ShadowDepth="2" 
+                                                                        BlurRadius="4" 
+                                                                        Opacity="0.1"/>
+                                                    </Border.Effect>
+                                                    <ContentPresenter HorizontalAlignment="Center" 
+                                                                    VerticalAlignment="Center"
+                                                                    TextElement.Foreground="#24292F"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Trigger.EnterActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <ColorAnimation Storyboard.TargetName="ButtonBorder"
+                                                                                  Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                                  To="#F6F8FA" Duration="0:0:0.15"/>
+                                                                    <ColorAnimation Storyboard.TargetName="ButtonBorder"
+                                                                                  Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                                                                  To="#0969DA" Duration="0:0:0.15"/>
+                                                                    <!-- Shadow animations removed to prevent dependency object errors -->
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </Trigger.EnterActions>
+                                                        <Trigger.ExitActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <ColorAnimation Storyboard.TargetName="ButtonBorder"
+                                                                                  Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                                  To="#FFFFFF" Duration="0:0:0.15"/>
+                                                                    <ColorAnimation Storyboard.TargetName="ButtonBorder"
+                                                                                  Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                                                                  To="#D0D7DE" Duration="0:0:0.15"/>
+                                                                    <!-- Shadow animations removed to prevent dependency object errors -->
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </Trigger.ExitActions>
+                                                    </Trigger>
+                                                    <Trigger Property="IsPressed" Value="True">
+                                                        <Setter TargetName="ButtonBorder" Property="Background" Value="#F0F7FF"/>
+                                                        <!-- Note: ButtonShadow effect cannot be targeted from here due to scope -->
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
 
-                                <!-- Toggle Pinned Panel Button -->
-                                <Button x:Name="TogglePinnedButton" 
-                                       ToolTip="Toggle Pinned Panel"
-                                       Click="TogglePinnedPanel_Click"
-                                       Width="28" 
-                                       Height="28" 
-                                       Margin="3,0"
-                                       BorderThickness="1"
-                                       BorderBrush="#CCCCCC"
-                                       Background="White">
-                                    <Image Source="/Assets/Icons/pin.svg" Width="16" Height="16"/>
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="#E8F4F8"/>
-                                                    <Setter Property="BorderBrush" Value="#0078D4"/>
-                                                </Trigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
+                                    <!-- Apply the same modern styling to other buttons -->
+                                    <Button x:Name="TogglePinnedButton" 
+                                           ToolTip="Toggle Pinned Panel"
+                                           Click="TogglePinnedPanel_Click"
+                                           Width="32" 
+                                           Height="32" 
+                                           Margin="4,0"
+                                           Style="{x:Null}">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="ButtonBorder"
+                                                      Background="#FFFFFF"
+                                                      BorderBrush="#D0D7DE"
+                                                      BorderThickness="1.5"
+                                                      CornerRadius="8"
+                                                      Padding="6">
+                                                    <Border.Effect>
+                                                        <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="2" BlurRadius="4" Opacity="0.1"/>
+                                                    </Border.Effect>
+                                                    <Image Source="/Assets/Icons/pin.svg" Width="16" Height="16"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="ButtonBorder" Property="Background" Value="#F6F8FA"/>
+                                                        <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#0969DA"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
 
-                                <!-- Toggle Bookmarks Button -->
-                                <Button x:Name="ToggleBookmarksButton" 
-                                       ToolTip="Toggle Bookmarks Panel"
-                                       Click="ToggleBookmarksPanel_Click"
-                                       Width="28" 
-                                       Height="28" 
-                                       Margin="3,0"
-                                       BorderThickness="1"
-                                       BorderBrush="#CCCCCC"
-                                       Background="White">
-                                    <Image Source="/Assets/Icons/star.svg" Width="16" Height="16"/>
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="#E8F4F8"/>
-                                                    <Setter Property="BorderBrush" Value="#0078D4"/>
-                                                </Trigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
+                                    <Button x:Name="ToggleBookmarksButton" 
+                                           ToolTip="Toggle Bookmarks Panel"
+                                           Click="ToggleBookmarksPanel_Click"
+                                           Width="32" 
+                                           Height="32" 
+                                           Margin="4,0"
+                                           Style="{x:Null}">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="ButtonBorder"
+                                                      Background="#FFFFFF"
+                                                      BorderBrush="#D0D7DE"
+                                                      BorderThickness="1.5"
+                                                      CornerRadius="8"
+                                                      Padding="6">
+                                                    <Border.Effect>
+                                                        <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="2" BlurRadius="4" Opacity="0.1"/>
+                                                    </Border.Effect>
+                                                    <Image Source="/Assets/Icons/star.svg" Width="16" Height="16"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="ButtonBorder" Property="Background" Value="#F6F8FA"/>
+                                                        <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#0969DA"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
 
-                                <!-- Toggle Procore Links Button -->
-                                <Button x:Name="ToggleProcoreButton" 
-                                       ToolTip="Toggle Procore Links Panel"
-                                       Click="ToggleProcorePanel_Click"
-                                       Width="28" 
-                                       Height="28" 
-                                       Margin="3,0"
-                                       BorderThickness="1"
-                                       BorderBrush="#CCCCCC"
-                                       Background="White">
-                                    <Image Source="/Assets/Icons/link.svg" Width="16" Height="16"/>
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="#E8F4F8"/>
-                                                    <Setter Property="BorderBrush" Value="#0078D4"/>
-                                                </Trigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
+                                    <Button x:Name="ToggleProcoreButton" 
+                                           ToolTip="Toggle Procore Links Panel"
+                                           Click="ToggleProcorePanel_Click"
+                                           Width="32" 
+                                           Height="32" 
+                                           Margin="4,0"
+                                           Style="{x:Null}">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="ButtonBorder"
+                                                      Background="#FFFFFF"
+                                                      BorderBrush="#D0D7DE"
+                                                      BorderThickness="1.5"
+                                                      CornerRadius="8"
+                                                      Padding="6">
+                                                    <Border.Effect>
+                                                        <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="2" BlurRadius="4" Opacity="0.1"/>
+                                                    </Border.Effect>
+                                                    <Image Source="/Assets/Icons/link.svg" Width="16" Height="16"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="ButtonBorder" Property="Background" Value="#F6F8FA"/>
+                                                        <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#0969DA"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
 
-                                <!-- Toggle To-Do Panel Button -->
-                                <Button x:Name="ToggleTodoButton" 
-                                       ToolTip="Toggle To-Do Panel"
-                                       Click="ToggleTodoPanel_Click"
-                                       Width="28" 
-                                       Height="28" 
-                                       Margin="3,0"
-                                       BorderThickness="1"
-                                       BorderBrush="#CCCCCC"
-                                       Background="White">
-                                    <Image Source="/Assets/Icons/list-todo.svg" Width="16" Height="16"/>
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="#E8F4F8"/>
-                                                    <Setter Property="BorderBrush" Value="#0078D4"/>
-                                                </Trigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
-                            </StackPanel>
-                        </Grid>
+                                    <Button x:Name="ToggleTodoButton" 
+                                           ToolTip="Toggle To-Do Panel"
+                                           Click="ToggleTodoPanel_Click"
+                                           Width="32" 
+                                           Height="32" 
+                                           Margin="4,0"
+                                           Style="{x:Null}">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="ButtonBorder"
+                                                      Background="#FFFFFF"
+                                                      BorderBrush="#D0D7DE"
+                                                      BorderThickness="1.5"
+                                                      CornerRadius="8"
+                                                      Padding="6">
+                                                    <Border.Effect>
+                                                        <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="2" BlurRadius="4" Opacity="0.1"/>
+                                                    </Border.Effect>
+                                                    <Image Source="/Assets/Icons/list-todo.svg" Width="16" Height="16"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="ButtonBorder" Property="Background" Value="#F6F8FA"/>
+                                                        <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#0969DA"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
 
-                        <!-- Tab Content -->
+                        <!-- Enhanced Tab Content Area -->
                         <Border Grid.Row="1" 
-                               BorderThickness="0,1,0,0" 
-                               BorderBrush="#CCCCCC" 
                                Background="{TemplateBinding Background}"
                                Padding="{TemplateBinding Padding}">
                             <ContentPresenter x:Name="PART_SelectedContentHost" 

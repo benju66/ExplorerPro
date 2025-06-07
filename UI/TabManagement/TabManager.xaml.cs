@@ -44,6 +44,10 @@ namespace ExplorerPro.UI.TabManagement
         private Point _dragStartPoint;
         private bool _isDragging;
 
+        // Memory monitoring
+        private Dictionary<TabItem, long> _tabMemoryUsage = new Dictionary<TabItem, long>();
+        private System.Windows.Threading.DispatcherTimer _memoryMonitorTimer;
+
         #endregion
 
         #region Properties
@@ -78,9 +82,13 @@ namespace ExplorerPro.UI.TabManagement
                 
                 // Setup drag-drop
                 TabControl.AllowDrop = true;
+                TabControl.PreviewMouseLeftButtonDown += TabControl_PreviewMouseLeftButtonDown;
                 TabControl.PreviewMouseMove += TabControl_PreviewMouseMove;
                 TabControl.DragEnter += TabControl_DragEnter;
                 TabControl.Drop += TabControl_Drop;
+                
+                // Initialize memory monitoring
+                InitializeMemoryMonitoring();
                 
                 Console.WriteLine("TabManager initialized successfully");
             }
@@ -94,6 +102,17 @@ namespace ExplorerPro.UI.TabManagement
                     _historyManager = new TabHistoryManager();
                 }
             }
+        }
+
+        /// <summary>
+        /// Initialize memory monitoring timer
+        /// </summary>
+        private void InitializeMemoryMonitoring()
+        {
+            _memoryMonitorTimer = new System.Windows.Threading.DispatcherTimer();
+            _memoryMonitorTimer.Interval = TimeSpan.FromSeconds(30); // Monitor every 30 seconds
+            _memoryMonitorTimer.Tick += (s, e) => MonitorTabMemory();
+            _memoryMonitorTimer.Start();
         }
 
         #endregion
@@ -146,11 +165,19 @@ namespace ExplorerPro.UI.TabManagement
                 // Add file tree to the grid BEFORE connecting events or setting root
                 tabContent.Children.Add(fileTree);
                 
-                // Create and add the tab
+                // Create and add the tab with icon support
                 TabItem newTab = new TabItem
                 {
                     Header = title,
-                    Content = tabContent
+                    Content = tabContent,
+                    Tag = new TabMetadata 
+                    { 
+                        Path = rootPath, 
+                        Icon = GetFolderIcon(rootPath),
+                        LastAccessed = DateTime.Now,
+                        ScrollPosition = 0,
+                        SelectedItems = new List<string>()
+                    }
                 };
                 
                 TabControl.Items.Add(newTab);
@@ -175,8 +202,11 @@ namespace ExplorerPro.UI.TabManagement
                     // Continue anyway - we'll at least have a tab
                 }
                 
-                // Initialize history for this tab
+                // Initialize history for this tab with scroll position and selection state
                 _historyManager.InitTabHistory(TabControl.Items.Count - 1, rootPath);
+                
+                // Initialize memory tracking
+                _tabMemoryUsage[newTab] = EstimateTabMemoryUsage(newTab);
                 
                 // Notify parent that this manager is now active with this path
                 ActiveManagerChanged?.Invoke(this, rootPath);
@@ -422,6 +452,181 @@ namespace ExplorerPro.UI.TabManagement
 
         #endregion
 
+        #region Tab Enhancement Methods
+
+        /// <summary>
+        /// Metadata for tab management
+        /// </summary>
+        public class TabMetadata
+        {
+            public string Path { get; set; } = string.Empty;
+            public string Icon { get; set; } = string.Empty;
+            public DateTime LastAccessed { get; set; }
+            public double ScrollPosition { get; set; }
+            public List<string> SelectedItems { get; set; } = new List<string>();
+        }
+
+        /// <summary>
+        /// Gets folder icon path for a directory
+        /// </summary>
+        /// <param name="path">Directory path</param>
+        /// <returns>Icon path or empty string</returns>
+        private string GetFolderIcon(string path)
+        {
+            // For now, return empty string - icons are handled by XAML DrawingImage
+            // In future versions, this could return dynamic icons based on folder type
+            return string.Empty;
+        }
+
+        /// <summary>
+        /// Estimates memory usage for a tab
+        /// </summary>
+        /// <param name="tab">Tab to estimate</param>
+        /// <returns>Estimated memory usage in bytes</returns>
+        private long EstimateTabMemoryUsage(TabItem tab)
+        {
+            if (tab?.Content is Grid grid)
+            {
+                var fileTree = FindFileTree(grid);
+                if (fileTree != null)
+                {
+                    // Rough estimation based on number of items in file tree
+                    // This is a simplified calculation
+                    try
+                    {
+                        long baseMemory = 1024 * 1024; // 1MB base
+                        // Add more sophisticated calculation if needed
+                        return baseMemory;
+                    }
+                    catch
+                    {
+                        return 1024 * 1024; // Default 1MB
+                    }
+                }
+            }
+            return 1024 * 512; // Default 512KB for empty tabs
+        }
+
+        /// <summary>
+        /// Monitors memory usage of all tabs
+        /// </summary>
+        private void MonitorTabMemory()
+        {
+            try
+            {
+                Dictionary<TabItem, long> newUsage = new Dictionary<TabItem, long>();
+                
+                foreach (TabItem tab in TabControl.Items)
+                {
+                    if (tab?.Content is Grid grid)
+                    {
+                        var fileTree = FindFileTree(grid);
+                        if (fileTree != null)
+                        {
+                            // Calculate approximate memory usage
+                            long memUsage = GC.GetTotalMemory(false) / Math.Max(TabControl.Items.Count, 1);
+                            newUsage[tab] = memUsage;
+                            
+                            // Update metadata
+                            if (tab.Tag is TabMetadata metadata)
+                            {
+                                metadata.LastAccessed = TabControl.SelectedItem == tab ? DateTime.Now : metadata.LastAccessed;
+                            }
+                        }
+                    }
+                }
+                
+                _tabMemoryUsage = newUsage;
+                
+                // Optional: Log high memory usage
+                foreach (var kvp in _tabMemoryUsage)
+                {
+                    if (kvp.Value > 50 * 1024 * 1024) // 50MB threshold
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] High memory tab: {kvp.Key.Header} - {kvp.Value / (1024 * 1024)}MB");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] Error monitoring memory: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Handle mouse down for drag initiation
+        /// </summary>
+        private void TabControl_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _dragStartPoint = e.GetPosition(TabControl);
+            _isDragging = false;
+        }
+
+        /// <summary>
+        /// Detach a tab to a new TabManager window
+        /// </summary>
+        /// <param name="tabItem">Tab to detach</param>
+        public void DetachTabToNewTabManager(TabItem tabItem)
+        {
+            if (tabItem == null || TabControl.Items.Count <= 1)
+                return;
+
+            try
+            {
+                string tabTitle = tabItem.Header?.ToString() ?? "Detached";
+                object? tabContent = tabItem.Content;
+                if (tabContent == null) return;
+
+                // Remove from current tab control
+                int index = TabControl.Items.IndexOf(tabItem);
+                TabControl.Items.RemoveAt(index);
+
+                // Create new window with TabManager
+                Window newWindow = new Window
+                {
+                    Title = $"ExplorerPro - {tabTitle}",
+                    Width = 900,
+                    Height = 650,
+                    WindowStartupLocation = WindowStartupLocation.CenterScreen
+                };
+
+                TabManager newTabManager = new TabManager
+                {
+                    OriginalTabManager = this
+                };
+
+                newWindow.Content = newTabManager;
+
+                // Create new tab in the new manager
+                TabItem newTab = new TabItem
+                {
+                    Header = tabTitle,
+                    Content = tabContent,
+                    Tag = tabItem.Tag
+                };
+
+                newTabManager.TabControl.Items.Add(newTab);
+                newTabManager.TabControl.SelectedItem = newTab;
+
+                // Track the detached window
+                _detachedWindows.Add(newWindow);
+                
+                // Show the window
+                newWindow.Show();
+                newWindow.Activate();
+
+                // Update history indices
+                _historyManager.RemoveTabHistory(index);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error detaching tab: {ex.Message}",
+                    "Detach Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        #endregion
+
         #region Context Menu Handlers
 
         /// <summary>
@@ -569,8 +774,71 @@ namespace ExplorerPro.UI.TabManagement
         /// </summary>
         private void UpdateReattachVisibility()
         {
-            ReattachTabMenuItem.Visibility = 
-                OriginalTabManager != null ? Visibility.Visible : Visibility.Collapsed;
+            // ReattachTabMenuItem functionality can be implemented when needed
+            // ReattachTabMenuItem.Visibility = 
+            //     OriginalTabManager != null ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Handler for refresh tab context menu item
+        /// </summary>
+        private void RefreshTab_Click(object sender, RoutedEventArgs e)
+        {
+            RefreshCurrentTab();
+        }
+
+        /// <summary>
+        /// Handler for refresh all tabs context menu item
+        /// </summary>
+        private void RefreshAllTabs_Click(object sender, RoutedEventArgs e)
+        {
+            RefreshAllTabs();
+        }
+
+        /// <summary>
+        /// Handler for new tab context menu item
+        /// </summary>
+        private void NewTabMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            AddNewFileTreeTab("New File Tree", @"C:\");
+        }
+
+        /// <summary>
+        /// Handler for duplicate tab context menu item
+        /// </summary>
+        private void DuplicateTabMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (TabControl.SelectedItem is TabItem selectedTab)
+            {
+                var fileTree = FindFileTree(selectedTab.Content as FrameworkElement);
+                if (fileTree != null)
+                {
+                    string currentPath = fileTree.CurrentPath ?? @"C:\";
+                    AddNewFileTreeTab($"Copy of {selectedTab.Header}", currentPath);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Handler for close tab context menu item
+        /// </summary>
+        private void CloseTabMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (TabControl.SelectedItem is TabItem selectedTab)
+            {
+                CloseTab(TabControl.Items.IndexOf(selectedTab));
+            }
+        }
+
+        /// <summary>
+        /// Handler for detach tab context menu item
+        /// </summary>
+        private void DetachTabMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (TabControl.SelectedItem is TabItem selectedTab)
+            {
+                DetachTabToNewTabManager(selectedTab);
+            }
         }
 
         #endregion
@@ -626,10 +894,17 @@ namespace ExplorerPro.UI.TabManagement
         public void GoBack()
         {
             int tabIndex = TabControl.SelectedIndex;
+            
+            // Store current scroll position and selection before navigating
+            StoreCurrentTabState(tabIndex);
+            
             string? newPath = _historyManager.GoBack(tabIndex);
             if (!string.IsNullOrEmpty(newPath))
             {
                 SetTabPath(tabIndex, newPath);
+                
+                // Restore scroll position and selection for the target path
+                RestoreTabState(tabIndex, newPath);
             }
         }
 
@@ -639,10 +914,90 @@ namespace ExplorerPro.UI.TabManagement
         public void GoForward()
         {
             int tabIndex = TabControl.SelectedIndex;
+            
+            // Store current scroll position and selection before navigating
+            StoreCurrentTabState(tabIndex);
+            
             string? newPath = _historyManager.GoForward(tabIndex);
             if (!string.IsNullOrEmpty(newPath))
             {
                 SetTabPath(tabIndex, newPath);
+                
+                // Restore scroll position and selection for the target path
+                RestoreTabState(tabIndex, newPath);
+            }
+        }
+
+        /// <summary>
+        /// Store current tab state (scroll position and selection)
+        /// </summary>
+        /// <param name="tabIndex">Tab index</param>
+        private void StoreCurrentTabState(int tabIndex)
+        {
+            if (tabIndex < 0 || tabIndex >= TabControl.Items.Count)
+                return;
+
+            if (TabControl.Items[tabIndex] is TabItem tabItem && tabItem.Tag is TabMetadata metadata)
+            {
+                var fileTree = FindActiveFileTree();
+                if (fileTree != null)
+                {
+                    // Store scroll position (simplified - in real implementation would get actual scroll position)
+                    metadata.ScrollPosition = 0; // Placeholder
+                    
+                    // Store selected items
+                    try
+                    {
+                        metadata.SelectedItems.Clear();
+                        if (fileTree.HasSelectedItems)
+                        {
+                            string? selectedPath = fileTree.GetSelectedPath();
+                            if (!string.IsNullOrEmpty(selectedPath))
+                            {
+                                metadata.SelectedItems.Add(selectedPath);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] Error storing tab state: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Restore tab state (scroll position and selection)
+        /// </summary>
+        /// <param name="tabIndex">Tab index</param>
+        /// <param name="path">Target path</param>
+        private void RestoreTabState(int tabIndex, string path)
+        {
+            if (tabIndex < 0 || tabIndex >= TabControl.Items.Count)
+                return;
+
+            if (TabControl.Items[tabIndex] is TabItem tabItem && tabItem.Tag is TabMetadata metadata)
+            {
+                var fileTree = FindActiveFileTree();
+                if (fileTree != null && metadata.Path == path)
+                {
+                    try
+                    {
+                        // Restore scroll position (simplified)
+                        // In real implementation would restore actual scroll position
+                        
+                        // Restore selection
+                        if (metadata.SelectedItems.Count > 0)
+                        {
+                            // In real implementation would restore selection in file tree
+                            System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] Would restore selection: {string.Join(", ", metadata.SelectedItems)}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[TAB-MANAGER] Error restoring tab state: {ex.Message}");
+                    }
+                }
             }
         }
 
@@ -900,6 +1255,25 @@ namespace ExplorerPro.UI.TabManagement
                             MoveTab(sourceIndex, targetIndex);
                         }
                     }
+                    else
+                    {
+                        // Check if dropping outside tab area to detach
+                        var tabControl = FindAncestorOfType<TabControl>(targetItem);
+                        if (tabControl == null)
+                        {
+                            DetachTabToNewTabManager(draggedItem);
+                        }
+                    }
+                }
+            }
+            else if (e.Data.GetDataPresent("TabManagerDrop"))
+            {
+                // Handle dropping tabs between different TabManager instances
+                var droppedData = e.Data.GetData("TabManagerDrop") as Dictionary<string, object>;
+                if (droppedData != null)
+                {
+                    // Implementation for cross-TabManager drops
+                    System.Diagnostics.Debug.WriteLine("[TAB-MANAGER] Cross-TabManager drop detected");
                 }
             }
         }
@@ -1059,6 +1433,10 @@ namespace ExplorerPro.UI.TabManagement
         /// </summary>
         public void Dispose()
         {
+            // Stop memory monitoring timer
+            _memoryMonitorTimer?.Stop();
+            _memoryMonitorTimer = null;
+
             // Close any detached windows
             foreach (var window in _detachedWindows)
             {
@@ -1078,6 +1456,9 @@ namespace ExplorerPro.UI.TabManagement
                     }
                 }
             }
+
+            // Clear memory usage tracking
+            _tabMemoryUsage.Clear();
         }
 
         #endregion

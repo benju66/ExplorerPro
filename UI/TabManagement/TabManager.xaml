@@ -8,48 +8,241 @@
              d:DesignHeight="450" d:DesignWidth="800">
     
     <UserControl.Resources>
-        <!-- Styles for tabs -->
-        <Style x:Key="TabItemStyle" TargetType="TabItem">
-            <Setter Property="Padding" Value="10,4" />
-            <Setter Property="HeaderTemplate">
-                <Setter.Value>
-                    <DataTemplate>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            
-                            <TextBlock Grid.Column="0" Text="{Binding}" VerticalAlignment="Center" />
-                            
-                            <Button Grid.Column="1" 
-                                    Content="×" 
-                                    FontWeight="Bold"
-                                    Margin="5,0,0,0" 
-                                    Padding="2,0"
-                                    Background="Transparent"
-                                    BorderThickness="0"
-                                    VerticalAlignment="Center"
-                                    Click="CloseTabButton_Click"/>
-                        </Grid>
-                    </DataTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <!-- Ultra-Modern Gradients and Brushes -->
+        <LinearGradientBrush x:Key="TabActiveGradient" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#FFFFFF" Offset="0"/>
+            <GradientStop Color="#F8F9FA" Offset="1"/>
+        </LinearGradientBrush>
+        
+        <LinearGradientBrush x:Key="TabHoverGradient" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#F0F7FF" Offset="0"/>
+            <GradientStop Color="#E3F2FD" Offset="1"/>
+        </LinearGradientBrush>
+        
+        <LinearGradientBrush x:Key="TabInactiveGradient" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#FAFAFA" Offset="0"/>
+            <GradientStop Color="#F0F0F0" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Enhanced Animation Storyboards -->
+        <Storyboard x:Key="TabHoverStoryboard">
+            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" 
+                           To="1.08" Duration="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <QuadraticEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <!-- DropShadowEffect animations removed to prevent dependency object errors -->
+        </Storyboard>
+        
+        <Storyboard x:Key="TabHoverExitStoryboard">
+            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" 
+                           To="1.0" Duration="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <QuadraticEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <!-- DropShadowEffect animations removed to prevent dependency object errors -->
+        </Storyboard>
+
+        <!-- Modern Icon Resources -->
+        <DrawingImage x:Key="FolderIcon">
+            <DrawingImage.Drawing>
+                <DrawingGroup ClipGeometry="M0,0 V16 H16 V0 H0 Z">
+                    <GeometryDrawing Brush="#FFD700" Geometry="F1 M16,16z M0,0z M2,2L14,2 14,4 2,4z M1,5L15,5 15,14 1,14z"/>
+                    <GeometryDrawing Brush="#FFA500" Geometry="F1 M16,16z M0,0z M2,2L14,2 14,3 2,3z"/>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
     </UserControl.Resources>
     
     <Grid>
         <TabControl x:Name="TabControl"
                    TabStripPlacement="Top"
                    SelectionChanged="TabControl_SelectionChanged"
-                   AllowDrop="True">
+                   AllowDrop="True"
+                   Background="White"
+                   BorderThickness="0"
+                   Style="{x:Null}"
+                   Padding="0"
+                   Margin="0">
             
-            <!-- Set the tab item style -->
+            <!-- Ultra-Modern TabItem Style -->
             <TabControl.ItemContainerStyle>
-                <Style TargetType="TabItem" BasedOn="{StaticResource TabItemStyle}" />
+                <Style TargetType="TabItem">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="TabItem">
+                                <Border x:Name="TabBorder"
+                                      Background="{StaticResource TabInactiveGradient}"
+                                      BorderBrush="#D0D7DE"
+                                      BorderThickness="1,1,1,0"
+                                      CornerRadius="12,12,0,0"
+                                      Margin="2,4,2,0"
+                                      Padding="0"
+                                      RenderTransformOrigin="0.5,0.5">
+                                    <Border.Effect>
+                                        <DropShadowEffect x:Name="TabShadow" 
+                                                        Color="#FF000000" 
+                                                        Direction="270" 
+                                                        ShadowDepth="2" 
+                                                        BlurRadius="6" 
+                                                        Opacity="0.1"/>
+                                    </Border.Effect>
+                                    <Border.RenderTransform>
+                                        <TransformGroup>
+                                            <ScaleTransform/>
+                                            <TranslateTransform/>
+                                        </TransformGroup>
+                                    </Border.RenderTransform>
+                                    
+                                    <!-- Tab content will be provided by ItemTemplate -->
+                                    <ContentPresenter x:Name="ContentSite"
+                                                    VerticalAlignment="Center"
+                                                    HorizontalAlignment="Center"
+                                                    ContentSource="Header"
+                                                    Margin="8,8,8,8"/>
+                                </Border>
+                                
+                                <ControlTemplate.Triggers>
+                                    <!-- Selected tab with enhanced styling -->
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource TabActiveGradient}"/>
+                                        <Setter TargetName="TabBorder" Property="BorderBrush" Value="#0969DA"/>
+                                        <Setter TargetName="TabBorder" Property="BorderThickness" Value="1,3,1,0"/>
+                                        <!-- Enhanced shadow effects applied to the border's effect -->
+                                        <Setter Property="Panel.ZIndex" Value="100"/>
+                                    </Trigger>
+                                    
+                                    <!-- Enhanced hover effect -->
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource TabHoverGradient}"/>
+                                        <Trigger.EnterActions>
+                                            <BeginStoryboard Storyboard="{StaticResource TabHoverStoryboard}"/>
+                                        </Trigger.EnterActions>
+                                        <Trigger.ExitActions>
+                                            <BeginStoryboard Storyboard="{StaticResource TabHoverExitStoryboard}"/>
+                                        </Trigger.ExitActions>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="Margin" Value="0"/>
+                    <Setter Property="MinWidth" Value="140"/>
+                    <Setter Property="MaxWidth" Value="280"/>
+                    <Setter Property="Height" Value="38"/>
+                    <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+                    <Setter Property="RenderTransform">
+                        <Setter.Value>
+                            <TransformGroup>
+                                <ScaleTransform/>
+                                <TranslateTransform/>
+                            </TransformGroup>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
             </TabControl.ItemContainerStyle>
             
-            <!-- Template for the tab control -->
+            <!-- Enhanced tab item template with modern design -->
+            <TabControl.ItemTemplate>
+                <DataTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <!-- Enhanced folder icon -->
+                        <Image Grid.Column="0" 
+                               Width="16" Height="16" 
+                               Margin="4,0,8,0"
+                               VerticalAlignment="Center"
+                               Source="{StaticResource FolderIcon}"/>
+                        
+                        <!-- Enhanced tab title with better typography -->
+                        <TextBlock Grid.Column="1" 
+                                   Text="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Header}" 
+                                   VerticalAlignment="Center"
+                                   FontSize="13"
+                                   FontWeight="Medium"
+                                   Foreground="#24292F"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxWidth="160"
+                                   ToolTip="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Header}">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="White" BlurRadius="1" ShadowDepth="0.5" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                        
+                        <!-- Ultra-modern close button -->
+                        <Button Grid.Column="2" 
+                                Content="✕" 
+                                Margin="8,0,4,0"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                FontWeight="Bold"
+                                Width="24" Height="24"
+                                BorderThickness="0"
+                                Background="Transparent"
+                                Foreground="#656D76"
+                                Click="CloseTabButton_Click"
+                                ToolTip="Close tab"
+                                Style="{x:Null}">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="CloseButtonBorder"
+                                          Background="Transparent"
+                                          CornerRadius="12"
+                                          Padding="4">
+                                        <ContentPresenter HorizontalAlignment="Center" 
+                                                        VerticalAlignment="Center"/>
+                                        <Border.Effect>
+                                            <DropShadowEffect x:Name="CloseButtonShadow" 
+                                                            Color="#FF000000" 
+                                                            BlurRadius="3" 
+                                                            ShadowDepth="1" 
+                                                            Opacity="0"/>
+                                        </Border.Effect>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Trigger.EnterActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <ColorAnimation Storyboard.TargetName="CloseButtonBorder"
+                                                                      Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                      To="#E53E3E" Duration="0:0:0.15"/>
+                                                        <ColorAnimation Storyboard.TargetProperty="(TextBlock.Foreground).(SolidColorBrush.Color)"
+                                                                      To="White" Duration="0:0:0.15"/>
+                                                                                                <!-- Shadow animation removed to prevent dependency object errors -->
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </Trigger.EnterActions>
+                                            <Trigger.ExitActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <ColorAnimation Storyboard.TargetName="CloseButtonBorder"
+                                                                      Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                      To="Transparent" Duration="0:0:0.15"/>
+                                                        <ColorAnimation Storyboard.TargetProperty="(TextBlock.Foreground).(SolidColorBrush.Color)"
+                                                                      To="#656D76" Duration="0:0:0.15"/>
+                                                                                                <!-- Shadow animation removed to prevent dependency object errors -->
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </Trigger.ExitActions>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </Grid>
+                </DataTemplate>
+            </TabControl.ItemTemplate>
+            
+            <!-- Ultra-modern TabControl template -->
             <TabControl.Template>
                 <ControlTemplate TargetType="TabControl">
                     <Grid>
@@ -58,53 +251,131 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         
-                        <!-- Tab headers with add button -->
-                        <Grid Grid.Row="0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            
-                            <!-- Tab headers -->
-                            <TabPanel x:Name="HeaderPanel" 
-                                     Grid.Column="0" 
-                                     IsItemsHost="True"
-                                     Background="Transparent"
-                                     Panel.ZIndex="1"
-                                     KeyboardNavigation.TabIndex="1"/>
-                            
-                            <!-- Add tab button in corner -->
-                            <Button x:Name="AddButton" 
-                                   Grid.Column="1"
-                                   Content="+"
-                                   Width="24" 
-                                   Height="24"
-                                   Margin="5,0"
-                                   VerticalAlignment="Center"
-                                   HorizontalAlignment="Center"
-                                   Click="AddButton_Click"
-                                   ToolTip="Open a new nested tab"/>
-                        </Grid>
+                        <!-- Enhanced tab header with glass effect -->
+                        <Border Grid.Row="0" 
+                              Background="#F6F8FA"
+                              BorderBrush="#D0D7DE"
+                              BorderThickness="0,0,0,1">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="1" BlurRadius="3" Opacity="0.08"/>
+                            </Border.Effect>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <!-- Tab headers -->
+                                <TabPanel x:Name="HeaderPanel" 
+                                         Grid.Column="0" 
+                                         IsItemsHost="True"
+                                         Background="Transparent"
+                                         Panel.ZIndex="1"
+                                         KeyboardNavigation.TabIndex="1"
+                                         Margin="8,0,0,0"/>
+                                
+                                <!-- Ultra-modern add tab button -->
+                                <Button x:Name="AddButton" 
+                                       Grid.Column="1"
+                                       Content="＋"
+                                       Width="32" 
+                                       Height="32"
+                                       Margin="8,6"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center"
+                                       FontSize="16"
+                                       FontWeight="Normal"
+                                       Click="AddButton_Click"
+                                       ToolTip="Add new file tree tab"
+                                       Style="{x:Null}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="ButtonBorder"
+                                                  Background="#FFFFFF"
+                                                  BorderBrush="#D0D7DE"
+                                                  BorderThickness="1.5"
+                                                  CornerRadius="8"
+                                                  Padding="0">
+                                                <Border.Effect>
+                                                    <DropShadowEffect x:Name="ButtonShadow" 
+                                                                    Color="#FF000000" 
+                                                                    Direction="270" 
+                                                                    ShadowDepth="2" 
+                                                                    BlurRadius="4" 
+                                                                    Opacity="0.1"/>
+                                                </Border.Effect>
+                                                <ContentPresenter HorizontalAlignment="Center" 
+                                                                VerticalAlignment="Center"
+                                                                TextElement.Foreground="#24292F"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Trigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <ColorAnimation Storyboard.TargetName="ButtonBorder"
+                                                                              Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                              To="#F6F8FA" Duration="0:0:0.15"/>
+                                                                <ColorAnimation Storyboard.TargetName="ButtonBorder"
+                                                                              Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                                                              To="#0969DA" Duration="0:0:0.15"/>
+                                                                                                                <!-- Shadow animations removed to prevent dependency object errors -->
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.EnterActions>
+                                                    <Trigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <ColorAnimation Storyboard.TargetName="ButtonBorder"
+                                                                              Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                              To="#FFFFFF" Duration="0:0:0.15"/>
+                                                                <ColorAnimation Storyboard.TargetName="ButtonBorder"
+                                                                              Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                                                              To="#D0D7DE" Duration="0:0:0.15"/>
+                                                                                                                <!-- Shadow animations removed to prevent dependency object errors -->
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.ExitActions>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="ButtonBorder" Property="Background" Value="#F0F7FF"/>
+                                                    <!-- Note: ButtonShadow effect cannot be targeted from here due to scope -->
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </Grid>
+                        </Border>
                         
-                        <!-- Tab content -->
+                        <!-- Enhanced content area -->
                         <Border Grid.Row="1" 
-                               BorderThickness="1,0,1,1" 
-                               BorderBrush="#CCCCCC"
-                               Background="{TemplateBinding Background}">
+                               Background="{TemplateBinding Background}"
+                               Padding="0"
+                               Margin="0">
                             <ContentPresenter x:Name="PART_SelectedContentHost" 
-                                            ContentSource="SelectedContent"/>
+                                            ContentSource="SelectedContent"
+                                            Margin="0"/>
                         </Border>
                     </Grid>
                 </ControlTemplate>
             </TabControl.Template>
             
-            <!-- Context menu for tabs -->
+            <!-- Context menu for enhanced functionality -->
             <TabControl.ContextMenu>
                 <ContextMenu>
-                    <MenuItem Header="Detach Tab" Click="DetachTab_Click"/>
-                    <MenuItem x:Name="ReattachTabMenuItem" Header="Reattach to Original" Click="ReattachTab_Click" Visibility="Collapsed"/>
-                    <Separator/>
-                    <MenuItem Header="Split View" Click="SplitView_Click"/>
+                    <MenuItem Header="New File Tree Tab" Click="NewTabMenuItem_Click">
+                        <MenuItem.Icon>
+                            <Image Source="{StaticResource FolderIcon}" Width="16" Height="16"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="Duplicate Tab" Click="DuplicateTabMenuItem_Click" />
+                    <MenuItem Header="Close Tab" Click="CloseTabMenuItem_Click" />
+                    <Separator />
+                    <MenuItem Header="Refresh Tab" Click="RefreshTab_Click" />
+                    <MenuItem Header="Refresh All Tabs" Click="RefreshAllTabs_Click" />
+                    <Separator />
+                    <MenuItem Header="Detach Tab" Click="DetachTabMenuItem_Click" />
                 </ContextMenu>
             </TabControl.ContextMenu>
         </TabControl>

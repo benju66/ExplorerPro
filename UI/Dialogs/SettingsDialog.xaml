@@ -6,19 +6,125 @@
         xmlns:local="clr-namespace:ExplorerPro.UI.Dialogs"
         mc:Ignorable="d"
         Title="Settings" 
-        Height="550" Width="600"
+        Height="600" Width="700"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResize"
-        MinWidth="500" MinHeight="450">
+        MinWidth="600" MinHeight="500"
+        Background="#FAFBFC"
+        BorderBrush="#D0D7DE"
+        BorderThickness="1">
     
-    <Grid Margin="10">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <Window.Resources>
+        <!-- Modern Button Style -->
+        <Style TargetType="Button" x:Key="ModernButtonStyle">
+            <Setter Property="Background" Value="#0969DA"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="2" BlurRadius="4" Opacity="0.1"/>
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#0860CA"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#0757B8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         
-        <!-- Tab Control -->
-        <TabControl x:Name="Tabs" Grid.Row="0">
+        <!-- Secondary Button Style -->
+        <Style TargetType="Button" x:Key="SecondaryButtonStyle">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="#24292F"/>
+            <Setter Property="BorderBrush" Value="#D0D7DE"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#F6F8FA"/>
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#0969DA"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#E3F2FD"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    
+    <!-- Ultra-Modern Dialog Layout -->
+    <Border Background="White" 
+            CornerRadius="12" 
+            Margin="8">
+        <Border.Effect>
+            <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="4" BlurRadius="12" Opacity="0.15"/>
+        </Border.Effect>
+        
+        <Grid Margin="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            
+            <!-- Modern Header -->
+            <Border Grid.Row="0" 
+                    Background="#F6F8FA"
+                    BorderBrush="#D0D7DE"
+                    BorderThickness="0,0,0,1"
+                    CornerRadius="12,12,0,0"
+                    Padding="24,16">
+                <StackPanel>
+                    <TextBlock Text="Settings" 
+                              FontSize="20" 
+                              FontWeight="SemiBold" 
+                              Foreground="#24292F"/>
+                    <TextBlock Text="Customize your ExplorerPro experience" 
+                              FontSize="14" 
+                              Foreground="#656D76" 
+                              Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+            
+            <!-- Tab Control -->
+            <TabControl x:Name="Tabs" 
+                       Grid.Row="1" 
+                       BorderThickness="0"
+                       Background="Transparent"
+                       Margin="0">
             <!-- General Settings Tab -->
             <TabItem Header="General">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -146,25 +252,33 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
-        </TabControl>
-        
-        <!-- Buttons -->
-        <StackPanel Grid.Row="1" 
-                    Orientation="Horizontal" 
-                    HorizontalAlignment="Right" 
-                    Margin="0,10,0,0">
-            <Button x:Name="SaveButton" 
-                    Content="Save" 
-                    Width="80" 
-                    Height="30" 
-                    Margin="0,0,10,0"
-                    Click="SaveButton_Click"/>
-            <Button x:Name="CancelButton" 
-                    Content="Cancel" 
-                    Width="80" 
-                    Height="30" 
-                    Click="CancelButton_Click"
-                    IsCancel="True"/>
-        </StackPanel>
-    </Grid>
+            </TabControl>
+            
+            <!-- Modern Action Buttons -->
+            <Border Grid.Row="2" 
+                    Background="#F6F8FA"
+                    BorderBrush="#D0D7DE"
+                    BorderThickness="0,1,0,0"
+                    CornerRadius="0,0,12,12"
+                    Padding="24,16">
+                <StackPanel Orientation="Horizontal" 
+                           HorizontalAlignment="Right">
+                    <Button x:Name="CancelButton" 
+                            Content="Cancel" 
+                            Width="90" 
+                            Height="36" 
+                            Margin="0,0,12,0"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Click="CancelButton_Click"
+                            IsCancel="True"/>
+                    <Button x:Name="SaveButton" 
+                            Content="Save Settings" 
+                            Width="120" 
+                            Height="36" 
+                            Style="{StaticResource ModernButtonStyle}"
+                            Click="SaveButton_Click"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
 </Window>

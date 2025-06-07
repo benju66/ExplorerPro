@@ -54,6 +54,44 @@ namespace ExplorerPro.UI.TabManagement
         }
 
         /// <summary>
+        /// Push a new path with state information onto the history stack for a tab
+        /// </summary>
+        /// <param name="tabIndex">The tab index</param>
+        /// <param name="path">The path to add</param>
+        /// <param name="scrollPosition">Scroll position</param>
+        /// <param name="selectedItems">Selected items</param>
+        public void PushPathWithState(int tabIndex, string path, double scrollPosition, List<string> selectedItems)
+        {
+            if (_tabHistories.TryGetValue(tabIndex, out TabHistory history))
+            {
+                history.AddPathWithState(path, scrollPosition, selectedItems);
+            }
+            else
+            {
+                // If history doesn't exist for this tab, create it
+                InitTabHistory(tabIndex, path);
+                if (_tabHistories.TryGetValue(tabIndex, out TabHistory newHistory))
+                {
+                    newHistory.UpdateState(scrollPosition, selectedItems);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Get the current history entry with state
+        /// </summary>
+        /// <param name="tabIndex">The tab index</param>
+        /// <returns>History entry with state information</returns>
+        public HistoryEntry? GetCurrentEntry(int tabIndex)
+        {
+            if (_tabHistories.TryGetValue(tabIndex, out TabHistory history))
+            {
+                return history.GetCurrentEntry();
+            }
+            return null;
+        }
+
+        /// <summary>
         /// Navigate back in the history for a tab
         /// </summary>
         /// <param name="tabIndex">The tab index</param>
@@ -233,6 +271,21 @@ namespace ExplorerPro.UI.TabManagement
 
         #endregion
 
+        #region Supporting Classes
+
+        /// <summary>
+        /// Represents a history entry with state information
+        /// </summary>
+        public class HistoryEntry
+        {
+            public string Path { get; set; } = string.Empty;
+            public double ScrollPosition { get; set; }
+            public List<string> SelectedItems { get; set; } = new List<string>();
+            public DateTime Timestamp { get; set; } = DateTime.Now;
+        }
+
+        #endregion
+
         #region TabHistory Class
 
         /// <summary>
@@ -240,7 +293,7 @@ namespace ExplorerPro.UI.TabManagement
         /// </summary>
         private class TabHistory
         {
-            private List<string> _history = new List<string>();
+            private List<HistoryEntry> _history = new List<HistoryEntry>();
             private int _currentIndex = -1;
 
             /// <summary>
@@ -248,6 +301,17 @@ namespace ExplorerPro.UI.TabManagement
             /// </summary>
             /// <param name="path">Path to add</param>
             public void AddPath(string path)
+            {
+                AddPathWithState(path, 0, new List<string>());
+            }
+
+            /// <summary>
+            /// Add a new path with state information to the history
+            /// </summary>
+            /// <param name="path">Path to add</param>
+            /// <param name="scrollPosition">Scroll position</param>
+            /// <param name="selectedItems">Selected items</param>
+            public void AddPathWithState(string path, double scrollPosition, List<string> selectedItems)
             {
                 // If we're in the middle of the history and navigating elsewhere,
                 // truncate the forward history
@@ -257,13 +321,54 @@ namespace ExplorerPro.UI.TabManagement
                 }
                 
                 // Don't add duplicate consecutive entries
-                if (_history.Count > 0 && _history[_history.Count - 1] == path)
+                if (_history.Count > 0 && _history[_history.Count - 1].Path == path)
                 {
+                    // Update the state of the existing entry
+                    _history[_history.Count - 1].ScrollPosition = scrollPosition;
+                    _history[_history.Count - 1].SelectedItems = new List<string>(selectedItems);
+                    _history[_history.Count - 1].Timestamp = DateTime.Now;
                     return;
                 }
                 
-                _history.Add(path);
+                var entry = new HistoryEntry
+                {
+                    Path = path,
+                    ScrollPosition = scrollPosition,
+                    SelectedItems = new List<string>(selectedItems),
+                    Timestamp = DateTime.Now
+                };
+                
+                _history.Add(entry);
                 _currentIndex = _history.Count - 1;
+            }
+
+            /// <summary>
+            /// Update state of current entry
+            /// </summary>
+            /// <param name="scrollPosition">Scroll position</param>
+            /// <param name="selectedItems">Selected items</param>
+            public void UpdateState(double scrollPosition, List<string> selectedItems)
+            {
+                if (_currentIndex >= 0 && _currentIndex < _history.Count)
+                {
+                    _history[_currentIndex].ScrollPosition = scrollPosition;
+                    _history[_currentIndex].SelectedItems = new List<string>(selectedItems);
+                    _history[_currentIndex].Timestamp = DateTime.Now;
+                }
+            }
+
+            /// <summary>
+            /// Get current history entry
+            /// </summary>
+            /// <returns>Current entry or null</returns>
+            public HistoryEntry? GetCurrentEntry()
+            {
+                if (_currentIndex >= 0 && _currentIndex < _history.Count)
+                {
+                    return _history[_currentIndex];
+                }
+                
+                return null;
             }
 
             /// <summary>
@@ -275,7 +380,7 @@ namespace ExplorerPro.UI.TabManagement
                 if (_currentIndex > 0)
                 {
                     _currentIndex--;
-                    return _history[_currentIndex];
+                    return _history[_currentIndex].Path;
                 }
                 
                 return null;
@@ -290,7 +395,7 @@ namespace ExplorerPro.UI.TabManagement
                 if (_currentIndex < _history.Count - 1)
                 {
                     _currentIndex++;
-                    return _history[_currentIndex];
+                    return _history[_currentIndex].Path;
                 }
                 
                 return null;
@@ -304,7 +409,7 @@ namespace ExplorerPro.UI.TabManagement
             {
                 if (_currentIndex >= 0 && _currentIndex < _history.Count)
                 {
-                    return _history[_currentIndex];
+                    return _history[_currentIndex].Path;
                 }
                 
                 return null;

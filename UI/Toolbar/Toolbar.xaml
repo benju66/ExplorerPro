@@ -10,30 +10,166 @@
              d:DesignHeight="40" d:DesignWidth="800">
     
     <UserControl.Resources>
+        <!-- Ultra-Modern Toolbar Button Style -->
         <Style TargetType="Button" x:Key="ToolbarButtonStyle">
-            <Setter Property="Margin" Value="2,0"/>
-            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="Margin" Value="4,0"/>
+            <Setter Property="Padding" Value="0"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
-            <Setter Property="Width" Value="36"/>
-            <Setter Property="Height" Value="36"/>
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="40"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" 
-                                BorderBrush="{TemplateBinding BorderBrush}" 
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Border x:Name="ButtonBorder"
+                                Background="Transparent" 
+                                BorderBrush="Transparent"
+                                BorderThickness="1.5"
+                                CornerRadius="8"
+                                Padding="8">
+                            <Border.Effect>
+                                <DropShadowEffect x:Name="ButtonShadow" 
+                                                Color="#FF000000" 
+                                                Direction="270" 
+                                                ShadowDepth="1" 
+                                                BlurRadius="3" 
+                                                Opacity="0"/>
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                            VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#E5E5E5"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <ColorAnimation Storyboard.TargetName="ButtonBorder"
+                                                          Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                          To="#F6F8FA" Duration="0:0:0.15"/>
+                                            <ColorAnimation Storyboard.TargetName="ButtonBorder"
+                                                          Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                                          To="#D0D7DE" Duration="0:0:0.15"/>
+                                            <DoubleAnimation Storyboard.TargetName="ButtonShadow"
+                                                           Storyboard.TargetProperty="Opacity"
+                                                           To="0.08" Duration="0:0:0.15"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <ColorAnimation Storyboard.TargetName="ButtonBorder"
+                                                          Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                          To="Transparent" Duration="0:0:0.15"/>
+                                            <ColorAnimation Storyboard.TargetName="ButtonBorder"
+                                                          Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                                          To="Transparent" Duration="0:0:0.15"/>
+                                            <DoubleAnimation Storyboard.TargetName="ButtonShadow"
+                                                           Storyboard.TargetProperty="Opacity"
+                                                           To="0" Duration="0:0:0.15"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#CCCCCC"/>
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#E3F2FD"/>
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#0969DA"/>
                             </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Ultra-Modern Search Bar Style -->
+        <Style TargetType="TextBox" x:Key="ModernSearchBarStyle">
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Foreground" Value="#24292F"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#D0D7DE"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="SearchBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <Border.Effect>
+                                <DropShadowEffect x:Name="SearchShadow" 
+                                                Color="#FF000000" 
+                                                Direction="270" 
+                                                ShadowDepth="1" 
+                                                BlurRadius="4" 
+                                                Opacity="0.06"/>
+                            </Border.Effect>
+                            <Grid>
+                                <ScrollViewer x:Name="PART_ContentHost" 
+                                            Margin="{TemplateBinding Padding}"
+                                            Focusable="False"
+                                            HorizontalScrollBarVisibility="Hidden"
+                                            VerticalScrollBarVisibility="Hidden"/>
+                                <TextBlock x:Name="PlaceholderText"
+                                         Text="Search or navigate..."
+                                         Foreground="#656D76"
+                                         FontStyle="Italic"
+                                         Margin="{TemplateBinding Padding}"
+                                         VerticalAlignment="Center"
+                                         IsHitTestVisible="False"
+                                         Opacity="0.8"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <ColorAnimation Storyboard.TargetName="SearchBorder"
+                                                          Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                                          To="#0969DA" Duration="0:0:0.15"/>
+
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <ColorAnimation Storyboard.TargetName="SearchBorder"
+                                                          Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                                          To="#D0D7DE" Duration="0:0:0.15"/>
+
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="SearchBorder" Property="BorderBrush" Value="#0969DA"/>
+                                <Setter TargetName="SearchBorder" Property="BorderThickness" Value="2"/>
+
+                                <Setter TargetName="PlaceholderText" Property="Opacity" Value="0"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="Text" Value=""/>
+                                    <Condition Property="IsFocused" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="PlaceholderText" Property="Visibility" Value="Visible"/>
+                            </MultiTrigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="Text" Value="{x:Null}"/>
+                                    <Condition Property="IsFocused" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="PlaceholderText" Property="Visibility" Value="Visible"/>
+                            </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -41,43 +177,72 @@
         </Style>
     </UserControl.Resources>
     
-    <Grid>
-        <ToolBar Background="Transparent" BorderThickness="0" ToolBarTray.IsLocked="True">
-            <!-- Navigation Buttons -->
-            <Button x:Name="upButton" 
-                    ToolTip="Go up one folder level in the active tab" 
-                    Click="UpButton_Click"
-                    Style="{StaticResource ToolbarButtonStyle}">
-                <Image Source="/Assets/Icons/arrow-up.png" Width="24" Height="24" />
-            </Button>
+    <!-- Ultra-Modern Toolbar with Glass Effect -->
+    <Border Background="#F6F8FA"
+            BorderBrush="#D0D7DE"
+            BorderThickness="0,0,0,1"
+            Padding="12,8">
+        <Border.Effect>
+            <DropShadowEffect Color="#FF000000" Direction="270" ShadowDepth="1" BlurRadius="3" Opacity="0.05"/>
+        </Border.Effect>
+        
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
             
-            <Button x:Name="refreshButton" 
-                    ToolTip="Refresh file tree" 
-                    Click="RefreshButton_Click"
-                    Style="{StaticResource ToolbarButtonStyle}">
-                <Image Source="/Assets/Icons/refresh-cw.png" Width="24" Height="24" />
-            </Button>
+            <!-- Navigation Section -->
+            <StackPanel Grid.Column="0" 
+                       Orientation="Horizontal" 
+                       VerticalAlignment="Center">
+                <Button x:Name="upButton" 
+                        ToolTip="Go up one folder level in the active tab" 
+                        Click="UpButton_Click"
+                        Style="{StaticResource ToolbarButtonStyle}">
+                    <Image Source="/Assets/Icons/arrow-up.png" Width="20" Height="20" />
+                </Button>
+                
+                <Button x:Name="refreshButton" 
+                        ToolTip="Refresh file tree" 
+                        Click="RefreshButton_Click"
+                        Style="{StaticResource ToolbarButtonStyle}">
+                    <Image Source="/Assets/Icons/refresh-cw.png" Width="20" Height="20" />
+                </Button>
+            </StackPanel>
             
-            <!-- Undo/Redo Buttons -->
-            <Button x:Name="undoButton" 
-                    ToolTip="Undo last action" 
-                    Click="UndoButton_Click"
-                    Style="{StaticResource ToolbarButtonStyle}">
-                <Image Source="/Assets/Icons/rotate-ccw.png" Width="24" Height="24" />
-            </Button>
+            <!-- Action Section -->
+            <StackPanel Grid.Column="1" 
+                       Orientation="Horizontal" 
+                       VerticalAlignment="Center"
+                       Margin="12,0,0,0">
+                <!-- Modern separator -->
+                <Rectangle Width="1" Height="24" Fill="#E1E4E8" Margin="0,0,12,0"/>
+                
+                <Button x:Name="undoButton" 
+                        ToolTip="Undo last action" 
+                        Click="UndoButton_Click"
+                        Style="{StaticResource ToolbarButtonStyle}">
+                    <Image Source="/Assets/Icons/rotate-ccw.png" Width="20" Height="20" />
+                </Button>
+                
+                <Button x:Name="redoButton" 
+                        ToolTip="Redo last action" 
+                        Click="RedoButton_Click"
+                        Style="{StaticResource ToolbarButtonStyle}">
+                    <Image Source="/Assets/Icons/rotate-cw.png" Width="20" Height="20" />
+                </Button>
+            </StackPanel>
             
-            <Button x:Name="redoButton" 
-                    ToolTip="Redo last action" 
-                    Click="RedoButton_Click"
-                    Style="{StaticResource ToolbarButtonStyle}">
-                <Image Source="/Assets/Icons/rotate-cw.png" Width="24" Height="24" />
-            </Button>
-            
-            <!-- Search/Address Bar -->
+            <!-- Ultra-Modern Search/Address Bar -->
             <TextBox x:Name="searchBar" 
+                     Grid.Column="2"
                      Width="400" 
-                     Margin="5,0" 
-                     VerticalContentAlignment="Center"
+                     Margin="16,0" 
+                     VerticalAlignment="Center"
+                     Style="{StaticResource ModernSearchBarStyle}"
                      KeyDown="SearchBar_KeyDown"
                      MouseDown="SearchBar_MouseDown"
                      GotFocus="SearchBar_GotFocus"
@@ -94,13 +259,20 @@
                 </TextBox.ContextMenu>
             </TextBox>
             
-            <!-- Settings Button -->
-            <Button x:Name="settingsButton" 
-                    ToolTip="Settings" 
-                    Click="SettingsButton_Click"
-                    Style="{StaticResource ToolbarButtonStyle}">
-                <Image Source="/Assets/Icons/settings.png" Width="24" Height="24" />
-            </Button>
-        </ToolBar>
-    </Grid>
+            <!-- Settings Section -->
+            <StackPanel Grid.Column="3" 
+                       Orientation="Horizontal" 
+                       VerticalAlignment="Center">
+                <!-- Modern separator -->
+                <Rectangle Width="1" Height="24" Fill="#E1E4E8" Margin="0,0,12,0"/>
+                
+                <Button x:Name="settingsButton" 
+                        ToolTip="Settings" 
+                        Click="SettingsButton_Click"
+                        Style="{StaticResource ToolbarButtonStyle}">
+                    <Image Source="/Assets/Icons/settings.png" Width="20" Height="20" />
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
 </UserControl>
