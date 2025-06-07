@@ -48,19 +48,36 @@
             <!-- Dock Panel Container will be populated dynamically in code -->
             <!-- This uses standard DockPanel approach, but we'll implement custom docking behavior -->
             
-            <!-- Left Column -->
-            <Border x:Name="LeftColumnContainer" DockPanel.Dock="Left" Width="200">
+            <!-- Left Column with VS Code-style collapsing -->
+            <Border x:Name="LeftColumnContainer" DockPanel.Dock="Left" Width="200" 
+                    Background="#F6F8FA" BorderBrush="#D0D7DE" BorderThickness="0,0,1,0">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="MinWidth" Value="200"/>
+                        <Style.Triggers>
+                            <Trigger Property="Visibility" Value="Collapsed">
+                                <Setter Property="Width" Value="0"/>
+                                <Setter Property="MinWidth" Value="0"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     
-                    <!-- Pinned Panel will go here -->
+                    <!-- Pinned Panel with modern header -->
                     <Border x:Name="PinnedPanelContainer" Grid.Row="0">
                         <DockPanel>
-                            <TextBlock DockPanel.Dock="Top" Text="Pinned Items" 
-                                      Padding="5" Background="#F0F0F0" FontWeight="Bold"/>
-                            <ContentControl x:Name="PinnedPanelContent"/>
+                            <Border DockPanel.Dock="Top" Background="#E3F2FD" BorderBrush="#D0D7DE" BorderThickness="0,0,0,1">
+                                <TextBlock Text="📌 Pinned Items" 
+                                          Padding="12,8" 
+                                          FontWeight="SemiBold"
+                                          FontSize="13"
+                                          Foreground="#24292F"/>
+                            </Border>
+                            <ContentControl x:Name="PinnedPanelContent" Background="White"/>
                         </DockPanel>
                     </Border>
                 </Grid>
@@ -72,8 +89,20 @@
                          VerticalAlignment="Stretch"
                          Style="{StaticResource SeparatorStyle}"/>
             
-            <!-- Right Column -->
-            <Border x:Name="RightColumnContainer" DockPanel.Dock="Right" Width="200">
+            <!-- Right Column with VS Code-style collapsing -->
+            <Border x:Name="RightColumnContainer" DockPanel.Dock="Right" Width="200"
+                    Background="#F6F8FA" BorderBrush="#D0D7DE" BorderThickness="1,0,0,0">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="MinWidth" Value="200"/>
+                        <Style.Triggers>
+                            <Trigger Property="Visibility" Value="Collapsed">
+                                <Setter Property="Width" Value="0"/>
+                                <Setter Property="MinWidth" Value="0"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*"/>
@@ -83,12 +112,17 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     
-                    <!-- To-Do Panel -->
+                    <!-- To-Do Panel with modern header -->
                     <Border x:Name="ToDoPanelContainer" Grid.Row="0">
                         <DockPanel>
-                            <TextBlock DockPanel.Dock="Top" Text="To-Do" 
-                                      Padding="5" Background="#F0F0F0" FontWeight="Bold"/>
-                            <ContentControl x:Name="ToDoPanelContent"/>
+                            <Border DockPanel.Dock="Top" Background="#FFF3CD" BorderBrush="#D0D7DE" BorderThickness="0,0,0,1">
+                                <TextBlock Text="✅ To-Do" 
+                                          Padding="12,8" 
+                                          FontWeight="SemiBold"
+                                          FontSize="13"
+                                          Foreground="#24292F"/>
+                            </Border>
+                            <ContentControl x:Name="ToDoPanelContent" Background="White"/>
                         </DockPanel>
                     </Border>
                     
@@ -98,12 +132,17 @@
                                  VerticalAlignment="Center"
                                  Style="{StaticResource SeparatorStyle}"/>
                     
-                    <!-- Procore Links Panel -->
+                    <!-- Procore Links Panel with modern header -->
                     <Border x:Name="ProcorePanelContainer" Grid.Row="2" Visibility="Collapsed">
                         <DockPanel>
-                            <TextBlock DockPanel.Dock="Top" Text="Procore Links" 
-                                      Padding="5" Background="#F0F0F0" FontWeight="Bold"/>
-                            <ContentControl x:Name="ProcorePanelContent"/>
+                            <Border DockPanel.Dock="Top" Background="#E8F5E8" BorderBrush="#D0D7DE" BorderThickness="0,0,0,1">
+                                <TextBlock Text="🔗 Procore Links" 
+                                          Padding="12,8" 
+                                          FontWeight="SemiBold"
+                                          FontSize="13"
+                                          Foreground="#24292F"/>
+                            </Border>
+                            <ContentControl x:Name="ProcorePanelContent" Background="White"/>
                         </DockPanel>
                     </Border>
                     
@@ -114,12 +153,17 @@
                                  Style="{StaticResource SeparatorStyle}" 
                                  Visibility="{Binding ElementName=ProcorePanelContainer, Path=Visibility}"/>
                     
-                    <!-- Bookmarks Panel -->
+                    <!-- Bookmarks Panel with modern header -->
                     <Border x:Name="BookmarksPanelContainer" Grid.Row="4">
                         <DockPanel>
-                            <TextBlock DockPanel.Dock="Top" Text="Bookmarks" 
-                                      Padding="5" Background="#F0F0F0" FontWeight="Bold"/>
-                            <ContentControl x:Name="BookmarksPanelContent"/>
+                            <Border DockPanel.Dock="Top" Background="#F0E6FF" BorderBrush="#D0D7DE" BorderThickness="0,0,0,1">
+                                <TextBlock Text="⭐ Bookmarks" 
+                                          Padding="12,8" 
+                                          FontWeight="SemiBold"
+                                          FontSize="13"
+                                          Foreground="#24292F"/>
+                            </Border>
+                            <ContentControl x:Name="BookmarksPanelContent" Background="White"/>
                         </DockPanel>
                     </Border>
                 </Grid>

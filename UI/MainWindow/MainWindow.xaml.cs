@@ -372,6 +372,10 @@ namespace ExplorerPro.UI.MainWindow
             RegisterShortcut(Key.B, ModifierKeys.Control, ToggleBookmarksPanel, "Toggle Bookmarks Panel");
             RegisterShortcut(Key.D, ModifierKeys.Control, ToggleTodoPanel, "Toggle ToDo Panel");
             RegisterShortcut(Key.K, ModifierKeys.Control, ToggleProcorePanel, "Toggle Procore Panel");
+            
+            // Sidebar toggles (VS Code style) - Using Alt+Shift to avoid conflicts
+            RegisterShortcut(Key.B, ModifierKeys.Alt | ModifierKeys.Shift, ToggleLeftSidebar, "Toggle Left Sidebar");
+            RegisterShortcut(Key.R, ModifierKeys.Alt | ModifierKeys.Shift, ToggleRightSidebar, "Toggle Right Sidebar");
 
             // Tab shortcuts
             RegisterShortcut(Key.Tab, ModifierKeys.Control, NextTab, "Next Tab");
@@ -1383,6 +1387,46 @@ namespace ExplorerPro.UI.MainWindow
         private void ToggleProcorePanel_Click(object sender, RoutedEventArgs e)
         {
             ToggleProcorePanel();
+        }
+
+        /// <summary>
+        /// Toggle the entire left sidebar visibility.
+        /// </summary>
+        private void ToggleLeftSidebar()
+        {
+            var container = GetCurrentContainer();
+            if (container == null) return;
+
+            // Toggle the entire left column
+            container.ToggleLeftSidebar();
+        }
+
+        /// <summary>
+        /// Event handler for left sidebar toggle button.
+        /// </summary>
+        private void ToggleLeftSidebar_Click(object sender, RoutedEventArgs e)
+        {
+            ToggleLeftSidebar();
+        }
+
+        /// <summary>
+        /// Toggle the entire right sidebar visibility.
+        /// </summary>
+        private void ToggleRightSidebar()
+        {
+            var container = GetCurrentContainer();
+            if (container == null) return;
+
+            // Toggle the entire right column
+            container.ToggleRightSidebar();
+        }
+
+        /// <summary>
+        /// Event handler for right sidebar toggle button.
+        /// </summary>
+        private void ToggleRightSidebar_Click(object sender, RoutedEventArgs e)
+        {
+            ToggleRightSidebar();
         }
 
         /// <summary>

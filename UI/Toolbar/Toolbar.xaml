@@ -202,14 +202,14 @@
                         ToolTip="Go up one folder level in the active tab" 
                         Click="UpButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
-                    <Image Source="/Assets/Icons/arrow-up.png" Width="20" Height="20" />
+                    <Image Source="/Assets/Icons/arrow-up.svg" Width="20" Height="20" />
                 </Button>
                 
                 <Button x:Name="refreshButton" 
                         ToolTip="Refresh file tree" 
                         Click="RefreshButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
-                    <Image Source="/Assets/Icons/refresh-cw.png" Width="20" Height="20" />
+                    <Image Source="/Assets/Icons/refresh-cw.svg" Width="20" Height="20" />
                 </Button>
             </StackPanel>
             
@@ -225,14 +225,14 @@
                         ToolTip="Undo last action" 
                         Click="UndoButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
-                    <Image Source="/Assets/Icons/rotate-ccw.png" Width="20" Height="20" />
+                    <Image Source="/Assets/Icons/rotate-ccw.svg" Width="20" Height="20" />
                 </Button>
                 
                 <Button x:Name="redoButton" 
                         ToolTip="Redo last action" 
                         Click="RedoButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
-                    <Image Source="/Assets/Icons/rotate-cw.png" Width="20" Height="20" />
+                    <Image Source="/Assets/Icons/rotate-cw.svg" Width="20" Height="20" />
                 </Button>
             </StackPanel>
             
@@ -270,7 +270,7 @@
                         ToolTip="Settings" 
                         Click="SettingsButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
-                    <Image Source="/Assets/Icons/settings.png" Width="20" Height="20" />
+                    <Image Source="/Assets/Icons/settings.svg" Width="20" Height="20" />
                 </Button>
             </StackPanel>
         </Grid>

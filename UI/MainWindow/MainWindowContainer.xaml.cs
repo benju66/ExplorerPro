@@ -469,6 +469,14 @@ namespace ExplorerPro.UI.MainWindow
                             if (ProcorePanelContainer != null)
                                 ProcorePanelContainer.Visibility = setting.Value ? Visibility.Visible : Visibility.Collapsed;
                             break;
+                        case "left_sidebar_visible":
+                            if (LeftColumnContainer != null)
+                                LeftColumnContainer.Visibility = setting.Value ? Visibility.Visible : Visibility.Collapsed;
+                            break;
+                        case "right_sidebar_visible":
+                            if (RightColumnContainer != null)
+                                RightColumnContainer.Visibility = setting.Value ? Visibility.Visible : Visibility.Collapsed;
+                            break;
                     }
                 }
             }
@@ -513,6 +521,122 @@ namespace ExplorerPro.UI.MainWindow
         public void ToggleProcorePanel()
         {
             TogglePanelVisibility(ProcorePanelContainer, "procore_panel");
+        }
+
+        /// <summary>
+        /// Toggle the entire left sidebar visibility (like VS Code)
+        /// </summary>
+        public void ToggleLeftSidebar()
+        {
+            try
+            {
+                if (LeftColumnContainer == null) return;
+                
+                if (LeftColumnContainer.Visibility == Visibility.Visible)
+                {
+                    // Animate collapse
+                    AnimateSidebarCollapse(LeftColumnContainer, () =>
+                    {
+                        LeftColumnContainer.Visibility = Visibility.Collapsed;
+                        _settingsManager.UpdateSetting("dockable_panels.left_sidebar_visible", false);
+                    });
+                }
+                else
+                {
+                    // Show and animate expand
+                    LeftColumnContainer.Visibility = Visibility.Visible;
+                    AnimateSidebarExpand(LeftColumnContainer);
+                    _settingsManager.UpdateSetting("dockable_panels.left_sidebar_visible", true);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error toggling left sidebar: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Toggle the entire right sidebar visibility (like VS Code)
+        /// </summary>
+        public void ToggleRightSidebar()
+        {
+            try
+            {
+                if (RightColumnContainer == null) return;
+                
+                if (RightColumnContainer.Visibility == Visibility.Visible)
+                {
+                    // Animate collapse
+                    AnimateSidebarCollapse(RightColumnContainer, () =>
+                    {
+                        RightColumnContainer.Visibility = Visibility.Collapsed;
+                        _settingsManager.UpdateSetting("dockable_panels.right_sidebar_visible", false);
+                    });
+                }
+                else
+                {
+                    // Show and animate expand
+                    RightColumnContainer.Visibility = Visibility.Visible;
+                    AnimateSidebarExpand(RightColumnContainer);
+                    _settingsManager.UpdateSetting("dockable_panels.right_sidebar_visible", true);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error toggling right sidebar: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Animate sidebar collapse with smooth transition
+        /// </summary>
+        /// <param name="sidebar">Sidebar element to animate</param>
+        /// <param name="onComplete">Action to execute when animation completes</param>
+        private void AnimateSidebarCollapse(FrameworkElement sidebar, Action onComplete)
+        {
+            try
+            {
+                var animation = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    From = sidebar.ActualWidth,
+                    To = 0,
+                    Duration = TimeSpan.FromMilliseconds(200),
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+                };
+
+                animation.Completed += (s, e) => onComplete?.Invoke();
+                sidebar.BeginAnimation(FrameworkElement.WidthProperty, animation);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error animating sidebar collapse: {ex.Message}");
+                onComplete?.Invoke(); // Fallback to immediate action
+            }
+        }
+
+        /// <summary>
+        /// Animate sidebar expand with smooth transition
+        /// </summary>
+        /// <param name="sidebar">Sidebar element to animate</param>
+        private void AnimateSidebarExpand(FrameworkElement sidebar)
+        {
+            try
+            {
+                var animation = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    From = 0,
+                    To = 200, // Default sidebar width
+                    Duration = TimeSpan.FromMilliseconds(200),
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+                };
+
+                sidebar.BeginAnimation(FrameworkElement.WidthProperty, animation);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error animating sidebar expand: {ex.Message}");
+                sidebar.Width = 200; // Fallback to immediate width change
+            }
         }
 
         /// <summary>
