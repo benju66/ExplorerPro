@@ -54,9 +54,14 @@ namespace ExplorerPro.UI.MainWindow
         private DispatcherTimer? _consoleAnimationTimer;
         private bool _consoleAnimationActive;
         
-        // Constants
-        private const double DEFAULT_PANEL_WIDTH = 200;
-        private const double COLLAPSED_PANEL_WIDTH = 3;
+        // Constants for optimal user experience
+        private const double DEFAULT_SIDEBAR_WIDTH = 250;    // Comfortable default width
+        private const double MIN_SIDEBAR_WIDTH = 200;        // Minimum usable width  
+        private const double COLLAPSED_PANEL_WIDTH = 3;      // Visual separator when collapsed
+        
+        // Panel proportional sizing constants
+        private const double DEFAULT_PANEL_RATIO = 0.6;      // Default panel ratio within sidebar
+        private const double MIN_PANEL_HEIGHT = 120;         // Minimum panel height for usability
 
         #endregion
 
@@ -155,6 +160,9 @@ namespace ExplorerPro.UI.MainWindow
 
                 // Install event handlers for panel resizing
                 InstallPanelResizeHandlers();
+                
+                // Initialize panel drag handlers for future docking functionality
+                InitializePanelDragHandlers();
 
                 // Apply saved panel visibility settings
                 ApplySavedPanelVisibility(null);
@@ -350,87 +358,29 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Install handlers for panel edge resize
+        /// Note: Panel edge resize handlers removed to avoid conflicts with hierarchical panel system.
+        /// Individual panels no longer have independent collapse/expand behavior.
+        /// Use sidebar toggles and panel visibility toggles instead.
         /// </summary>
         private void InstallPanelResizeHandlers()
         {
-            try
-            {
-                // Attach handlers to all panel borders
-                AttachPanelResizeHandlers(LeftColumnContainer);
-                AttachPanelResizeHandlers(RightColumnContainer);
-                AttachPanelResizeHandlers(PinnedPanelContainer);
-                AttachPanelResizeHandlers(ToDoPanelContainer);
-                AttachPanelResizeHandlers(ProcorePanelContainer);
-                AttachPanelResizeHandlers(BookmarksPanelContainer);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error installing panel resize handlers: {ex.Message}");
-                // Non-critical error, continue
-            }
+            // Removed: Individual panel edge-click collapse functionality
+            // This was creating conflicts with the hierarchical sidebar system
+            // where panels could be collapsed at both sidebar and individual level
         }
 
         /// <summary>
-        /// Attach resize handlers to a panel border
+        /// Removed: Individual panel edge-click collapse functionality.
+        /// This method is kept for compatibility but no longer attaches conflicting handlers.
+        /// Use the hierarchical sidebar system instead: sidebar toggles control sections,
+        /// individual panel toggles control visibility within sections.
         /// </summary>
-        /// <param name="border">Border to attach handlers to</param>
+        /// <param name="border">Border (no longer used)</param>
         private void AttachPanelResizeHandlers(Border border)
         {
-            if (border == null) return;
-            
-            try
-            {
-                // Handle mouse clicks on edges to collapse/expand
-                border.MouseLeftButtonDown += (s, e) =>
-                {
-                    try
-                    {
-                        var pos = e.GetPosition(border);
-                        double edgeThreshold = 5;
-                        
-                        // Detect clicks on left or right edge
-                        if (pos.X <= edgeThreshold || border.ActualWidth - pos.X <= edgeThreshold)
-                        {
-                            TogglePanelCollapsedState(border);
-                            e.Handled = true;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error in MouseLeftButtonDown handler: {ex.Message}");
-                    }
-                };
-                
-                // Change cursor when mouse is over edges
-                border.MouseMove += (s, e) =>
-                {
-                    try
-                    {
-                        var pos = e.GetPosition(border);
-                        double edgeThreshold = 5;
-                        
-                        if (pos.X <= edgeThreshold || border.ActualWidth - pos.X <= edgeThreshold)
-                        {
-                            border.Cursor = Cursors.SizeWE;
-                        }
-                        else
-                        {
-                            border.Cursor = Cursors.Arrow;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error in MouseMove handler: {ex.Message}");
-                        // Reset cursor to default on error
-                        border.Cursor = Cursors.Arrow;
-                    }
-                };
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error attaching panel resize handlers: {ex.Message}");
-            }
+            // Intentionally empty - removing conflicting individual panel collapse behavior
+            // The hierarchical system (sidebar toggles + panel visibility toggles) provides
+            // a cleaner, more predictable user experience
         }
 
         /// <summary>
@@ -471,11 +421,49 @@ namespace ExplorerPro.UI.MainWindow
                             break;
                         case "left_sidebar_visible":
                             if (LeftColumnContainer != null)
+                            {
                                 LeftColumnContainer.Visibility = setting.Value ? Visibility.Visible : Visibility.Collapsed;
+                                var leftSplitter = FindName("LeftSplitter") as GridSplitter;
+                                var leftColumn = FindName("LeftColumn") as ColumnDefinition;
+                                if (leftSplitter != null) leftSplitter.Visibility = LeftColumnContainer.Visibility;
+                                if (leftColumn != null)
+                                {
+                                    if (setting.Value)
+                                    {
+                                        var savedWidth = _settingsManager.GetSetting<double>("dockable_panels.left_sidebar_width");
+                                        leftColumn.Width = new GridLength(savedWidth > 0 ? savedWidth : 200);
+                                        leftColumn.MinWidth = 150;
+                                    }
+                                    else
+                                    {
+                                        leftColumn.Width = new GridLength(0);
+                                        leftColumn.MinWidth = 0;
+                                    }
+                                }
+                            }
                             break;
                         case "right_sidebar_visible":
                             if (RightColumnContainer != null)
+                            {
                                 RightColumnContainer.Visibility = setting.Value ? Visibility.Visible : Visibility.Collapsed;
+                                var rightSplitter = FindName("RightSplitter") as GridSplitter;
+                                var rightColumn = FindName("RightColumn") as ColumnDefinition;
+                                if (rightSplitter != null) rightSplitter.Visibility = RightColumnContainer.Visibility;
+                                if (rightColumn != null)
+                                {
+                                    if (setting.Value)
+                                    {
+                                        var savedWidth = _settingsManager.GetSetting<double>("dockable_panels.right_sidebar_width");
+                                        rightColumn.Width = new GridLength(savedWidth > 0 ? savedWidth : 200);
+                                        rightColumn.MinWidth = 150;
+                                    }
+                                    else
+                                    {
+                                        rightColumn.Width = new GridLength(0);
+                                        rightColumn.MinWidth = 0;
+                                    }
+                                }
+                            }
                             break;
                     }
                 }
@@ -492,35 +480,74 @@ namespace ExplorerPro.UI.MainWindow
         #region Panel Management
 
         /// <summary>
-        /// Toggle pinned panel visibility
+        /// Toggle pinned panel visibility (respects sidebar state)
         /// </summary>
         public void TogglePinnedPanel()
         {
-            TogglePanelVisibility(PinnedPanelContainer, "pinned_panel");
+            TogglePanelVisibility(PinnedPanelContainer, "pinned_panel", SidebarLocation.Left);
         }
 
         /// <summary>
-        /// Toggle bookmarks panel visibility
+        /// Toggle bookmarks panel visibility (respects sidebar state)
         /// </summary>
         public void ToggleBookmarksPanel()
         {
-            TogglePanelVisibility(BookmarksPanelContainer, "bookmarks_panel");
+            TogglePanelVisibility(BookmarksPanelContainer, "bookmarks_panel", SidebarLocation.Right);
         }
 
         /// <summary>
-        /// Toggle to-do panel visibility
+        /// Toggle to-do panel visibility (respects sidebar state)
         /// </summary>
         public void ToggleTodoPanel()
         {
-            TogglePanelVisibility(ToDoPanelContainer, "to_do_panel");
+            TogglePanelVisibility(ToDoPanelContainer, "to_do_panel", SidebarLocation.Right);
         }
 
         /// <summary>
-        /// Toggle Procore links panel visibility
+        /// Toggle Procore links panel visibility (respects sidebar state)
         /// </summary>
         public void ToggleProcorePanel()
         {
-            TogglePanelVisibility(ProcorePanelContainer, "procore_panel");
+            TogglePanelVisibility(ProcorePanelContainer, "procore_panel", SidebarLocation.Right);
+        }
+
+        /// <summary>
+        /// Helper enum to identify sidebar locations
+        /// </summary>
+        public enum SidebarLocation
+        {
+            Left,
+            Right
+        }
+
+        /// <summary>
+        /// Check if a sidebar is currently visible and functional
+        /// </summary>
+        /// <param name="location">Which sidebar to check</param>
+        /// <returns>True if sidebar is visible and functional</returns>
+        private bool IsSidebarVisible(SidebarLocation location)
+        {
+            return location switch
+            {
+                SidebarLocation.Left => LeftColumnContainer?.Visibility == Visibility.Visible,
+                SidebarLocation.Right => RightColumnContainer?.Visibility == Visibility.Visible,
+                _ => false
+            };
+        }
+
+        /// <summary>
+        /// Get all panels within a specific sidebar
+        /// </summary>
+        /// <param name="location">Sidebar location</param>
+        /// <returns>List of panel containers in that sidebar</returns>
+        private List<Border> GetPanelsInSidebar(SidebarLocation location)
+        {
+            return location switch
+            {
+                SidebarLocation.Left => new List<Border> { PinnedPanelContainer }.Where(p => p != null).ToList(),
+                SidebarLocation.Right => new List<Border> { ToDoPanelContainer, ProcorePanelContainer, BookmarksPanelContainer }.Where(p => p != null).ToList(),
+                _ => new List<Border>()
+            };
         }
 
         /// <summary>
@@ -532,21 +559,53 @@ namespace ExplorerPro.UI.MainWindow
             {
                 if (LeftColumnContainer == null) return;
                 
+                // Find the left splitter and column definition
+                var leftSplitter = FindName("LeftSplitter") as GridSplitter;
+                var leftColumn = FindName("LeftColumn") as ColumnDefinition;
+                
                 if (LeftColumnContainer.Visibility == Visibility.Visible)
                 {
+                    // Store current width before collapsing
+                    if (leftColumn != null && leftColumn.Width.Value > 0)
+                    {
+                        _settingsManager.UpdateSetting("dockable_panels.left_sidebar_width", leftColumn.Width.Value);
+                    }
+                    
+                    // Store panel states before collapsing sidebar
+                    StorePanelStatesForSidebar(SidebarLocation.Left);
+                    
                     // Animate collapse
                     AnimateSidebarCollapse(LeftColumnContainer, () =>
                     {
                         LeftColumnContainer.Visibility = Visibility.Collapsed;
+                        if (leftSplitter != null) leftSplitter.Visibility = Visibility.Collapsed;
+                        if (leftColumn != null)
+                        {
+                            leftColumn.Width = new GridLength(0);
+                            leftColumn.MinWidth = 0;
+                        }
                         _settingsManager.UpdateSetting("dockable_panels.left_sidebar_visible", false);
                     });
                 }
                 else
                 {
+                    // Restore column width to comfortable default or saved preference
+                    if (leftColumn != null)
+                    {
+                        var savedWidth = _settingsManager.GetSetting<double>("dockable_panels.left_sidebar_width");
+                        var targetWidth = savedWidth > MIN_SIDEBAR_WIDTH ? savedWidth : DEFAULT_SIDEBAR_WIDTH;
+                        leftColumn.Width = new GridLength(targetWidth);
+                        leftColumn.MinWidth = MIN_SIDEBAR_WIDTH;
+                    }
+                    
                     // Show and animate expand
                     LeftColumnContainer.Visibility = Visibility.Visible;
+                    if (leftSplitter != null) leftSplitter.Visibility = Visibility.Visible;
                     AnimateSidebarExpand(LeftColumnContainer);
                     _settingsManager.UpdateSetting("dockable_panels.left_sidebar_visible", true);
+                    
+                    // Restore panel states after expanding sidebar
+                    RestorePanelStatesForSidebar(SidebarLocation.Left);
                 }
             }
             catch (Exception ex)
@@ -564,21 +623,53 @@ namespace ExplorerPro.UI.MainWindow
             {
                 if (RightColumnContainer == null) return;
                 
+                // Find the right splitter and column definition
+                var rightSplitter = FindName("RightSplitter") as GridSplitter;
+                var rightColumn = FindName("RightColumn") as ColumnDefinition;
+                
                 if (RightColumnContainer.Visibility == Visibility.Visible)
                 {
+                    // Store current width before collapsing
+                    if (rightColumn != null && rightColumn.Width.Value > 0)
+                    {
+                        _settingsManager.UpdateSetting("dockable_panels.right_sidebar_width", rightColumn.Width.Value);
+                    }
+                    
+                    // Store panel states before collapsing sidebar
+                    StorePanelStatesForSidebar(SidebarLocation.Right);
+                    
                     // Animate collapse
                     AnimateSidebarCollapse(RightColumnContainer, () =>
                     {
                         RightColumnContainer.Visibility = Visibility.Collapsed;
+                        if (rightSplitter != null) rightSplitter.Visibility = Visibility.Collapsed;
+                        if (rightColumn != null)
+                        {
+                            rightColumn.Width = new GridLength(0);
+                            rightColumn.MinWidth = 0;
+                        }
                         _settingsManager.UpdateSetting("dockable_panels.right_sidebar_visible", false);
                     });
                 }
                 else
                 {
+                    // Restore column width to comfortable default or saved preference
+                    if (rightColumn != null)
+                    {
+                        var savedWidth = _settingsManager.GetSetting<double>("dockable_panels.right_sidebar_width");
+                        var targetWidth = savedWidth > MIN_SIDEBAR_WIDTH ? savedWidth : DEFAULT_SIDEBAR_WIDTH;
+                        rightColumn.Width = new GridLength(targetWidth);
+                        rightColumn.MinWidth = MIN_SIDEBAR_WIDTH;
+                    }
+                    
                     // Show and animate expand
                     RightColumnContainer.Visibility = Visibility.Visible;
+                    if (rightSplitter != null) rightSplitter.Visibility = Visibility.Visible;
                     AnimateSidebarExpand(RightColumnContainer);
                     _settingsManager.UpdateSetting("dockable_panels.right_sidebar_visible", true);
+                    
+                    // Restore panel states after expanding sidebar
+                    RestorePanelStatesForSidebar(SidebarLocation.Right);
                 }
             }
             catch (Exception ex)
@@ -586,6 +677,374 @@ namespace ExplorerPro.UI.MainWindow
                 Console.WriteLine($"Error toggling right sidebar: {ex.Message}");
             }
         }
+
+        /// <summary>
+        /// Store panel states before collapsing a sidebar
+        /// </summary>
+        /// <param name="location">Sidebar location</param>
+        private void StorePanelStatesForSidebar(SidebarLocation location)
+        {
+            try
+            {
+                var panels = GetPanelsInSidebar(location);
+                var prefix = location == SidebarLocation.Left ? "left_" : "right_";
+                
+                foreach (var panel in panels)
+                {
+                    if (panel != null)
+                    {
+                        var panelKey = GetPanelSettingName(panel);
+                        if (!string.IsNullOrEmpty(panelKey))
+                        {
+                            var stateKey = $"{prefix}panel_state_{panelKey}";
+                            _settingsManager.UpdateSetting(stateKey, panel.Visibility == Visibility.Visible);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error storing panel states: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Restore panel states after expanding a sidebar
+        /// </summary>
+        /// <param name="location">Sidebar location</param>
+        private void RestorePanelStatesForSidebar(SidebarLocation location)
+        {
+            try
+            {
+                var panels = GetPanelsInSidebar(location);
+                var prefix = location == SidebarLocation.Left ? "left_" : "right_";
+                
+                foreach (var panel in panels)
+                {
+                    if (panel != null)
+                    {
+                        var panelKey = GetPanelSettingName(panel);
+                        if (!string.IsNullOrEmpty(panelKey))
+                        {
+                            var stateKey = $"{prefix}panel_state_{panelKey}";
+                            var wasVisible = _settingsManager.GetSetting<bool>(stateKey, true); // Default to visible
+                            
+                            panel.Visibility = wasVisible ? Visibility.Visible : Visibility.Collapsed;
+                            if (wasVisible)
+                            {
+                                // Panel width is now handled by Grid column definitions
+                                // No individual panel width restoration needed
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error restoring panel states: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Get setting name for a panel container
+        /// </summary>
+        /// <param name="panel">Panel container</param>
+        /// <returns>Setting name or null if not found</returns>
+        private string? GetPanelSettingName(Border panel)
+        {
+            if (panel == PinnedPanelContainer) return "pinned_panel";
+            if (panel == BookmarksPanelContainer) return "bookmarks_panel";
+            if (panel == ToDoPanelContainer) return "to_do_panel";
+            if (panel == ProcorePanelContainer) return "procore_panel";
+            return null;
+        }
+
+        /// <summary>
+        /// Toggle a panel's visibility (respects parent sidebar state)
+        /// </summary>
+        /// <param name="container">Panel container</param>
+        /// <param name="settingName">Setting name for persistence</param>
+        /// <param name="location">Sidebar location</param>
+        private void TogglePanelVisibility(Border container, string settingName, SidebarLocation location)
+        {
+            try
+            {
+                if (container == null) return;
+                
+                // Check if parent sidebar is visible
+                if (!IsSidebarVisible(location))
+                {
+                    // If sidebar is collapsed, show it first, then show the panel
+                    ShowSidebarAndPanel(location, container, settingName);
+                    return;
+                }
+                
+                // Sidebar is visible, toggle individual panel
+                if (container.Visibility == Visibility.Visible)
+                {
+                    // Width is handled by Grid column definitions, no storage needed
+                    
+                    // Hide panel
+                    container.Visibility = Visibility.Collapsed;
+                    
+                    // Update settings
+                    _settingsManager.UpdateSetting($"dockable_panels.{settingName}", false);
+                    
+                    // Check if this was the last visible panel in sidebar
+                    CheckAndCollapseSidebarIfEmpty(location);
+                }
+                else
+                {
+                    // Show panel
+                    container.Visibility = Visibility.Visible;
+                    
+                    // Width is handled by Grid column definitions, no restoration needed
+                    
+                    // Update settings
+                    _settingsManager.UpdateSetting($"dockable_panels.{settingName}", true);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error toggling panel visibility: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Show sidebar and activate specific panel
+        /// </summary>
+        /// <param name="location">Sidebar location</param>
+        /// <param name="targetPanel">Panel to show after sidebar is expanded</param>
+        /// <param name="settingName">Panel setting name</param>
+        private void ShowSidebarAndPanel(SidebarLocation location, Border targetPanel, string settingName)
+        {
+            try
+            {
+                // First show the sidebar
+                if (location == SidebarLocation.Left)
+                {
+                    ToggleLeftSidebar();
+                }
+                else
+                {
+                    ToggleRightSidebar();
+                }
+                
+                // Then ensure the target panel is visible
+                if (targetPanel != null)
+                {
+                    targetPanel.Visibility = Visibility.Visible;
+                    // Width is handled by Grid column definitions, no restoration needed
+                    _settingsManager.UpdateSetting($"dockable_panels.{settingName}", true);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error showing sidebar and panel: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Check if sidebar should be collapsed when all panels are hidden
+        /// </summary>
+        /// <param name="location">Sidebar location to check</param>
+        private void CheckAndCollapseSidebarIfEmpty(SidebarLocation location)
+        {
+            try
+            {
+                var panels = GetPanelsInSidebar(location);
+                bool anyPanelVisible = panels.Any(p => p?.Visibility == Visibility.Visible);
+                
+                if (!anyPanelVisible)
+                {
+                    // All panels are hidden, optionally collapse sidebar
+                    // This is a UX decision - you might want to keep sidebar open for easy re-access
+                    // For now, let's keep sidebar open but notify user
+                    Console.WriteLine($"{location} sidebar has no visible panels but will remain open for easy access");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error checking sidebar state: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Removed: Individual panel collapse functionality.
+        /// This created conflicts with the hierarchical sidebar system where panels
+        /// could be collapsed at both sidebar and individual level, causing confusion.
+        /// Use sidebar toggles and panel visibility toggles instead.
+        /// </summary>
+        /// <param name="container">Panel container (no longer used)</param>
+        private void TogglePanelCollapsedState(Border container)
+        {
+            // Removed: Individual panel collapse behavior
+            // The hierarchical system provides better UX:
+            // - Sidebar toggles control entire sidebar visibility  
+            // - Panel toggles control individual panel visibility within sidebars
+            // - No conflicting edge-click collapse behavior
+        }
+
+        #region Panel Architecture - Proportional & Dockable System
+        
+        /// <summary>
+        /// Enhanced panel system with proportional sizing and future docking support.
+        /// Panels maintain hierarchical relationship with sidebars while supporting individual sizing.
+        /// Architecture supports future drag-out docking functionality.
+        /// </summary>
+        
+        /// <summary>
+        /// Panel information for managing proportional sizing and docking
+        /// </summary>
+        public class PanelInfo
+        {
+            public string Name { get; set; }
+            public Border Container { get; set; }
+            public Border Header { get; set; }
+            public SidebarLocation Location { get; set; }
+            public double PreferredRatio { get; set; } = DEFAULT_PANEL_RATIO;
+            public bool IsDockable { get; set; } = true;
+            public bool IsFloating { get; set; } = false;
+        }
+        
+        /// <summary>
+        /// Get panel proportional height within its sidebar
+        /// </summary>
+        /// <param name="panelName">Panel name</param>
+        /// <returns>Proportional height ratio</returns>
+        private double GetPanelRatio(string panelName)
+        {
+            try
+            {
+                var savedRatio = _settingsManager.GetSetting<double>($"panel_ratios.{panelName}");
+                return savedRatio > 0 ? savedRatio : DEFAULT_PANEL_RATIO;
+            }
+            catch
+            {
+                return DEFAULT_PANEL_RATIO;
+            }
+        }
+        
+        /// <summary>
+        /// Store panel proportional height for future restoration
+        /// </summary>
+        /// <param name="panelName">Panel name</param>
+        /// <param name="ratio">Proportional height ratio</param>
+        private void StorePanelRatio(string panelName, double ratio)
+        {
+            try
+            {
+                _settingsManager.UpdateSetting($"panel_ratios.{panelName}", ratio);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error storing panel ratio for {panelName}: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Get all panels within a sidebar with their information
+        /// </summary>
+        /// <param name="location">Sidebar location</param>
+        /// <returns>List of panel information</returns>
+        private List<PanelInfo> GetPanelInfoForSidebar(SidebarLocation location)
+        {
+            var panels = new List<PanelInfo>();
+            
+            try
+            {
+                if (location == SidebarLocation.Left)
+                {
+                    panels.Add(new PanelInfo 
+                    { 
+                        Name = "pinned", 
+                        Container = PinnedPanelContainer, 
+                        Header = PinnedPanelHeader,
+                        Location = SidebarLocation.Left 
+                    });
+                    panels.Add(new PanelInfo 
+                    { 
+                        Name = "bookmarks", 
+                        Container = BookmarksPanelContainer, 
+                        Header = BookmarksPanelHeader,
+                        Location = SidebarLocation.Left 
+                    });
+                }
+                else if (location == SidebarLocation.Right)
+                {
+                    panels.Add(new PanelInfo 
+                    { 
+                        Name = "todo", 
+                        Container = ToDoPanelContainer, 
+                        Header = ToDoPanelHeader,
+                        Location = SidebarLocation.Right 
+                    });
+                    panels.Add(new PanelInfo 
+                    { 
+                        Name = "procore", 
+                        Container = ProcorePanelContainer, 
+                        Header = ProcorePanelHeader,
+                        Location = SidebarLocation.Right 
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting panel info for {location}: {ex.Message}");
+            }
+            
+            return panels;
+        }
+        
+        /// <summary>
+        /// Initialize panel drag handlers for future docking functionality
+        /// </summary>
+        private void InitializePanelDragHandlers()
+        {
+            try
+            {
+                // Get all panels and set up drag preparation
+                var allPanels = GetPanelInfoForSidebar(SidebarLocation.Left)
+                    .Concat(GetPanelInfoForSidebar(SidebarLocation.Right));
+                
+                foreach (var panel in allPanels)
+                {
+                    if (panel.Header != null && panel.IsDockable)
+                    {
+                        // Add visual feedback for drag capability
+                        panel.Header.MouseEnter += (s, e) =>
+                        {
+                            panel.Header.Background = new SolidColorBrush(Color.FromArgb(40, 9, 105, 218)); // Light blue overlay
+                        };
+                        
+                        panel.Header.MouseLeave += (s, e) =>
+                        {
+                            // Restore original background based on panel type
+                            var originalBrush = panel.Name switch
+                            {
+                                "pinned" => new SolidColorBrush(Color.FromRgb(227, 242, 253)), // #E3F2FD
+                                "bookmarks" => new SolidColorBrush(Color.FromRgb(240, 249, 255)), // #F0F9FF
+                                "todo" => new SolidColorBrush(Color.FromRgb(255, 243, 205)), // #FFF3CD
+                                "procore" => new SolidColorBrush(Color.FromRgb(232, 245, 232)), // #E8F5E8
+                                _ => new SolidColorBrush(Color.FromRgb(246, 248, 250)) // Default #F6F8FA
+                            };
+                            panel.Header.Background = originalBrush;
+                        };
+                        
+                        // Future: Add drag-and-drop handlers here
+                        // panel.Header.MouseLeftButtonDown += StartPanelDrag;
+                        // panel.Header.MouseLeftButtonUp += EndPanelDrag;  
+                        // panel.Header.MouseMove += HandlePanelDrag;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error initializing panel drag handlers: {ex.Message}");
+            }
+        }
+        
+        #endregion
 
         /// <summary>
         /// Animate sidebar collapse with smooth transition
@@ -615,7 +1074,7 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Animate sidebar expand with smooth transition
+        /// Animate sidebar expand with smooth transition to comfortable width
         /// </summary>
         /// <param name="sidebar">Sidebar element to animate</param>
         private void AnimateSidebarExpand(FrameworkElement sidebar)
@@ -625,7 +1084,7 @@ namespace ExplorerPro.UI.MainWindow
                 var animation = new System.Windows.Media.Animation.DoubleAnimation
                 {
                     From = 0,
-                    To = 200, // Default sidebar width
+                    To = DEFAULT_SIDEBAR_WIDTH, // Use comfortable default width
                     Duration = TimeSpan.FromMilliseconds(200),
                     EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
                 };
@@ -635,261 +1094,7 @@ namespace ExplorerPro.UI.MainWindow
             catch (Exception ex)
             {
                 Console.WriteLine($"Error animating sidebar expand: {ex.Message}");
-                sidebar.Width = 200; // Fallback to immediate width change
-            }
-        }
-
-        /// <summary>
-        /// Toggle a panel's visibility
-        /// </summary>
-        /// <param name="container">Panel container</param>
-        /// <param name="settingName">Setting name for persistence</param>
-        private void TogglePanelVisibility(Border container, string settingName)
-        {
-            try
-            {
-                if (container == null) return;
-                
-                if (container.Visibility == Visibility.Visible)
-                {
-                    // Store width before hiding
-                    StoreCurrentPanelWidth(container);
-                    
-                    // Hide panel
-                    container.Visibility = Visibility.Collapsed;
-                    
-                    // Update settings
-                    _settingsManager.UpdateSetting($"dockable_panels.{settingName}", false);
-                }
-                else
-                {
-                    // Show panel
-                    container.Visibility = Visibility.Visible;
-                    
-                    // Restore width
-                    RestorePanelWidth(container);
-                    
-                    // Update settings
-                    _settingsManager.UpdateSetting($"dockable_panels.{settingName}", true);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error toggling panel visibility: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Toggle a panel between normal and collapsed states
-        /// </summary>
-        /// <param name="container">Panel container to toggle</param>
-        private void TogglePanelCollapsedState(Border container)
-        {
-            try
-            {
-                if (container == null) return;
-                
-                var parent = container.Parent as FrameworkElement;
-                if (parent == null) return;
-
-                // Check if panel is in left or right column
-                if (parent == LeftColumnContainer || parent == RightColumnContainer)
-                {
-                    // Handle column-level collapse/expand
-                    if (parent.Width <= COLLAPSED_PANEL_WIDTH + 2)
-                    {
-                        ExpandColumn(parent);
-                    }
-                    else
-                    {
-                        CollapseColumn(parent);
-                    }
-                }
-                else
-                {
-                    // Handle individual panel collapse/expand
-                    if (container.ActualWidth <= COLLAPSED_PANEL_WIDTH + 2)
-                    {
-                        ExpandPanel(container);
-                    }
-                    else
-                    {
-                        CollapsePanel(container);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error toggling panel collapsed state: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Collapse a panel to separator width
-        /// </summary>
-        /// <param name="container">Panel to collapse</param>
-        private void CollapsePanel(Border container)
-        {
-            try
-            {
-                if (container == null) return;
-                
-                // Store current width for later restoration
-                StoreCurrentPanelWidth(container);
-                
-                // Set minimum width
-                container.Width = COLLAPSED_PANEL_WIDTH;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error collapsing panel: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Expand a panel from separator state
-        /// </summary>
-        /// <param name="container">Panel to expand</param>
-        private void ExpandPanel(Border container)
-        {
-            try
-            {
-                if (container == null) return;
-                
-                // Restore previous width
-                RestorePanelWidth(container);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error expanding panel: {ex.Message}");
-                // Try to set a default width if restoration fails
-                if (container != null)
-                {
-                    container.Width = DEFAULT_PANEL_WIDTH;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Collapse a column to separator width
-        /// </summary>
-        /// <param name="column">Column to collapse</param>
-        private void CollapseColumn(FrameworkElement column)
-        {
-            try
-            {
-                if (column == null) return;
-                
-                // Store current width
-                string columnKey = column.Name;
-                _panelWidths[columnKey] = column.ActualWidth;
-                
-                // Set to collapsed width
-                column.Width = COLLAPSED_PANEL_WIDTH;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error collapsing column: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Expand a column from separator state
-        /// </summary>
-        /// <param name="column">Column to expand</param>
-        private void ExpandColumn(FrameworkElement column)
-        {
-            try
-            {
-                if (column == null) return;
-                
-                // Get stored width
-                string columnKey = column.Name;
-                double storedWidth = _panelWidths.ContainsKey(columnKey) ? 
-                    _panelWidths[columnKey] : DEFAULT_PANEL_WIDTH;
-                    
-                if (storedWidth <= COLLAPSED_PANEL_WIDTH)
-                {
-                    storedWidth = DEFAULT_PANEL_WIDTH;
-                }
-                
-                // Apply width
-                column.Width = storedWidth;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error expanding column: {ex.Message}");
-                // Try to set a default width if expansion fails
-                if (column != null)
-                {
-                    column.Width = DEFAULT_PANEL_WIDTH;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Store a panel's current width
-        /// </summary>
-        /// <param name="panel">Panel to store width for</param>
-        private void StoreCurrentPanelWidth(FrameworkElement panel)
-        {
-            try
-            {
-                if (panel == null) return;
-                
-                string panelKey = panel.Name;
-                double currentWidth = panel.ActualWidth;
-                
-                // Only store if not collapsed already
-                if (currentWidth > COLLAPSED_PANEL_WIDTH)
-                {
-                    _panelWidths[panelKey] = currentWidth;
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error storing panel width: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Restore a panel's width from stored value
-        /// </summary>
-        /// <param name="panel">Panel to restore width for</param>
-        private void RestorePanelWidth(FrameworkElement panel)
-        {
-            try
-            {
-                if (panel == null) return;
-                
-                string panelKey = panel.Name;
-                
-                if (_panelWidths.ContainsKey(panelKey))
-                {
-                    double storedWidth = _panelWidths[panelKey];
-                    
-                    // Use default if stored width is too small
-                    if (storedWidth <= COLLAPSED_PANEL_WIDTH)
-                    {
-                        storedWidth = DEFAULT_PANEL_WIDTH;
-                    }
-                    
-                    panel.Width = storedWidth;
-                }
-                else
-                {
-                    // Use default width if no stored value
-                    panel.Width = DEFAULT_PANEL_WIDTH;
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error restoring panel width: {ex.Message}");
-                // Set default width on error
-                if (panel != null)
-                {
-                    panel.Width = DEFAULT_PANEL_WIDTH;
-                }
+                sidebar.Width = DEFAULT_SIDEBAR_WIDTH; // Fallback to comfortable width
             }
         }
 
@@ -1843,5 +2048,90 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         #endregion
+
+        /// <summary>
+        /// Check if a specific panel can be toggled (its sidebar is visible)
+        /// </summary>
+        /// <param name="panelName">Panel name ("pinned", "bookmarks", "todo", "procore")</param>
+        /// <returns>True if panel can be toggled</returns>
+        public bool IsPanelToggleable(string panelName)
+        {
+            return panelName.ToLower() switch
+            {
+                "pinned" => IsSidebarVisible(SidebarLocation.Left),
+                "bookmarks" or "todo" or "procore" => IsSidebarVisible(SidebarLocation.Right),
+                _ => false
+            };
+        }
+
+        /// <summary>
+        /// Get the current panel visibility status with context
+        /// </summary>
+        /// <param name="panelName">Panel name</param>
+        /// <returns>Panel status information</returns>
+        public PanelStatus GetPanelStatus(string panelName)
+        {
+            var location = panelName.ToLower() switch
+            {
+                "pinned" => SidebarLocation.Left,
+                "bookmarks" or "todo" or "procore" => SidebarLocation.Right,
+                _ => (SidebarLocation?)null
+            };
+
+            if (location == null)
+                return new PanelStatus { IsAvailable = false, Message = "Unknown panel" };
+
+            var sidebarVisible = IsSidebarVisible(location.Value);
+            
+            if (!sidebarVisible)
+            {
+                return new PanelStatus 
+                { 
+                    IsAvailable = false, 
+                    Message = $"{location.Value} sidebar is collapsed. Click to expand and show panel.",
+                    CanExpand = true
+                };
+            }
+
+            var panel = GetPanelByName(panelName);
+            if (panel == null)
+                return new PanelStatus { IsAvailable = false, Message = "Panel not found" };
+
+            return new PanelStatus
+            {
+                IsAvailable = true,
+                IsVisible = panel.Visibility == Visibility.Visible,
+                Message = panel.Visibility == Visibility.Visible ? "Panel is visible" : "Panel is hidden",
+                CanExpand = false
+            };
+        }
+
+        /// <summary>
+        /// Get panel container by name
+        /// </summary>
+        /// <param name="panelName">Panel name</param>
+        /// <returns>Panel container or null</returns>
+        private Border? GetPanelByName(string panelName)
+        {
+            return panelName.ToLower() switch
+            {
+                "pinned" => PinnedPanelContainer,
+                "bookmarks" => BookmarksPanelContainer,
+                "todo" => ToDoPanelContainer,
+                "procore" => ProcorePanelContainer,
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Panel status information
+        /// </summary>
+        public class PanelStatus
+        {
+            public bool IsAvailable { get; set; }
+            public bool IsVisible { get; set; }
+            public string Message { get; set; } = string.Empty;
+            public bool CanExpand { get; set; }
+        }
     }
 }

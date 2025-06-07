@@ -19,18 +19,7 @@
             <Setter Property="Background" Value="Transparent"/>
         </Style>
         
-        <!-- Separator styles -->
-        <Style x:Key="SeparatorStyle" TargetType="GridSplitter">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Width" Value="3"/>
-            <Setter Property="Margin" Value="0"/>
-            <Setter Property="Padding" Value="0"/>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#0083DB"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
+        <!-- Modern splitter styling is now inline within each GridSplitter -->
         
         <!-- Drop indicator style -->
         <Style x:Key="DropIndicatorStyle" TargetType="Border">
@@ -43,125 +32,116 @@
     </UserControl.Resources>
     
     <Grid x:Name="MainGrid">
-        <!-- Main window with dockable layout -->
-        <DockPanel x:Name="DockArea" Style="{StaticResource DockAreaStyle}" AllowDrop="True">
-            <!-- Dock Panel Container will be populated dynamically in code -->
-            <!-- This uses standard DockPanel approach, but we'll implement custom docking behavior -->
+        <!-- Main window with resizable dockable layout -->
+        <Grid x:Name="DockArea" AllowDrop="True" Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <!-- Left Column (resizable) -->
+                <ColumnDefinition x:Name="LeftColumn" Width="250" MinWidth="200"/>
+                <!-- Left Splitter -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Main Content (takes remaining space) -->
+                <ColumnDefinition Width="*" MinWidth="300"/>
+                <!-- Right Splitter -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Right Column (resizable) -->
+                <ColumnDefinition x:Name="RightColumn" Width="250" MinWidth="200"/>
+            </Grid.ColumnDefinitions>
             
-            <!-- Left Column with VS Code-style collapsing -->
-            <Border x:Name="LeftColumnContainer" DockPanel.Dock="Left" Width="200" 
+            <!-- Left Column with VS Code-style collapsing and resizable panels -->
+            <Border x:Name="LeftColumnContainer" Grid.Column="0"
                     Background="#F6F8FA" BorderBrush="#D0D7DE" BorderThickness="0,0,1,0">
-                <Border.Style>
-                    <Style TargetType="Border">
-                        <Setter Property="MinWidth" Value="200"/>
-                        <Style.Triggers>
-                            <Trigger Property="Visibility" Value="Collapsed">
-                                <Setter Property="Width" Value="0"/>
-                                <Setter Property="MinWidth" Value="0"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
+                        <!-- Pinned Panel - proportional sizing -->
+                        <RowDefinition Height="2*" MinHeight="120"/>
+                        <!-- Panel Splitter -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- Bookmarks Panel - proportional sizing -->
+                        <RowDefinition Height="1*" MinHeight="120"/>
                     </Grid.RowDefinitions>
                     
-                    <!-- Pinned Panel with modern header -->
+                    <!-- Pinned Panel with modern header and drag handle -->
                     <Border x:Name="PinnedPanelContainer" Grid.Row="0">
                         <DockPanel>
-                            <Border DockPanel.Dock="Top" Background="#E3F2FD" BorderBrush="#D0D7DE" BorderThickness="0,0,0,1">
-                                <TextBlock Text="📌 Pinned Items" 
-                                          Padding="12,8" 
-                                          FontWeight="SemiBold"
-                                          FontSize="13"
-                                          Foreground="#24292F"/>
+                            <Border x:Name="PinnedPanelHeader" DockPanel.Dock="Top" 
+                                   Background="#E3F2FD" BorderBrush="#D0D7DE" BorderThickness="0,0,0,1"
+                                   Cursor="Hand">
+                                <DockPanel>
+                                    <TextBlock Text="📌 Pinned Items" 
+                                              Padding="12,8" 
+                                              FontWeight="SemiBold"
+                                              FontSize="13"
+                                              Foreground="#24292F"
+                                              DockPanel.Dock="Left"/>
+                                    <!-- Future: Add drag handle icon here -->
+                                    <Border DockPanel.Dock="Right" Padding="8,8"
+                                           ToolTip="Drag to undock panel (Future)">
+                                        <TextBlock Text="⋮⋮" FontSize="12" Foreground="#6B7280" 
+                                                  VerticalAlignment="Center"/>
+                                    </Border>
+                                </DockPanel>
                             </Border>
                             <ContentControl x:Name="PinnedPanelContent" Background="White"/>
                         </DockPanel>
                     </Border>
-                </Grid>
-            </Border>
-            
-            <!-- Splitter between Left Column and Main Area -->
-            <GridSplitter Width="3" DockPanel.Dock="Left" 
-                         HorizontalAlignment="Center"
-                         VerticalAlignment="Stretch"
-                         Style="{StaticResource SeparatorStyle}"/>
-            
-            <!-- Right Column with VS Code-style collapsing -->
-            <Border x:Name="RightColumnContainer" DockPanel.Dock="Right" Width="200"
-                    Background="#F6F8FA" BorderBrush="#D0D7DE" BorderThickness="1,0,0,0">
-                <Border.Style>
-                    <Style TargetType="Border">
-                        <Setter Property="MinWidth" Value="200"/>
-                        <Style.Triggers>
-                            <Trigger Property="Visibility" Value="Collapsed">
-                                <Setter Property="Width" Value="0"/>
-                                <Setter Property="MinWidth" Value="0"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
                     
-                    <!-- To-Do Panel with modern header -->
-                    <Border x:Name="ToDoPanelContainer" Grid.Row="0">
-                        <DockPanel>
-                            <Border DockPanel.Dock="Top" Background="#FFF3CD" BorderBrush="#D0D7DE" BorderThickness="0,0,0,1">
-                                <TextBlock Text="✅ To-Do" 
-                                          Padding="12,8" 
-                                          FontWeight="SemiBold"
-                                          FontSize="13"
-                                          Foreground="#24292F"/>
-                            </Border>
-                            <ContentControl x:Name="ToDoPanelContent" Background="White"/>
-                        </DockPanel>
-                    </Border>
-                    
-                    <!-- Splitter -->
-                    <GridSplitter Grid.Row="1" Height="3" 
+                    <!-- Panel Splitter for resizing between panels -->
+                    <GridSplitter x:Name="LeftPanelSplitter" Grid.Row="1" 
+                                 Height="6" 
                                  HorizontalAlignment="Stretch"
                                  VerticalAlignment="Center"
-                                 Style="{StaticResource SeparatorStyle}"/>
+                                 Background="#E1E4E8"
+                                 ResizeDirection="Rows"
+                                 ResizeBehavior="PreviousAndNext"
+                                 ShowsPreview="False">
+                        <GridSplitter.Style>
+                            <Style TargetType="GridSplitter">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="GridSplitter">
+                                            <Border Background="{TemplateBinding Background}">
+                                                <!-- Visual indicator -->
+                                                <Rectangle Height="1" 
+                                                          Fill="#C6C6C6" 
+                                                          VerticalAlignment="Center"
+                                                          Margin="4,0"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="#0969DA"/>
+                                                    <Setter Property="Cursor" Value="SizeNS"/>
+                                                </Trigger>
+                                                <Trigger Property="IsDragging" Value="True">
+                                                    <Setter Property="Background" Value="#0969DA"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </GridSplitter.Style>
+                    </GridSplitter>
                     
-                    <!-- Procore Links Panel with modern header -->
-                    <Border x:Name="ProcorePanelContainer" Grid.Row="2" Visibility="Collapsed">
+                    <!-- Bookmarks Panel with modern header and drag handle -->
+                    <Border x:Name="BookmarksPanelContainer" Grid.Row="2" Visibility="Collapsed">
                         <DockPanel>
-                            <Border DockPanel.Dock="Top" Background="#E8F5E8" BorderBrush="#D0D7DE" BorderThickness="0,0,0,1">
-                                <TextBlock Text="🔗 Procore Links" 
-                                          Padding="12,8" 
-                                          FontWeight="SemiBold"
-                                          FontSize="13"
-                                          Foreground="#24292F"/>
-                            </Border>
-                            <ContentControl x:Name="ProcorePanelContent" Background="White"/>
-                        </DockPanel>
-                    </Border>
-                    
-                    <!-- Splitter -->
-                    <GridSplitter Grid.Row="3" Height="3" 
-                                 HorizontalAlignment="Stretch"
-                                 VerticalAlignment="Center"
-                                 Style="{StaticResource SeparatorStyle}" 
-                                 Visibility="{Binding ElementName=ProcorePanelContainer, Path=Visibility}"/>
-                    
-                    <!-- Bookmarks Panel with modern header -->
-                    <Border x:Name="BookmarksPanelContainer" Grid.Row="4">
-                        <DockPanel>
-                            <Border DockPanel.Dock="Top" Background="#F0E6FF" BorderBrush="#D0D7DE" BorderThickness="0,0,0,1">
-                                <TextBlock Text="⭐ Bookmarks" 
-                                          Padding="12,8" 
-                                          FontWeight="SemiBold"
-                                          FontSize="13"
-                                          Foreground="#24292F"/>
+                            <Border x:Name="BookmarksPanelHeader" DockPanel.Dock="Top" 
+                                   Background="#F0F9FF" BorderBrush="#D0D7DE" BorderThickness="0,0,0,1"
+                                   Cursor="Hand">
+                                <DockPanel>
+                                    <TextBlock Text="🔖 Bookmarks" 
+                                              Padding="12,8" 
+                                              FontWeight="SemiBold"
+                                              FontSize="13"
+                                              Foreground="#24292F"
+                                              DockPanel.Dock="Left"/>
+                                    <!-- Future: Add drag handle icon here -->
+                                    <Border DockPanel.Dock="Right" Padding="8,8"
+                                           ToolTip="Drag to undock panel (Future)">
+                                        <TextBlock Text="⋮⋮" FontSize="12" Foreground="#6B7280" 
+                                                  VerticalAlignment="Center"/>
+                                    </Border>
+                                </DockPanel>
                             </Border>
                             <ContentControl x:Name="BookmarksPanelContent" Background="White"/>
                         </DockPanel>
@@ -169,17 +149,193 @@
                 </Grid>
             </Border>
             
-            <!-- Splitter between Main Area and Right Column -->
-            <GridSplitter Width="3" DockPanel.Dock="Right" 
+            <!-- Left Splitter - Draggable to resize left panel -->
+            <GridSplitter x:Name="LeftSplitter" Grid.Column="1" 
+                         Width="6" 
                          HorizontalAlignment="Center"
                          VerticalAlignment="Stretch"
-                         Style="{StaticResource SeparatorStyle}"/>
+                         Background="#E1E4E8"
+                         BorderBrush="#D0D7DE"
+                         BorderThickness="1,0"
+                         ResizeDirection="Columns"
+                         ResizeBehavior="PreviousAndNext"
+                         ShowsPreview="False">
+                <GridSplitter.Style>
+                    <Style TargetType="GridSplitter">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="GridSplitter">
+                                    <Border Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}">
+                                        <!-- Visual indicator -->
+                                        <Rectangle Width="1" 
+                                                  Fill="#C6C6C6" 
+                                                  HorizontalAlignment="Center"
+                                                  Margin="0,4"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#0969DA"/>
+                                            <Setter Property="Cursor" Value="SizeWE"/>
+                                        </Trigger>
+                                        <Trigger Property="IsDragging" Value="True">
+                                            <Setter Property="Background" Value="#0969DA"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </GridSplitter.Style>
+            </GridSplitter>
             
             <!-- Main Content Area (Center) -->
-            <ContentControl x:Name="MainContent">
+            <ContentControl x:Name="MainContent" Grid.Column="2">
                 <!-- Tab Manager will be placed here -->
             </ContentControl>
-        </DockPanel>
+            
+            <!-- Right Splitter - Draggable to resize right panel -->
+            <GridSplitter x:Name="RightSplitter" Grid.Column="3" 
+                         Width="6" 
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Stretch"
+                         Background="#E1E4E8"
+                         BorderBrush="#D0D7DE"
+                         BorderThickness="1,0"
+                         ResizeDirection="Columns"
+                         ResizeBehavior="PreviousAndNext"
+                         ShowsPreview="False">
+                <GridSplitter.Style>
+                    <Style TargetType="GridSplitter">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="GridSplitter">
+                                    <Border Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}">
+                                        <!-- Visual indicator -->
+                                        <Rectangle Width="1" 
+                                                  Fill="#C6C6C6" 
+                                                  HorizontalAlignment="Center"
+                                                  Margin="0,4"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#0969DA"/>
+                                            <Setter Property="Cursor" Value="SizeWE"/>
+                                        </Trigger>
+                                        <Trigger Property="IsDragging" Value="True">
+                                            <Setter Property="Background" Value="#0969DA"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </GridSplitter.Style>
+            </GridSplitter>
+            
+            <!-- Right Column with VS Code-style collapsing -->
+            <Border x:Name="RightColumnContainer" Grid.Column="4"
+                    Background="#F6F8FA" BorderBrush="#D0D7DE" BorderThickness="1,0,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <!-- To-Do Panel with modern header and drag handle -->
+                    <Border x:Name="ToDoPanelContainer" Grid.Row="0">
+                        <DockPanel>
+                            <Border x:Name="ToDoPanelHeader" DockPanel.Dock="Top" 
+                                   Background="#FFF3CD" BorderBrush="#D0D7DE" BorderThickness="0,0,0,1"
+                                   Cursor="Hand">
+                                <DockPanel>
+                                    <TextBlock Text="✅ To-Do" 
+                                              Padding="12,8" 
+                                              FontWeight="SemiBold"
+                                              FontSize="13"
+                                              Foreground="#24292F"
+                                              DockPanel.Dock="Left"/>
+                                    <!-- Future: Add drag handle icon here -->
+                                    <Border DockPanel.Dock="Right" Padding="8,8"
+                                           ToolTip="Drag to undock panel (Future)">
+                                        <TextBlock Text="⋮⋮" FontSize="12" Foreground="#6B7280" 
+                                                  VerticalAlignment="Center"/>
+                                    </Border>
+                                </DockPanel>
+                            </Border>
+                            <ContentControl x:Name="ToDoPanelContent" Background="White"/>
+                        </DockPanel>
+                    </Border>
+                    
+                    <!-- Splitter for vertical resizing within right panel -->
+                    <GridSplitter Grid.Row="1" Height="6" 
+                                 HorizontalAlignment="Stretch"
+                                 VerticalAlignment="Center"
+                                 Background="#E1E4E8"
+                                 ResizeDirection="Rows"
+                                 ResizeBehavior="PreviousAndNext"
+                                 ShowsPreview="False">
+                        <GridSplitter.Style>
+                            <Style TargetType="GridSplitter">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="GridSplitter">
+                                            <Border Background="{TemplateBinding Background}">
+                                                <!-- Visual indicator -->
+                                                <Rectangle Height="1" 
+                                                          Fill="#C6C6C6" 
+                                                          VerticalAlignment="Center"
+                                                          Margin="4,0"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="#0969DA"/>
+                                                    <Setter Property="Cursor" Value="SizeNS"/>
+                                                </Trigger>
+                                                <Trigger Property="IsDragging" Value="True">
+                                                    <Setter Property="Background" Value="#0969DA"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </GridSplitter.Style>
+                    </GridSplitter>
+                    
+                    <!-- Procore Links Panel with modern header and drag handle -->
+                    <Border x:Name="ProcorePanelContainer" Grid.Row="2" Visibility="Collapsed">
+                        <DockPanel>
+                            <Border x:Name="ProcorePanelHeader" DockPanel.Dock="Top" 
+                                   Background="#E8F5E8" BorderBrush="#D0D7DE" BorderThickness="0,0,0,1"
+                                   Cursor="Hand">
+                                <DockPanel>
+                                    <TextBlock Text="🔗 Procore Links" 
+                                              Padding="12,8" 
+                                              FontWeight="SemiBold"
+                                              FontSize="13"
+                                              Foreground="#24292F"
+                                              DockPanel.Dock="Left"/>
+                                    <!-- Future: Add drag handle icon here -->
+                                    <Border DockPanel.Dock="Right" Padding="8,8"
+                                           ToolTip="Drag to undock panel (Future)">
+                                        <TextBlock Text="⋮⋮" FontSize="12" Foreground="#6B7280" 
+                                                  VerticalAlignment="Center"/>
+                                    </Border>
+                                </DockPanel>
+                            </Border>
+                            <ContentControl x:Name="ProcorePanelContent" Background="White"/>
+                        </DockPanel>
+                    </Border>
+
+
+                </Grid>
+            </Border>
+        </Grid>
         
         <!-- Console Area at bottom (Hidden by default) -->
         <Border x:Name="ConsoleArea" Visibility="Collapsed" 
