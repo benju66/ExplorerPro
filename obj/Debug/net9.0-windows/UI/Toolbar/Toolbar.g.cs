@@ -116,7 +116,7 @@ namespace ExplorerPro.UI.Toolbar {
                 return;
             }
             _contentLoaded = true;
-            System.Uri resourceLocater = new System.Uri("/ExplorerPro;component/ui/toolbar/toolbar.xaml", System.UriKind.Relative);
+            System.Uri resourceLocater = new System.Uri("/ExplorerPro;V1.0.0.0;component/ui/toolbar/toolbar.xaml", System.UriKind.Relative);
             
             #line 1 "..\..\..\..\..\UI\Toolbar\Toolbar.xaml"
             System.Windows.Application.LoadComponent(this, resourceLocater);

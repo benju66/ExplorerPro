@@ -166,6 +166,14 @@ namespace ExplorerPro.UI.MainWindow
 
                 // Apply saved panel visibility settings
                 ApplySavedPanelVisibility(null);
+                
+                // Initialize panel layouts after visibility is set
+                // Use a dispatcher to ensure UI is fully loaded before layout updates
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+                {
+                    UpdatePanelLayout(SidebarLocation.Left);
+                    UpdatePanelLayout(SidebarLocation.Right);
+                }));
             }
             catch (Exception ex)
             {
@@ -606,6 +614,9 @@ namespace ExplorerPro.UI.MainWindow
                     
                     // Restore panel states after expanding sidebar
                     RestorePanelStatesForSidebar(SidebarLocation.Left);
+                    
+                    // Update panel layout for dynamic height allocation
+                    UpdatePanelLayout(SidebarLocation.Left);
                 }
             }
             catch (Exception ex)
@@ -670,6 +681,9 @@ namespace ExplorerPro.UI.MainWindow
                     
                     // Restore panel states after expanding sidebar
                     RestorePanelStatesForSidebar(SidebarLocation.Right);
+                    
+                    // Update panel layout for dynamic height allocation
+                    UpdatePanelLayout(SidebarLocation.Right);
                 }
             }
             catch (Exception ex)
@@ -803,6 +817,9 @@ namespace ExplorerPro.UI.MainWindow
                     // Update settings
                     _settingsManager.UpdateSetting($"dockable_panels.{settingName}", true);
                 }
+                
+                // Update panel layout for dynamic height allocation
+                UpdatePanelLayout(location);
             }
             catch (Exception ex)
             {
@@ -836,6 +853,9 @@ namespace ExplorerPro.UI.MainWindow
                     targetPanel.Visibility = Visibility.Visible;
                     // Width is handled by Grid column definitions, no restoration needed
                     _settingsManager.UpdateSetting($"dockable_panels.{settingName}", true);
+                    
+                    // Update panel layout for dynamic height allocation
+                    UpdatePanelLayout(location);
                 }
             }
             catch (Exception ex)
@@ -888,13 +908,16 @@ namespace ExplorerPro.UI.MainWindow
         #region Panel Architecture - Proportional & Dockable System
         
         /// <summary>
-        /// Enhanced panel system with proportional sizing and future docking support.
+        /// Enhanced panel system with proportional sizing, dynamic height allocation, and future docking support.
         /// Panels maintain hierarchical relationship with sidebars while supporting individual sizing.
-        /// Architecture supports future drag-out docking functionality.
+        /// Features:
+        /// - Dynamic height: Single visible panel expands to full sidebar height
+        /// - Individual width preferences within sidebars (future: resizable panel widths)
+        /// - Architecture supports future drag-out docking functionality
         /// </summary>
         
         /// <summary>
-        /// Panel information for managing proportional sizing and docking
+        /// Panel information for managing proportional sizing, width preferences, and docking
         /// </summary>
         public class PanelInfo
         {
@@ -903,6 +926,7 @@ namespace ExplorerPro.UI.MainWindow
             public Border Header { get; set; }
             public SidebarLocation Location { get; set; }
             public double PreferredRatio { get; set; } = DEFAULT_PANEL_RATIO;
+            public double PreferredWidthRatio { get; set; } = 1.0; // For future width resizing within sidebars
             public bool IsDockable { get; set; } = true;
             public bool IsFloating { get; set; } = false;
         }
@@ -1041,6 +1065,228 @@ namespace ExplorerPro.UI.MainWindow
             catch (Exception ex)
             {
                 Console.WriteLine($"Error initializing panel drag handlers: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Update panel layout dynamically based on visible panels in a sidebar
+        /// Single visible panel expands to full height, multiple panels use proportional sizing
+        /// </summary>
+        /// <param name="location">Sidebar location to update</param>
+        private void UpdatePanelLayout(SidebarLocation location)
+        {
+            try
+            {
+                Grid sidebarGrid = null;
+                List<PanelInfo> panels = null;
+                GridSplitter splitter = null;
+                
+                if (location == SidebarLocation.Left)
+                {
+                    sidebarGrid = LeftColumnContainer.Child as Grid;
+                    panels = GetPanelInfoForSidebar(SidebarLocation.Left);
+                    splitter = LeftPanelSplitter;
+                }
+                else if (location == SidebarLocation.Right)
+                {
+                    sidebarGrid = RightColumnContainer.Child as Grid;
+                    panels = GetPanelInfoForSidebar(SidebarLocation.Right);
+                    // Right sidebar splitter - find it in the grid
+                    splitter = sidebarGrid?.Children.OfType<GridSplitter>()
+                        .FirstOrDefault(gs => Grid.GetRow(gs) == 1);
+                }
+                
+                if (sidebarGrid == null || panels == null) 
+                {
+                    Console.WriteLine($"UpdatePanelLayout: Failed to get sidebar grid or panels for {location}");
+                    return;
+                }
+                
+                // Count visible panels
+                var visiblePanels = panels.Where(p => p.Container.Visibility == Visibility.Visible).ToList();
+                
+                Console.WriteLine($"UpdatePanelLayout: {location} sidebar has {visiblePanels.Count} visible panels");
+                foreach (var panel in visiblePanels)
+                {
+                    Console.WriteLine($"  - Visible panel: {panel.Name}");
+                }
+                
+                if (visiblePanels.Count == 1)
+                {
+                    Console.WriteLine($"Setting single panel layout for {location}");
+                    // Single panel - expand to full height
+                    SetSinglePanelLayout(sidebarGrid, visiblePanels[0], splitter);
+                }
+                else if (visiblePanels.Count > 1)
+                {
+                    Console.WriteLine($"Setting multi panel layout for {location}");
+                    // Multiple panels - use proportional sizing
+                    SetMultiPanelLayout(sidebarGrid, visiblePanels, splitter);
+                }
+                else
+                {
+                    Console.WriteLine($"No visible panels in {location} sidebar");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error updating panel layout for {location}: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            }
+        }
+        
+        /// <summary>
+        /// Configure layout for single visible panel (full height)
+        /// </summary>
+        private void SetSinglePanelLayout(Grid sidebarGrid, PanelInfo visiblePanel, GridSplitter splitter)
+        {
+            try
+            {
+                Console.WriteLine($"SetSinglePanelLayout: Configuring layout for panel {visiblePanel.Name}");
+                Console.WriteLine($"  - Grid has {sidebarGrid.RowDefinitions.Count} row definitions");
+                
+                // For sidebar with single panel, make it take full height
+                if (sidebarGrid.RowDefinitions.Count >= 1)
+                {
+                    var visibleRowIndex = Grid.GetRow(visiblePanel.Container);
+                    Console.WriteLine($"  - Visible panel is in row {visibleRowIndex}");
+                    
+                    // Clear all row definitions and recreate with single expanding row
+                    sidebarGrid.RowDefinitions.Clear();
+                    
+                    // Add single row that expands to fill all space
+                    sidebarGrid.RowDefinitions.Add(new RowDefinition 
+                    { 
+                        Height = new GridLength(1, GridUnitType.Star),
+                        MinHeight = MIN_PANEL_HEIGHT 
+                    });
+                    
+                    // Move the visible panel to row 0
+                    Grid.SetRow(visiblePanel.Container, 0);
+                    
+                    // Ensure the panel fills full width by removing any margins/padding
+                    visiblePanel.Container.Margin = new Thickness(0);
+                    visiblePanel.Container.Padding = new Thickness(0);
+                    
+                    Console.WriteLine($"  - Grid recreated with single expanding row");
+                    Console.WriteLine($"  - Visible panel moved to row 0");
+                    
+                    // Hide splitter
+                    if (splitter != null)
+                    {
+                        splitter.Visibility = Visibility.Collapsed;
+                        Console.WriteLine("  - Splitter hidden");
+                    }
+                    else
+                    {
+                        Console.WriteLine("  - No splitter found");
+                    }
+                    
+                    // Force layout update
+                    sidebarGrid.UpdateLayout();
+                    Console.WriteLine("  - Layout update forced");
+                }
+                else
+                {
+                    Console.WriteLine($"  - Warning: Grid has no row definitions");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error setting single panel layout: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            }
+        }
+        
+        /// <summary>
+        /// Configure layout for multiple visible panels (proportional sizing)
+        /// </summary>
+        private void SetMultiPanelLayout(Grid sidebarGrid, List<PanelInfo> visiblePanels, GridSplitter splitter)
+        {
+            try
+            {
+                Console.WriteLine($"SetMultiPanelLayout: Configuring layout for {visiblePanels.Count} panels");
+                
+                // Recreate the grid structure for multiple panels
+                sidebarGrid.RowDefinitions.Clear();
+                
+                var firstPanel = visiblePanels.FirstOrDefault();
+                if (firstPanel?.Location == SidebarLocation.Left)
+                {
+                    // Left sidebar: recreate with pinned and bookmarks structure
+                    var pinnedRatio = GetPanelRatio("pinned");
+                    var bookmarksRatio = GetPanelRatio("bookmarks");
+                    
+                    // Row 0: Pinned panel
+                    sidebarGrid.RowDefinitions.Add(new RowDefinition 
+                    { 
+                        Height = new GridLength(pinnedRatio, GridUnitType.Star),
+                        MinHeight = MIN_PANEL_HEIGHT 
+                    });
+                    
+                    // Row 1: Splitter
+                    sidebarGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    
+                    // Row 2: Bookmarks panel
+                    sidebarGrid.RowDefinitions.Add(new RowDefinition 
+                    { 
+                        Height = new GridLength(bookmarksRatio, GridUnitType.Star),
+                        MinHeight = MIN_PANEL_HEIGHT 
+                    });
+                    
+                    // Set panel positions
+                    Grid.SetRow(PinnedPanelContainer, 0);
+                    Grid.SetRow(BookmarksPanelContainer, 2);
+                    if (splitter != null) Grid.SetRow(splitter, 1);
+                    
+                    Console.WriteLine($"  - Left sidebar: pinned({pinnedRatio}*), splitter(auto), bookmarks({bookmarksRatio}*)");
+                }
+                else if (firstPanel?.Location == SidebarLocation.Right)
+                {
+                    // Right sidebar: recreate with todo and procore structure
+                    var todoRatio = GetPanelRatio("todo");
+                    var procoreRatio = GetPanelRatio("procore");
+                    
+                    // Row 0: Todo panel
+                    sidebarGrid.RowDefinitions.Add(new RowDefinition 
+                    { 
+                        Height = new GridLength(todoRatio, GridUnitType.Star),
+                        MinHeight = MIN_PANEL_HEIGHT 
+                    });
+                    
+                    // Row 1: Splitter
+                    sidebarGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    
+                    // Row 2: Procore panel
+                    sidebarGrid.RowDefinitions.Add(new RowDefinition 
+                    { 
+                        Height = new GridLength(procoreRatio, GridUnitType.Star),
+                        MinHeight = MIN_PANEL_HEIGHT 
+                    });
+                    
+                    // Set panel positions
+                    Grid.SetRow(ToDoPanelContainer, 0);
+                    Grid.SetRow(ProcorePanelContainer, 2);
+                    if (splitter != null) Grid.SetRow(splitter, 1);
+                    
+                    Console.WriteLine($"  - Right sidebar: todo({todoRatio}*), splitter(auto), procore({procoreRatio}*)");
+                }
+                
+                // Show splitter
+                if (splitter != null)
+                {
+                    splitter.Visibility = Visibility.Visible;
+                    Console.WriteLine("  - Splitter shown");
+                }
+                
+                // Force layout update
+                sidebarGrid.UpdateLayout();
+                Console.WriteLine("  - Layout update forced");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error setting multi panel layout: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
             }
         }
         
