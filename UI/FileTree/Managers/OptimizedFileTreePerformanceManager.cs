@@ -35,6 +35,17 @@ namespace ExplorerPro.UI.FileTree.Managers
         private volatile int _cacheMissCount = 0;
         private DateTime _lastCacheUpdate = DateTime.MinValue;
         
+        // Enhanced memory tracking
+        private readonly MemoryTracker _memoryTracker;
+        private readonly Timer _memoryCheckTimer;
+        private readonly TimeSpan _memoryCheckInterval = TimeSpan.FromSeconds(30);
+        
+        // Enhanced caching strategies
+        private readonly Dictionary<string, WeakReference<FileTreeItem>> _pathToItemCache = new Dictionary<string, WeakReference<FileTreeItem>>();
+        private readonly Dictionary<FileTreeItem, TreeViewContainer> _itemToContainerCache = new Dictionary<FileTreeItem, TreeViewContainer>();
+        private readonly Queue<string> _pathCacheKeys = new Queue<string>();
+        private const int MAX_PATH_CACHE_SIZE = 1000;
+        
         private bool _disposed = false;
 
         #endregion
@@ -58,6 +69,10 @@ namespace ExplorerPro.UI.FileTree.Managers
             
             // Subscribe to indexer events
             _indexer.VisibilityChanged += OnIndexerVisibilityChanged;
+            
+            // Initialize enhanced features
+            _memoryTracker = new MemoryTracker();
+            _memoryCheckTimer = new Timer(CheckMemoryUsage, null, (int)_memoryCheckInterval.TotalMilliseconds, (int)_memoryCheckInterval.TotalMilliseconds);
             
             Initialize();
         }
@@ -349,6 +364,38 @@ namespace ExplorerPro.UI.FileTree.Managers
             System.Diagnostics.Debug.WriteLine($"[OPTIMIZED-PERF] {DateTime.Now:HH:mm:ss.fff} - {message}");
         }
 
+        /// <summary>
+        /// Periodic memory usage check callback
+        /// </summary>
+        private void CheckMemoryUsage(object state)
+        {
+            if (_disposed) return;
+
+            try
+            {
+                var stats = _memoryTracker?.GetStats();
+                if (stats != null)
+                {
+                    // Log memory usage if it's significantly higher than baseline
+                    if (stats.DeltaFromBaseline > 50 * 1024 * 1024) // 50MB threshold
+                    {
+                        LogDebug($"Memory usage: {stats.CurrentMemory / (1024 * 1024)}MB (Delta: +{stats.DeltaFromBaseline / (1024 * 1024)}MB)");
+                        
+                        // Force garbage collection if memory usage is very high
+                        if (stats.DeltaFromBaseline > 200 * 1024 * 1024) // 200MB threshold
+                        {
+                            _memoryTracker.ForceGarbageCollection();
+                            LogDebug("Forced garbage collection due to high memory usage");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogDebug($"Error during memory check: {ex.Message}");
+            }
+        }
+
         #endregion
 
         #region IDisposable
@@ -395,6 +442,69 @@ namespace ExplorerPro.UI.FileTree.Managers
             public int CachedItemsCount { get; set; }
             public DateTime LastCacheUpdate { get; set; }
             public OptimizedTreeViewIndexer.IndexerStats IndexerStats { get; set; }
+        }
+
+        /// <summary>
+        /// Container wrapper for TreeViewItem with additional metadata
+        /// </summary>
+        public class TreeViewContainer
+        {
+            public TreeViewItem Container { get; set; }
+            public DateTime LastAccessed { get; set; }
+            public bool IsVisible { get; set; }
+            public int AccessCount { get; set; }
+        }
+
+        /// <summary>
+        /// Memory usage tracker for the file tree
+        /// </summary>
+        public class MemoryTracker
+        {
+            private long _baselineMemory;
+            private long _peakMemory;
+            private DateTime _lastCheck = DateTime.Now;
+
+            public MemoryTracker()
+            {
+                _baselineMemory = GC.GetTotalMemory(false);
+                _peakMemory = _baselineMemory;
+            }
+
+            public MemoryStats GetStats()
+            {
+                var currentMemory = GC.GetTotalMemory(false);
+                if (currentMemory > _peakMemory)
+                    _peakMemory = currentMemory;
+
+                return new MemoryStats
+                {
+                    CurrentMemory = currentMemory,
+                    BaselineMemory = _baselineMemory,
+                    PeakMemory = _peakMemory,
+                    DeltaFromBaseline = currentMemory - _baselineMemory,
+                    LastCheck = _lastCheck
+                };
+            }
+
+            public void ForceGarbageCollection()
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                _lastCheck = DateTime.Now;
+            }
+        }
+
+        /// <summary>
+        /// Memory statistics
+        /// </summary>
+        public class MemoryStats
+        {
+            public long CurrentMemory { get; set; }
+            public long BaselineMemory { get; set; }
+            public long PeakMemory { get; set; }
+            public long DeltaFromBaseline { get; set; }
+            public DateTime LastCheck { get; set; }
         }
 
         #endregion

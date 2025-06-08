@@ -57,6 +57,14 @@ namespace ExplorerPro.UI.FileTree
         // State tracking
         private bool _isInitialized = false;
         private bool _disposed = false;
+        
+        // Search highlighting
+        private string _searchQuery = "";
+        private readonly Dictionary<string, bool> _highlightedItems = new Dictionary<string, bool>();
+        
+        // Performance optimization settings
+        private bool _enableAnimations = false; // Disabled by default for performance
+        private const int MAX_ITEMS_FOR_ANIMATIONS = 500; // Threshold for enabling animations
 
         #endregion
 
@@ -444,7 +452,13 @@ namespace ExplorerPro.UI.FileTree
             return Directory.Exists(selectedPath) ? selectedPath : Path.GetDirectoryName(selectedPath);
         }
 
-        public void RefreshView() => _coordinator?.RefreshView();
+        public void RefreshView() 
+        { 
+            _coordinator?.RefreshView();
+            
+            // Optimize performance after view refresh
+            OptimizePerformanceForTreeSize();
+        }
         public void RefreshDirectory(string directoryPath) => _ = _coordinator?.RefreshDirectoryAsync(directoryPath);
         public void SelectItem(string path) => _coordinator?.SelectItemByPath(path);
 
@@ -574,6 +588,174 @@ namespace ExplorerPro.UI.FileTree
             _coordinator?.SelectionService?.SelectByPattern(pattern, _rootItems, addToSelection);
         }
 
+        /// <summary>
+        /// Highlights search results in the tree view
+        /// </summary>
+        public void HighlightSearchResults(string query)
+        {
+            _searchQuery = query?.Trim() ?? "";
+            _highlightedItems.Clear();
+            
+            if (string.IsNullOrEmpty(_searchQuery))
+            {
+                RefreshView();
+                return;
+            }
+            
+            // Find matching items
+            var matchingItems = FindMatchingItems(_rootItems, _searchQuery);
+            foreach (var item in matchingItems)
+            {
+                _highlightedItems[item.Path] = true;
+                
+                // Expand parent items to make matches visible
+                ExpandToPath(item.Path);
+            }
+            
+            RefreshView();
+        }
+
+        /// <summary>
+        /// Clears search highlighting
+        /// </summary>
+        public void ClearSearchHighlighting()
+        {
+            _searchQuery = "";
+            _highlightedItems.Clear();
+            RefreshView();
+        }
+
+        /// <summary>
+        /// Gets whether an item is highlighted from search
+        /// </summary>
+        public bool IsItemHighlighted(string path)
+        {
+            return _highlightedItems.ContainsKey(path);
+        }
+
+        /// <summary>
+        /// Recursively finds items matching the search query
+        /// </summary>
+        private List<FileTreeItem> FindMatchingItems(IEnumerable<FileTreeItem> items, string query)
+        {
+            var matches = new List<FileTreeItem>();
+            
+            foreach (var item in items)
+            {
+                // Check if item name contains the query (case-insensitive)
+                if (item.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    matches.Add(item);
+                }
+                
+                // Recursively search children
+                if (item.Children?.Count > 0)
+                {
+                    matches.AddRange(FindMatchingItems(item.Children, query));
+                }
+            }
+            
+            return matches;
+        }
+
+        #endregion
+
+        #region Performance Optimization Methods
+        
+        /// <summary>
+        /// Gets or sets whether animations are enabled based on performance considerations
+        /// </summary>
+        public bool EnableAnimations
+        {
+            get => _enableAnimations;
+            set
+            {
+                if (_enableAnimations != value)
+                {
+                    _enableAnimations = value;
+                    ApplyPerformanceSettings();
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Automatically adjusts performance settings based on tree size
+        /// </summary>
+        private void OptimizePerformanceForTreeSize()
+        {
+            try
+            {
+                var totalItemCount = CountVisibleTreeItems();
+                
+                // Automatically disable animations for large trees
+                var shouldEnableAnimations = totalItemCount <= MAX_ITEMS_FOR_ANIMATIONS;
+                
+                if (_enableAnimations != shouldEnableAnimations)
+                {
+                    _enableAnimations = shouldEnableAnimations;
+                    ApplyPerformanceSettings();
+                    
+                    System.Diagnostics.Debug.WriteLine(
+                        $"FileTree Performance: {totalItemCount} items, animations {(_enableAnimations ? "enabled" : "disabled")}");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error optimizing performance: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Counts visible items in the tree for performance optimization
+        /// </summary>
+        private int CountVisibleTreeItems()
+        {
+            return CountItemsRecursive(_rootItems);
+        }
+        
+        /// <summary>
+        /// Recursively counts items in the tree
+        /// </summary>
+        private int CountItemsRecursive(IEnumerable<FileTreeItem> items)
+        {
+            int count = 0;
+            if (items == null) return count;
+            
+            foreach (var item in items)
+            {
+                count++;
+                if (item.IsExpanded && item.Children?.Count > 0)
+                {
+                    count += CountItemsRecursive(item.Children);
+                }
+            }
+            return count;
+        }
+        
+        /// <summary>
+        /// Applies performance settings to the TreeView
+        /// </summary>
+        private void ApplyPerformanceSettings()
+        {
+            try
+            {
+                // For now, we're using lightweight CSS-style hover effects instead of animations
+                // This method can be extended in the future if we want to re-enable optional animations
+                
+                // Update virtualization settings based on performance mode
+                if (fileTreeView != null)
+                {
+                    VirtualizingPanel.SetIsVirtualizing(fileTreeView, true);
+                    VirtualizingPanel.SetVirtualizationMode(fileTreeView, VirtualizationMode.Recycling);
+                    VirtualizingPanel.SetIsContainerVirtualizable(fileTreeView, true);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error applying performance settings: {ex.Message}");
+            }
+        }
+        
         #endregion
 
         #region Inline Editing Event Handlers

@@ -93,6 +93,11 @@ namespace ExplorerPro.UI.FileTree.Services
         public event EventHandler<string> ErrorOccurred;
         public event EventHandler<OutlookExtractionCompletedEventArgs> OutlookExtractionCompleted;
         
+        // Enhanced events for modern features
+        public event EventHandler<DragBetweenTabsEventArgs> DragBetweenTabs;
+        public event EventHandler<VisualDropIndicatorEventArgs> ShowDropIndicator;
+        public event EventHandler HideDropIndicator;
+        
         #endregion
         
         #region Properties
@@ -1157,5 +1162,37 @@ namespace ExplorerPro.UI.FileTree.Services
         }
         
         #endregion
+    }
+
+    /// <summary>
+    /// Event arguments for drag between tabs functionality
+    /// </summary>
+    public class DragBetweenTabsEventArgs : EventArgs
+    {
+        public string[] SourcePaths { get; set; }
+        public string TargetTabId { get; set; }
+        public DragDropEffects Effects { get; set; }
+    }
+
+    /// <summary>
+    /// Event arguments for visual drop indicator
+    /// </summary>
+    public class VisualDropIndicatorEventArgs : EventArgs
+    {
+        public Point Position { get; set; }
+        public DropIndicatorType IndicatorType { get; set; }
+        public bool IsValidDrop { get; set; }
+    }
+
+    /// <summary>
+    /// Types of drop indicators
+    /// </summary>
+    public enum DropIndicatorType
+    {
+        None,
+        InsertAbove,
+        InsertBelow,
+        DropInto,
+        TabDrop
     }
 }

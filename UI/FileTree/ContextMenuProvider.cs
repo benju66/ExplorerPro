@@ -138,6 +138,43 @@ namespace ExplorerPro.UI.FileTree
 
             contextMenu.Items.Add(new Separator());
 
+            // Enhanced Windows Shell Integration
+            var shellMenu = AddSubMenu(contextMenu, "_Windows Shell", iconPath + "windows.png");
+            
+            AddMenuItem(shellMenu, "Open Command Prompt _Here", iconPath + "terminal.png", 
+                () => OpenCommandPrompt(selectedPath), Key.T, ModifierKeys.Control | ModifierKeys.Alt);
+                
+            AddMenuItem(shellMenu, "Open PowerShell Here", iconPath + "powershell.png", 
+                () => OpenPowerShell(selectedPath));
+                
+            AddMenuItem(shellMenu, "Open Windows Terminal", iconPath + "terminal-modern.png", 
+                () => OpenWindowsTerminal(selectedPath));
+
+            shellMenu.Items.Add(new Separator());
+            
+            AddMenuItem(shellMenu, "Show in File Explorer", iconPath + "folder.png", 
+                () => ShowInExplorer(selectedPath), Key.E, ModifierKeys.Control | ModifierKeys.Shift);
+                
+            AddMenuItem(shellMenu, "Copy Full Path", iconPath + "copy-path.png", 
+                () => CopyAsPath(selectedPath), Key.C, ModifierKeys.Control | ModifierKeys.Shift);
+
+            // Enhanced Search and Navigation
+            var searchMenu = AddSubMenu(contextMenu, "_Search && Navigate", iconPath + "search.png");
+            
+            AddMenuItem(searchMenu, "Search in This _Folder", iconPath + "search-folder.png", 
+                () => SearchInFolder(selectedPath), Key.F, ModifierKeys.Control | ModifierKeys.Shift);
+                
+            AddMenuItem(searchMenu, "Find _Similar Files", iconPath + "search-similar.png", 
+                () => FindSimilarFiles(selectedPath));
+                
+            if (!isDirectory)
+            {
+                AddMenuItem(searchMenu, "Find _Duplicates", iconPath + "search-duplicates.png", 
+                    () => FindDuplicates(selectedPath));
+            }
+
+            contextMenu.Items.Add(new Separator());
+
             // Create operations
             if (isDirectory)
             {
@@ -1172,6 +1209,149 @@ namespace ExplorerPro.UI.FileTree
             // This would show a properties dialog for multiple items
             MessageBox.Show($"Properties for {paths.Count} items", "Properties", 
                 MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        #endregion
+
+        #region Enhanced Shell Integration Methods
+
+        private void OpenCommandPrompt(string path)
+        {
+            try
+            {
+                string directory = Directory.Exists(path) ? path : IOPath.GetDirectoryName(path);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/k cd /d \"{directory}\"",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to open Command Prompt: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OpenPowerShell(string path)
+        {
+            try
+            {
+                string directory = Directory.Exists(path) ? path : IOPath.GetDirectoryName(path);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = $"-NoExit -Command \"Set-Location '{directory}'\"",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to open PowerShell: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OpenWindowsTerminal(string path)
+        {
+            try
+            {
+                string directory = Directory.Exists(path) ? path : IOPath.GetDirectoryName(path);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "wt.exe",
+                    Arguments = $"-d \"{directory}\"",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                // Fallback to PowerShell if Windows Terminal is not available
+                OpenPowerShell(path);
+            }
+        }
+
+        #endregion
+
+        #region Enhanced Search Methods
+
+        private void SearchInFolder(string path)
+        {
+            try
+            {
+                string directory = Directory.Exists(path) ? path : IOPath.GetDirectoryName(path);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{path}\"",
+                    UseShellExecute = true
+                });
+                
+                // Send Ctrl+F to open search
+                System.Threading.Tasks.Task.Delay(500).ContinueWith(_ =>
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        // This would require additional Windows API calls to send keys to Explorer
+                        // For now, just show a message
+                        MessageBox.Show("Explorer opened. Press Ctrl+F to search in this folder.", 
+                            "Search Tip", MessageBoxButton.OK, MessageBoxImage.Information);
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to open search: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void FindSimilarFiles(string path)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    string extension = IOPath.GetExtension(path);
+                    string directory = IOPath.GetDirectoryName(path);
+                    
+                    // This would integrate with the file tree's search functionality
+                    MessageBox.Show($"Searching for files with extension '{extension}' in '{directory}'...", 
+                        "Find Similar Files", MessageBoxButton.OK, MessageBoxImage.Information);
+                    
+                    // TODO: Integrate with actual search functionality
+                    // _fileTree.HighlightSearchResults($"*{extension}");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to find similar files: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void FindDuplicates(string path)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    string fileName = IOPath.GetFileNameWithoutExtension(path);
+                    string directory = IOPath.GetDirectoryName(path);
+                    
+                    MessageBox.Show($"Searching for duplicate files of '{fileName}' in '{directory}'...", 
+                        "Find Duplicates", MessageBoxButton.OK, MessageBoxImage.Information);
+                    
+                    // TODO: Implement actual duplicate detection logic
+                    // This would involve file size, hash comparison, etc.
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to find duplicates: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         #endregion

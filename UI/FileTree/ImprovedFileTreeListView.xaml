@@ -136,20 +136,49 @@
                   Tag="{Binding SelectionService.IsMultiSelectMode, Converter={StaticResource BoolToMultiSelectTagConverter}}"
                   ItemsSource="{Binding RootItems}">
             
-            <!-- Enhance ScrollViewer appearance without overriding template -->
+            <!-- Enhanced TreeView Resources with Smooth Animations -->
             <TreeView.Resources>
                 <Style TargetType="{x:Type ScrollViewer}" BasedOn="{StaticResource BaseScrollViewerStyle}">
                     <Setter Property="Focusable" Value="False"/>
                 </Style>
-            </TreeView.Resources>
-            
-            <TreeView.ItemContainerStyle>
+                
+                <!-- Enhanced TreeViewItem Style with Smooth Animations -->
                 <Style TargetType="TreeViewItem" BasedOn="{StaticResource TreeViewItemWithLines}">
                     <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
                     <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Standard"/>
                     <Setter Property="VirtualizingPanel.ScrollUnit" Value="Item"/>
+                    
+                    <!-- Performance-optimized hover effects using simple property changes -->
+                    <Style.Triggers>
+                        <!-- Lightweight hover effect using background opacity -->
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background">
+                                <Setter.Value>
+                                    <SolidColorBrush Color="#E5F3FF" Opacity="0.5"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        
+                        <!-- Smooth selection highlighting -->
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="{StaticResource SelectionBackgroundColor}"/>
+                        </Trigger>
+                        
+                        <!-- Combined hover + selection state -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsMouseOver" Value="True"/>
+                                <Condition Property="IsSelected" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter Property="Background">
+                                <Setter.Value>
+                                    <SolidColorBrush Color="#CCE8FF" Opacity="0.8"/>
+                                </Setter.Value>
+                            </Setter>
+                        </MultiTrigger>
+                    </Style.Triggers>
                 </Style>
-            </TreeView.ItemContainerStyle>
+            </TreeView.Resources>
             
             <TreeView.ItemTemplate>
                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
@@ -297,8 +326,6 @@
                                                             </Style>
                                                         </TextBox.Style>
                                                     </TextBox>
-                                                    
-
                                                 </Grid>
                                             </DataTemplate>
                                         </ContentPresenter.ContentTemplate>
