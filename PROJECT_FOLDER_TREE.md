@@ -14,7 +14,7 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 ├── TestWindow.xaml.cs                        # Test window code-behind
 ├── structure.txt                             # Project structure documentation
 │
-├── Documentation/                            # Project Documentation
+├── Documentation/                            # Project Documentation (Root Level)
 │   ├── PROJECT_FOLDER_TREE.md               # This file - project structure overview
 │   ├── CONTEXT_MENU_COLOR_FIX.md            # Context menu color fix documentation
 │   ├── README_TreeView_Selection_Optimization.md  # TreeView selection optimization guide
@@ -26,7 +26,18 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 │   ├── PERFORMANCE_OPTIMIZATION_ANALYSIS.md # Performance optimization analysis
 │   ├── REFACTORING_COMPLETE.md              # Refactoring completion summary
 │   ├── REFACTORING_NEXT_STEPS.md            # Next steps for refactoring
-│   └── REFACTORING_SUMMARY.md               # Refactoring summary
+│   ├── REFACTORING_SUMMARY.md               # Refactoring summary
+│   ├── EXCEPTION_HANDLING_IMPLEMENTATION.md # Exception handling implementation guide
+│   └── SIDEBAR_ENHANCEMENT_SUMMARY.md       # Sidebar enhancement implementation summary
+│
+├── Core/                                     # Core Application Components
+│   ├── ExceptionHandler.cs                  # Global exception handling and error management
+│   ├── OperationContext.cs                  # Operation context and state management
+│   ├── TransactionalOperation.cs            # Transactional operation wrapper
+│   ├── WindowLifecycleManager.cs            # Window lifecycle and registry management
+│   ├── IWindowRegistry.cs                   # Window registry interface
+│   ├── MainWindowInitializer.cs             # Main window initialization and setup
+│   └── InitializationState.cs               # Application initialization state tracking
 │
 ├── UI/                                        # User Interface Components
 │   ├── MainWindow/                           # Main application window
@@ -83,10 +94,11 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 │   │   ├── Utilities/                       # File tree utilities
 │   │   │   └── VisualTreeHelper.cs          # Visual tree manipulation utilities
 │   │   │
-│   │   ├── Dialogs/                         # File tree dialogs
+│   │   ├── Resources/                       # File tree resources
+│   │   ├── Dialogs/                         # File tree specific dialogs
 │   │   ├── Coordinators/                    # File tree coordinators
 │   │   ├── Behaviors/                       # File tree behaviors
-│   │   ├── Resources/                       # File tree resources
+│   │   ├── Models/                          # File tree models (currently empty)
 │   │   ├── DragDrop/                        # Drag and drop components
 │   │   └── Examples/                        # File tree examples
 │   │
@@ -168,6 +180,9 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 │   ├── LightTheme.xaml                     # Light mode theme definition
 │   └── DarkTheme.xaml                      # Dark mode theme definition
 │
+├── Tests/                                   # Testing Components
+│   └── DragDropMetadataTest.cs             # Drag and drop metadata testing
+│
 ├── Assets/                                  # Static Resources
 │   └── Icons/                              # Application icons and imagery
 │       └── app.ico                         # Main application icon
@@ -203,6 +218,8 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 - **Optimized TreeView** with performance enhancements and selection optimization
 - **Comprehensive drag-and-drop** support with file operations
 - **Extensible architecture** with service-oriented design
+- **Robust exception handling** with comprehensive error management
+- **Advanced window lifecycle management** with registry and state tracking
 
 ## Key Dependencies
 - MahApps.Metro (Modern WPF UI)
@@ -212,9 +229,26 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 - Newtonsoft.Json (Configuration management)
 
 ## Architecture Highlights
+- **Core application layer** with centralized exception handling and window management
 - **Service-oriented design** with clear separation of concerns
 - **Performance-optimized TreeView** with indexing and caching
 - **Comprehensive theming system** supporting light and dark modes
 - **Modular UI components** with reusable panels and controls
 - **Advanced file operations** with undo/redo support
-- **Extensible preview system** for various file types 
+- **Extensible preview system** for various file types
+- **Transactional operations** with rollback capabilities
+- **Comprehensive testing framework** for drag-and-drop and metadata operations
+- **Detailed documentation** covering implementation guides and optimization strategies
+
+## Recent Enhancements
+- **Exception Handling**: Comprehensive global exception handling with operation context tracking
+- **Window Lifecycle Management**: Advanced window registry and lifecycle management
+- **Sidebar Enhancements**: Improved sidebar functionality and user experience
+- **Performance Optimizations**: Multiple rounds of TreeView and selection optimization
+- **Context Menu Fixes**: Resolved theming issues with context menus
+- **Deadlock Prevention**: Implemented fixes for UI threading deadlocks
+
+## Testing Infrastructure
+- **Drag-and-Drop Testing**: Comprehensive testing for drag-and-drop metadata functionality
+- **Performance Testing**: Testing framework for TreeView optimization validation
+- **Integration Testing**: End-to-end testing for critical user workflows 
