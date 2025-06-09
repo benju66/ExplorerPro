@@ -245,6 +245,7 @@ namespace ExplorerPro.UI.MainWindow
         private readonly MainWindowInitializer _initializer;
         private readonly ExceptionHandler _exceptionHandler;
         private readonly object _stateLock = new object();
+        private WindowInitializationContext _initContext;
         
         private InitializationState _initState = InitializationState.Created;
         private TabControl _mainTabsControl;
@@ -507,19 +508,23 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Default constructor that creates MainWindow with shared logger infrastructure.
-        /// ENHANCED FOR FIX 1: Logger Factory Memory Leaks - Uses shared logger factory
+        /// ENHANCED FOR FIX 1: Logger Factory Memory Leaks AND Race Condition Prevention
         /// </summary>
         public MainWindow()
         {
-            InitializeComponent();
-            
-            // Create instance-specific logger with window ID context using shared factory
-            var windowId = Guid.NewGuid().ToString("N").Substring(0, 8);
-            _logger = _staticLogger;
-            _instanceLogger = CreateInstanceLogger(windowId);
+            _initContext = new WindowInitializationContext(this);
             
             try
             {
+                SetInitializationState(InitializationState.InitializingComponents);
+                InitializeComponent();
+                SetInitializationState(InitializationState.InitializingWindow);
+                
+                // Create instance-specific logger with window ID context using shared factory
+                var windowId = Guid.NewGuid().ToString("N").Substring(0, 8);
+                _logger = _staticLogger;
+                _instanceLogger = CreateInstanceLogger(windowId);
+                
                 _windowState = UIWindowState.Initializing;
                 _instanceLogger.LogInformation($"MainWindow created with shared logger (ID: {windowId})");
                 
@@ -530,27 +535,74 @@ namespace ExplorerPro.UI.MainWindow
                 // Initialize core fields
                 InitializeCoreFields();
                 
-                // Perform initialization through the initializer
-                var result = _initializer.InitializeWindow(this);
+                // Defer other initialization to Loaded event
+                Loaded += OnWindowLoaded;
                 
-                if (!result.Success)
-                {
-                    // Initialization failed - throw to prevent invalid window creation
-                    throw new WindowInitializationException(
-                        result.ErrorMessage, 
-                        result.State, 
-                        result.Error);
-                }
-                
-                _instanceLogger.LogInformation("MainWindow created successfully with shared logger");
+                _instanceLogger.LogInformation("MainWindow constructor completed - deferred initialization to Loaded event");
             }
             catch (Exception ex)
             {
-                _instanceLogger?.LogCritical(ex, "Failed to create MainWindow");
+                SetInitializationState(InitializationState.Failed);
+                throw new WindowInitializationException(
+                    "Failed to initialize window components", _initState, ex);
+            }
+        }
+
+        private void SetInitializationState(InitializationState state)
+        {
+            lock (_stateLock)
+            {
+                _initState = state;
+                _instanceLogger?.LogDebug($"Window state changed to: {state}");
+            }
+        }
+
+        private async void OnWindowLoaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                await InitializeWindowAsync();
+                SetInitializationState(InitializationState.Ready);
+            }
+            catch (Exception ex)
+            {
+                SetInitializationState(InitializationState.Failed);
+                _instanceLogger?.LogError(ex, "Window initialization failed");
+                MessageBox.Show($"Failed to initialize window: {ex.Message}", 
+                    "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Close();
+            }
+        }
+
+        private async Task InitializeWindowAsync()
+        {
+            try
+            {
+                _instanceLogger?.LogInformation("Starting async window initialization");
                 
-                // Ensure window is properly disposed on construction failure
-                try { Dispose(); } catch { }
+                // Use the original synchronous initializer for proven functionality
+                // but run it on a background thread to avoid blocking the UI
+                await Task.Run(() =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        var result = _initializer.InitializeWindow(this);
+                        
+                        if (!result.Success)
+                        {
+                            throw new WindowInitializationException(
+                                result.ErrorMessage, 
+                                result.State, 
+                                result.Error);
+                        }
+                    });
+                });
                 
+                _instanceLogger?.LogInformation("Async window initialization completed successfully");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Async window initialization failed");
                 throw;
             }
         }
