@@ -354,75 +354,89 @@ namespace ExplorerPro.UI.Toolbar
         
         /// <summary>
         /// Performs a fuzzy search using the SearchEngine.
+        /// FIXED FOR FIX 2: Replace async void with SafeFireAndForget pattern
         /// </summary>
         /// <param name="query">The search query to use</param>
-        private async void PerformFuzzySearch(string query)
+        private void PerformFuzzySearch(string query)
         {
-            if (_parentWindow is ExplorerPro.UI.MainWindow.MainWindow mainWindow)
-            {
-                try
-                {
-                    // Get the active file tree
-                    ImprovedFileTreeListView? activeFileTree = mainWindow.GetActiveFileTree();
-                    if (activeFileTree == null)
-                    {
-                        _logger?.LogWarning("No active FileTree found for fuzzy searching");
-                        return;
-                    }
-                    
-                    // Get the directory to search in
-                    string? searchDirectory = GetSearchDirectory(activeFileTree);
-                    if (string.IsNullOrEmpty(searchDirectory))
-                    {
-                        _logger?.LogWarning("Could not determine search directory");
-                        return;
-                    }
-                    
-                    _logger?.LogDebug($"Searching in directory: {searchDirectory}");
-                    
-                    // Show search indicator (if implemented)
-                    SetSearchInProgress(true);
-                    
-                    try
-                    {
-                        // Use the search engine to perform the search asynchronously
-                        int threshold = 60; // Adjust fuzzy matching threshold
-                        var results = await _searchEngine.FuzzySearchByNameAsync(
-                            directory: searchDirectory,
-                            query: query,
-                            threshold: threshold,
-                            includeFolders: true
-                        );
-                        
-                        if (results.Count > 0)
-                        {
-                            string? firstMatch = results[0];
-                            if (!string.IsNullOrEmpty(firstMatch))
-                            {
-                                _logger?.LogDebug($"Fuzzy match: {firstMatch}");
-                                
-                                // Navigate to the match
-                                activeFileTree.NavigateAndHighlight(firstMatch);
-                            }
-                        }
-                        else
-                        {
-                            _logger?.LogInformation("No fuzzy matches found");
-                            MessageBox.Show("No matches found for your search.", "Search Results", 
-                                MessageBoxButton.OK, MessageBoxImage.Information);
-                        }
-                    }
-                    finally
-                    {
-                        // Hide search indicator
-                        SetSearchInProgress(false);
-                    }
-                }
-                catch (Exception ex)
-                {
+            // FIXED: Replace dangerous async void with SafeFireAndForget pattern
+            _ = ExplorerPro.Core.AsyncHelper.SafeFireAndForgetAsync(
+                () => PerformFuzzySearchAsync(query),
+                ex => {
                     _logger?.LogError(ex, "Error performing fuzzy search");
                     MessageBox.Show($"Error performing search: {ex.Message}", "Error", 
                         MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            );
+        }
+
+        private async Task PerformFuzzySearchAsync(string query)
+        {
+            if (_parentWindow is ExplorerPro.UI.MainWindow.MainWindow mainWindow)
+            {
+                // Get the active file tree
+                ImprovedFileTreeListView? activeFileTree = mainWindow.GetActiveFileTree();
+                if (activeFileTree == null)
+                {
+                    _logger?.LogWarning("No active FileTree found for fuzzy searching");
+                    return;
+                }
+                
+                // Get the directory to search in
+                string? searchDirectory = GetSearchDirectory(activeFileTree);
+                if (string.IsNullOrEmpty(searchDirectory))
+                {
+                    _logger?.LogWarning("Could not determine search directory");
+                    return;
+                }
+                
+                _logger?.LogDebug($"Searching in directory: {searchDirectory}");
+                
+                // Show search indicator (if implemented)
+                SetSearchInProgress(true);
+                
+                try
+                {
+                    // Use the search engine to perform the search asynchronously
+                    int threshold = 60; // Adjust fuzzy matching threshold
+                    var results = await _searchEngine.FuzzySearchByNameAsync(
+                        directory: searchDirectory,
+                        query: query,
+                        threshold: threshold,
+                        includeFolders: true
+                    ).ConfigureAwait(false);
+                    
+                    if (results.Count > 0)
+                    {
+                        string? firstMatch = results[0];
+                        if (!string.IsNullOrEmpty(firstMatch))
+                        {
+                            _logger?.LogDebug($"Fuzzy match: {firstMatch}");
+                            
+                            // Navigate to the match on UI thread
+                            await ExplorerPro.Core.AsyncHelper.ExecuteOnUIThreadAsync(() =>
+                            {
+                                activeFileTree.NavigateAndHighlight(firstMatch);
+                            }).ConfigureAwait(false);
+                        }
+                    }
+                    else
+                    {
+                        _logger?.LogInformation("No fuzzy matches found");
+                        await ExplorerPro.Core.AsyncHelper.ExecuteOnUIThreadAsync(() =>
+                        {
+                            MessageBox.Show("No matches found for your search.", "Search Results", 
+                                MessageBoxButton.OK, MessageBoxImage.Information);
+                        }).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    // Hide search indicator on UI thread
+                    await ExplorerPro.Core.AsyncHelper.ExecuteOnUIThreadAsync(() =>
+                    {
+                        SetSearchInProgress(false);
+                    }).ConfigureAwait(false);
                 }
             }
         }

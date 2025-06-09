@@ -277,22 +277,21 @@ namespace ExplorerPro.UI.FileTree.Services
         
         public bool HandleOutlookDrop(DataObject dataObject, string targetPath)
         {
-            // DEADLOCK FIX: Instead of using task.Wait() which can cause UI thread deadlock,
-            // we use Task.Run to execute the async operation on a background thread.
-            // This approach ensures that:
-            // 1. The UI thread is not blocked
-            // 2. We maintain the same return type (bool)
-            // 3. The method can be safely called from the UI thread
-            // 4. Error handling and events are properly maintained
+            // FIXED: Replace dangerous GetAwaiter().GetResult() with SafeFireAndForget pattern
+            // This prevents deadlocks and UI freezes while maintaining proper error handling
             
             try
             {
-                // Execute the async operation on a background thread to prevent UI deadlock
-                var task = Task.Run(async () => await HandleOutlookDropAsync(dataObject, targetPath));
+                // Use SafeFireAndForget pattern instead of blocking synchronous wait
+                // This prevents deadlocks and UI freezes
+                _ = ExplorerPro.Core.AsyncHelper.SafeFireAndForgetAsync(
+                    () => HandleOutlookDropAsync(dataObject, targetPath),
+                    ex => OnError($"Outlook drop operation failed: {ex.Message}")
+                );
                 
-                // Use ConfigureAwait(false) and GetAwaiter().GetResult() for safer synchronous waiting
-                // This approach is safer than task.Wait() as it doesn't wrap exceptions in AggregateException
-                return task.ConfigureAwait(false).GetAwaiter().GetResult();
+                // Return true to indicate the operation was initiated successfully
+                // The actual result will be communicated through events
+                return true;
             }
             catch (Exception ex)
             {

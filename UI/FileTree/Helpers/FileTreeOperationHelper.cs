@@ -95,31 +95,44 @@ namespace ExplorerPro.UI.FileTree.Helpers
 
         /// <summary>
         /// Pastes items from clipboard to the current target location
+        /// FIXED FOR FIX 2: Replace async void with SafeFireAndForget pattern
         /// </summary>
-        public async void Paste()
+        public void Paste()
         {
-            try
-            {
-                var targetPath = GetTargetPath();
-                if (string.IsNullOrEmpty(targetPath))
-                {
-                    System.Diagnostics.Debug.WriteLine("[FILEOP] No valid target path for paste operation");
-                    return;
-                }
+            // FIXED: Replace dangerous async void with SafeFireAndForget pattern
+            _ = ExplorerPro.Core.AsyncHelper.SafeFireAndForgetAsync(
+                PasteAsync,
+                ex => System.Diagnostics.Debug.WriteLine($"[ERROR] Paste operation failed: {ex.Message}")
+            );
+        }
 
-                await _fileOperationHandler.PasteItemsAsync(targetPath).ConfigureAwait(false);
-                System.Diagnostics.Debug.WriteLine($"[FILEOP] Paste operation completed to: {targetPath}");
-            }
-            catch (Exception ex)
+        private async Task PasteAsync()
+        {
+            var targetPath = GetTargetPath();
+            if (string.IsNullOrEmpty(targetPath))
             {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Paste operation failed: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine("[FILEOP] No valid target path for paste operation");
+                return;
             }
+
+            await _fileOperationHandler.PasteItemsAsync(targetPath).ConfigureAwait(false);
+            System.Diagnostics.Debug.WriteLine($"[FILEOP] Paste operation completed to: {targetPath}");
         }
 
         /// <summary>
         /// Deletes the currently selected items
+        /// FIXED FOR FIX 2: Replace async void with SafeFireAndForget pattern
         /// </summary>
-        public async void DeleteSelected()
+        public void DeleteSelected()
+        {
+            // FIXED: Replace dangerous async void with SafeFireAndForget pattern
+            _ = ExplorerPro.Core.AsyncHelper.SafeFireAndForgetAsync(
+                DeleteSelectedAsync,
+                ex => System.Diagnostics.Debug.WriteLine($"[ERROR] Delete operation failed: {ex.Message}")
+            );
+        }
+
+        private async Task DeleteSelectedAsync()
         {
             if (!_selectionService.HasSelection)
             {
@@ -127,17 +140,10 @@ namespace ExplorerPro.UI.FileTree.Helpers
                 return;
             }
 
-            try
-            {
-                var selectedPaths = _selectionService.SelectedPaths.ToList();
-                await _fileOperationHandler.DeleteMultipleItemsAsync(selectedPaths, _fileTree).ConfigureAwait(false);
-                
-                System.Diagnostics.Debug.WriteLine($"[FILEOP] Deleted {selectedPaths.Count} items");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Delete operation failed: {ex.Message}");
-            }
+            var selectedPaths = _selectionService.SelectedPaths.ToList();
+            await _fileOperationHandler.DeleteMultipleItemsAsync(selectedPaths, _fileTree).ConfigureAwait(false);
+            
+            System.Diagnostics.Debug.WriteLine($"[FILEOP] Deleted {selectedPaths.Count} items");
         }
 
         /// <summary>
@@ -188,8 +194,18 @@ namespace ExplorerPro.UI.FileTree.Helpers
 
         /// <summary>
         /// Renames the currently selected item
+        /// FIXED FOR FIX 2: Replace async void with SafeFireAndForget pattern
         /// </summary>
-        public async void RenameSelected(string newName)
+        public void RenameSelected(string newName)
+        {
+            // FIXED: Replace dangerous async void with SafeFireAndForget pattern
+            _ = ExplorerPro.Core.AsyncHelper.SafeFireAndForgetAsync(
+                () => RenameSelectedAsync(newName),
+                ex => System.Diagnostics.Debug.WriteLine($"[ERROR] Rename operation failed: {ex.Message}")
+            );
+        }
+
+        private async Task RenameSelectedAsync(string newName)
         {
             if (!_selectionService.HasSelection || _selectionService.SelectionCount != 1)
             {
@@ -197,29 +213,22 @@ namespace ExplorerPro.UI.FileTree.Helpers
                 return;
             }
 
-            try
+            var selectedPath = _selectionService.FirstSelectedPath;
+            if (string.IsNullOrEmpty(selectedPath) || string.IsNullOrWhiteSpace(newName))
             {
-                var selectedPath = _selectionService.FirstSelectedPath;
-                if (string.IsNullOrEmpty(selectedPath) || string.IsNullOrWhiteSpace(newName))
-                {
-                    return;
-                }
-
-                // Use the FileOperationHandler to ensure metadata preservation
-                bool success = _fileOperationHandler.RenameItem(selectedPath, newName, _fileTree);
-                
-                if (success)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[FILEOP] Successfully renamed '{selectedPath}' to '{newName}'");
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"[FILEOP] Failed to rename '{selectedPath}' to '{newName}'");
-                }
+                return;
             }
-            catch (Exception ex)
+
+            // Use the FileOperationHandler to ensure metadata preservation
+            bool success = _fileOperationHandler.RenameItem(selectedPath, newName, _fileTree);
+            
+            if (success)
             {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Rename operation failed: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[FILEOP] Successfully renamed '{selectedPath}' to '{newName}'");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[FILEOP] Failed to rename '{selectedPath}' to '{newName}'");
             }
         }
 
