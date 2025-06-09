@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
+using System.Threading;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Controls;
@@ -54,6 +56,7 @@ namespace ExplorerPro.UI.MainWindow
         // Robust initialization system fields
         private readonly ILogger<MainWindow> _logger;
         private readonly MainWindowInitializer _initializer;
+        private readonly ExceptionHandler _exceptionHandler;
         private readonly object _stateLock = new object();
         
         private InitializationState _initState = InitializationState.Created;
@@ -71,10 +74,14 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Initializes a new instance of MainWindow with comprehensive error handling.
         /// </summary>
-        public MainWindow(ILogger<MainWindow> logger, MainWindowInitializer initializer)
+        public MainWindow(
+            ILogger<MainWindow> logger, 
+            MainWindowInitializer initializer,
+            ExceptionHandler exceptionHandler)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _initializer = initializer ?? throw new ArgumentNullException(nameof(initializer));
+            _exceptionHandler = exceptionHandler ?? throw new ArgumentNullException(nameof(exceptionHandler));
 
             try
             {
@@ -114,7 +121,7 @@ namespace ExplorerPro.UI.MainWindow
         /// This maintains backward compatibility for existing code.
         /// </summary>
         public MainWindow() 
-            : this(CreateDefaultLogger(), CreateDefaultInitializer())
+            : this(CreateDefaultLogger(), CreateDefaultInitializer(), CreateDefaultExceptionHandler())
         {
         }
 
@@ -142,6 +149,18 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
+        /// Creates a default exception handler for backward compatibility.
+        /// </summary>
+        private static ExceptionHandler CreateDefaultExceptionHandler()
+        {
+            // Create a simple console logger for backward compatibility
+            var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Information));
+            var logger = loggerFactory.CreateLogger<ExceptionHandler>();
+            var telemetry = new ConsoleTelemetryService();
+            return new ExceptionHandler(logger, telemetry);
+        }
+
+        /// <summary>
         /// Initializes core fields that need to be available before InitializeComponent.
         /// </summary>
         private void InitializeCoreFields()
@@ -156,6 +175,8 @@ namespace ExplorerPro.UI.MainWindow
             WindowLifecycleManager.Instance.RegisterWindow(this);
         }
 
+
+
         /// <summary>
         /// Handle initialization errors with a user-friendly message.
         /// </summary>
@@ -164,6 +185,84 @@ namespace ExplorerPro.UI.MainWindow
             Console.WriteLine($"Error initializing main window: {ex.Message}");
             MessageBox.Show($"Error initializing application: {ex.Message}\n\nThe application may have limited functionality.",
                 "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        /// <summary>
+        /// Safely performs an operation with comprehensive exception handling.
+        /// </summary>
+        public void PerformSafeOperation(Action operation, string operationName)
+        {
+            var context = new OperationContext(operationName)
+                .WithProperty("WindowId", GetWindowId());
+            
+            _exceptionHandler.ExecuteWithHandling(
+                () =>
+                {
+                    EnsureOperationAllowed(operationName);
+                    operation();
+                    return true;
+                },
+                context,
+                ex =>
+                {
+                    _logger.LogWarning($"Operation {operationName} failed, using fallback");
+                    return false;
+                });
+        }
+
+        /// <summary>
+        /// Safely performs an async operation with comprehensive exception handling.
+        /// </summary>
+        public async Task<T> PerformSafeOperationAsync<T>(Func<Task<T>> operation, string operationName, Func<Exception, T> fallback = null)
+        {
+            var context = new OperationContext(operationName)
+                .WithProperty("WindowId", GetWindowId());
+            
+            return await _exceptionHandler.ExecuteWithHandlingAsync(
+                operation,
+                context,
+                fallback);
+        }
+
+        /// <summary>
+        /// Gets a unique identifier for this window.
+        /// </summary>
+        private string GetWindowId()
+        {
+            return $"MainWindow_{GetHashCode()}";
+        }
+
+        /// <summary>
+        /// Example of using transactional operations for complex window operations.
+        /// </summary>
+        public async Task<bool> PerformTransactionalWindowSetup()
+        {
+            try
+            {
+                var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+                var transactionLogger = loggerFactory.CreateLogger<TransactionalOperation<WindowInitState>>();
+                
+                return await TransactionalOperation<WindowInitState>.RunAsync(
+                    transactionLogger,
+                    async transaction =>
+                    {
+                        // Example: Setup window in steps that can be rolled back
+                        transaction.Execute(new InitializeComponentsAction(this));
+                        transaction.Execute(new ValidateComponentsAction(this));
+                        
+                        // If any step fails, all previous steps will be automatically rolled back
+                        return true;
+                    },
+                    new WindowInitState { Window = this });
+            }
+            catch (Exception ex)
+            {
+                var context = new OperationContext("PerformTransactionalWindowSetup")
+                    .WithProperty("WindowId", GetWindowId());
+                
+                _exceptionHandler.HandleException(ex, context);
+                return false;
+            }
         }
 
         /// <summary>
@@ -2829,6 +2928,94 @@ namespace ExplorerPro.UI.MainWindow
 
         #endregion
     }
+
+    #region Window State and Actions for Transactions
+
+    /// <summary>
+    /// Window initialization state for transactional operations.
+    /// </summary>
+    public class WindowInitState
+    {
+        public MainWindow Window { get; set; }
+        public InitializationState State { get; set; }
+        public List<string> CompletedSteps { get; set; } = new List<string>();
+        public Dictionary<string, object> Properties { get; set; } = new Dictionary<string, object>();
+    }
+
+    /// <summary>
+    /// Example undoable action for initializing components.
+    /// </summary>
+    public class InitializeComponentsAction : IUndoableAction
+    {
+        private readonly MainWindow _window;
+        
+        public InitializeComponentsAction(MainWindow window)
+        {
+            _window = window;
+        }
+        
+        public string Name => "InitializeComponents";
+        
+        public void Execute(object state)
+        {
+            _window.InitializeComponent();
+            
+            if (!_window.IsInitialized)
+                throw new InvalidOperationException("InitializeComponent failed");
+                
+            if (state is WindowInitState windowState)
+            {
+                windowState.CompletedSteps.Add(Name);
+            }
+        }
+        
+        public void Undo(object state)
+        {
+            // Cannot truly undo InitializeComponent, but we can mark state
+            _window.UpdateInitializationState(InitializationState.Failed);
+            
+            if (state is WindowInitState windowState)
+            {
+                windowState.CompletedSteps.Remove(Name);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Example undoable action for validating components.
+    /// </summary>
+    public class ValidateComponentsAction : IUndoableAction
+    {
+        private readonly MainWindow _window;
+        
+        public ValidateComponentsAction(MainWindow window)
+        {
+            _window = window;
+        }
+        
+        public string Name => "ValidateComponents";
+        
+        public void Execute(object state)
+        {
+            if (!_window.IsInitialized)
+                throw new InvalidOperationException("Window components not initialized");
+                
+            if (state is WindowInitState windowState)
+            {
+                windowState.CompletedSteps.Add(Name);
+            }
+        }
+        
+        public void Undo(object state)
+        {
+            if (state is WindowInitState windowState)
+            {
+                windowState.CompletedSteps.Remove(Name);
+            }
+        }
+    }
+
+    #endregion
 
     #region Converters
 
