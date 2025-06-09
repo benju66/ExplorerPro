@@ -1454,87 +1454,109 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Initialize keyboard shortcuts for the application.
+        /// ENHANCED FOR FIX 6: Command Binding Memory Overhead - Uses CommandPool for reusable commands
         /// </summary>
         private void InitializeKeyboardShortcuts()
         {
-            // Navigation shortcuts
-            RegisterShortcut(Key.Up, ModifierKeys.Alt, GoUp, "Go Up");
-            RegisterShortcut(Key.F5, ModifierKeys.None, RefreshFileTree, "Refresh");
-            RegisterShortcut(Key.D, ModifierKeys.Alt, FocusAddressBar, "Focus Address Bar");
-            RegisterShortcut(Key.L, ModifierKeys.Control, FocusAddressBar, "Focus Address Bar (Alt)");
-            RegisterShortcut(Key.F, ModifierKeys.Control, FocusSearch, "Focus Search");
-            RegisterShortcut(Key.F3, ModifierKeys.None, FocusSearch, "Focus Search (Alt)");
-            RegisterShortcut(Key.Left, ModifierKeys.Alt, GoBack, "Go Back");
-            RegisterShortcut(Key.Right, ModifierKeys.Alt, GoForward, "Go Forward");
-
-            // File operation shortcuts
-            RegisterShortcut(Key.N, ModifierKeys.Control | ModifierKeys.Shift, NewFolder, "New Folder");
-            RegisterShortcut(Key.N, ModifierKeys.Control | ModifierKeys.Alt, NewFile, "New File");
-            
-            // Panel toggle shortcuts
-            RegisterShortcut(Key.P, ModifierKeys.Control, TogglePinnedPanel, "Toggle Pinned Panel");
-            RegisterShortcut(Key.B, ModifierKeys.Control, ToggleBookmarksPanel, "Toggle Bookmarks Panel");
-            RegisterShortcut(Key.D, ModifierKeys.Control, ToggleTodoPanel, "Toggle ToDo Panel");
-            RegisterShortcut(Key.K, ModifierKeys.Control, ToggleProcorePanel, "Toggle Procore Panel");
-            
-            // Sidebar toggles (VS Code style) - Using Alt+Shift to avoid conflicts
-            RegisterShortcut(Key.B, ModifierKeys.Alt | ModifierKeys.Shift, ToggleLeftSidebar, "Toggle Left Sidebar");
-            RegisterShortcut(Key.R, ModifierKeys.Alt | ModifierKeys.Shift, ToggleRightSidebar, "Toggle Right Sidebar");
-
-            // Tab shortcuts
-            RegisterShortcut(Key.Tab, ModifierKeys.Control, NextTab, "Next Tab");
-            RegisterShortcut(Key.Tab, ModifierKeys.Control | ModifierKeys.Shift, PreviousTab, "Previous Tab");
-            RegisterShortcut(Key.T, ModifierKeys.Control, NewTab, "New Tab");
-            RegisterShortcut(Key.W, ModifierKeys.Control, CloseCurrentTab, "Close Tab");
-            RegisterShortcut(Key.OemBackslash, ModifierKeys.Control, () => ToggleSplitView(null), "Toggle Split View");
-            // View shortcuts
-            RegisterShortcut(Key.F10, ModifierKeys.None, ToggleFullscreen, "Toggle Fullscreen");
-            RegisterShortcut(Key.OemPlus, ModifierKeys.Control, ZoomIn, "Zoom In");
-            RegisterShortcut(Key.OemMinus, ModifierKeys.Control, ZoomOut, "Zoom Out");
-            RegisterShortcut(Key.D0, ModifierKeys.Control, ZoomReset, "Reset Zoom");
-
-            // Theme shortcut
-            RegisterShortcut(Key.T, ModifierKeys.Control | ModifierKeys.Shift, () => ThemeManager.Instance.ToggleTheme(), "Toggle Theme");
-
-            // Utility shortcuts
-            RegisterShortcut(Key.F1, ModifierKeys.None, ShowHelp, "Help");
-            RegisterShortcut(Key.OemComma, ModifierKeys.Control, OpenSettings, "Settings");
-            RegisterShortcut(Key.H, ModifierKeys.Control, ToggleHiddenFiles, "Toggle Hidden Files");
-            RegisterShortcut(Key.Escape, ModifierKeys.None, EscapeAction, "Escape Current Operation");
-
-            Console.WriteLine("Keyboard shortcuts initialized");
+            try
+            {
+                // Clear existing bindings
+                CommandBindings.Clear();
+                
+                // Map of command names to actions
+                var commandActions = new Dictionary<string, Action>
+                {
+                    ["GoUp"] = GoUp,
+                    ["Refresh"] = RefreshFileTree,
+                    ["FocusAddressBar"] = FocusAddressBar,
+                    ["FocusAddressBarAlt"] = FocusAddressBar,
+                    ["FocusSearch"] = FocusSearch,
+                    ["FocusSearchAlt"] = FocusSearch,
+                    ["GoBack"] = GoBack,
+                    ["GoForward"] = GoForward,
+                    ["NewFolder"] = NewFolder,
+                    ["NewFile"] = NewFile,
+                    ["TogglePinnedPanel"] = TogglePinnedPanel,
+                    ["ToggleBookmarksPanel"] = ToggleBookmarksPanel,
+                    ["ToggleTodoPanel"] = ToggleTodoPanel,
+                    ["ToggleProcorePanel"] = ToggleProcorePanel,
+                    ["ToggleLeftSidebar"] = ToggleLeftSidebar,
+                    ["ToggleRightSidebar"] = ToggleRightSidebar,
+                    ["NextTab"] = NextTab,
+                    ["PreviousTab"] = PreviousTab,
+                    ["NewTab"] = NewTab,
+                    ["CloseTab"] = CloseCurrentTab,
+                    ["ToggleSplitView"] = () => ToggleSplitView(null),
+                    ["ToggleFullscreen"] = ToggleFullscreen,
+                    ["ZoomIn"] = ZoomIn,
+                    ["ZoomOut"] = ZoomOut,
+                    ["ZoomReset"] = ZoomReset,
+                    ["ToggleTheme"] = () => ThemeManager.Instance.ToggleTheme(),
+                    ["ShowHelp"] = ShowHelp,
+                    ["OpenSettings"] = OpenSettings,
+                    ["ToggleHiddenFiles"] = ToggleHiddenFiles,
+                    ["EscapeAction"] = EscapeAction
+                };
+                
+                // Register all shortcuts using the CommandPool
+                foreach (var shortcut in ExplorerPro.Commands.KeyboardShortcuts.Shortcuts)
+                {
+                    if (commandActions.TryGetValue(shortcut.Name, out var action))
+                    {
+                        // Get reusable command from pool instead of creating new one
+                        var command = ExplorerPro.Commands.CommandPool.GetCommand(
+                            shortcut.Name, 
+                            shortcut.Key, 
+                            shortcut.Modifiers,
+                            GetType());
+                            
+                        CommandBindings.Add(new CommandBinding(
+                            command,
+                            (s, e) => 
+                            {
+                                try
+                                {
+                                    action();
+                                    e.Handled = true;
+                                }
+                                catch (Exception ex)
+                                {
+                                    _instanceLogger?.LogError(ex, "Error executing shortcut: {ShortcutName}", shortcut.Name);
+                                }
+                            },
+                            (s, e) => e.CanExecute = !_isDisposed && _windowState != UIWindowState.Disposed));
+                    }
+                }
+                
+                _instanceLogger?.LogDebug("Initialized {Count} keyboard shortcuts using CommandPool (Pool size: {PoolSize})", 
+                    CommandBindings.Count, ExplorerPro.Commands.CommandPool.GetPoolSize());
+                
+                // Log pool statistics for monitoring
+                _instanceLogger?.LogDebug("CommandPool Statistics: {Statistics}", 
+                    ExplorerPro.Commands.CommandPool.GetPoolStatistics());
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Failed to initialize keyboard shortcuts");
+                Console.WriteLine($"Error initializing keyboard shortcuts: {ex.Message}");
+            }
         }
 
         /// <summary>
         /// Register a keyboard shortcut.
+        /// DEPRECATED: This method is replaced by CommandPool usage in InitializeKeyboardShortcuts.
+        /// Kept for reference but no longer used.
         /// </summary>
         /// <param name="key">Key to register</param>
         /// <param name="modifiers">Modifier keys</param>
         /// <param name="action">Action to execute</param>
         /// <param name="description">Description for the shortcut</param>
+        [Obsolete("This method is deprecated. Use CommandPool in InitializeKeyboardShortcuts instead.")]
         private void RegisterShortcut(Key key, ModifierKeys modifiers, Action? action, string description)
         {
-            try
-            {
-                KeyGesture gesture = new KeyGesture(key, modifiers);
-                RoutedCommand command = new RoutedCommand(description, GetType());
-                command.InputGestures.Add(gesture);
-
-                CommandBindings.Add(new CommandBinding(
-                    command,
-                    (sender, e) =>
-                    {
-                        action?.Invoke();
-                        e.Handled = true;
-                    }
-                ));
-
-                Console.WriteLine($"Added shortcut: {gesture} - {description}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error registering shortcut {description}: {ex.Message}");
-            }
+            // This method is no longer used - shortcuts are now managed through CommandPool
+            // in InitializeKeyboardShortcuts() to prevent memory leaks from duplicate command creation
+            Console.WriteLine($"WARNING: RegisterShortcut is deprecated. Shortcut '{description}' should be added to KeyboardShortcuts.cs");
         }
 
         #endregion
