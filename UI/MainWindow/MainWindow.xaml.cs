@@ -11,6 +11,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using Newtonsoft.Json;
+using Microsoft.Extensions.Logging;
 using ExplorerPro.Models;
 using ExplorerPro.FileOperations;
 using ExplorerPro.UI.Dialogs;
@@ -20,6 +21,7 @@ using ExplorerPro.UI.Panels;
 using ExplorerPro.UI.Panels.PinnedPanel;
 using ExplorerPro.Utilities;
 using ExplorerPro.Themes;
+using ExplorerPro.Core;
 // Add reference to System.Windows.Forms but use an alias
 using WinForms = System.Windows.Forms;
 using WPF = System.Windows;
@@ -49,6 +51,15 @@ namespace ExplorerPro.UI.MainWindow
         // Detached windows tracking
         private List<MainWindow> _detachedWindows = new List<MainWindow>();
 
+        // Robust initialization system fields
+        private readonly ILogger<MainWindow> _logger;
+        private readonly MainWindowInitializer _initializer;
+        private readonly object _stateLock = new object();
+        
+        private InitializationState _initState = InitializationState.Created;
+        private TabControl _mainTabsControl;
+        private bool _isDisposed;
+
         // Value converter for tab count
         // private CountToVisibilityConverter _countToVisibilityConverter;
         // private CountToEnableConverter _countToEnableConverter;
@@ -58,75 +69,92 @@ namespace ExplorerPro.UI.MainWindow
         #region Constructor
 
         /// <summary>
-        /// Default constructor that calls the parameterized constructor with the default settings path.
+        /// Initializes a new instance of MainWindow with comprehensive error handling.
+        /// </summary>
+        public MainWindow(ILogger<MainWindow> logger, MainWindowInitializer initializer)
+        {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _initializer = initializer ?? throw new ArgumentNullException(nameof(initializer));
+
+            try
+            {
+                _logger.LogInformation("Creating new MainWindow instance");
+                
+                // Initialize core fields first
+                InitializeCoreFields();
+                
+                // Perform initialization through the initializer
+                var result = _initializer.InitializeWindow(this);
+                
+                if (!result.Success)
+                {
+                    // Initialization failed - throw to prevent invalid window creation
+                    throw new WindowInitializationException(
+                        result.ErrorMessage, 
+                        result.State, 
+                        result.Error);
+                }
+                
+                // Window is ready for use
+                _logger.LogInformation("MainWindow created successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogCritical(ex, "Failed to create MainWindow");
+                
+                // Ensure window is properly disposed on construction failure
+                try { Dispose(); } catch { }
+                
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Default constructor that creates MainWindow with default logger and initializer.
+        /// This maintains backward compatibility for existing code.
         /// </summary>
         public MainWindow() 
-            : this("Data/settings.json") // Call the parameterized constructor with default path
+            : this(CreateDefaultLogger(), CreateDefaultInitializer())
         {
         }
 
         /// <summary>
-        /// Initializes a new instance of the MainWindow class.
+        /// Creates a default logger for backward compatibility.
         /// </summary>
-        /// <param name="settingsFile">Path to the settings file</param>
-        public MainWindow(string settingsFile)
+        private static ILogger<MainWindow> CreateDefaultLogger()
         {
-            try
-            {
-                // Initialize fields before InitializeComponent to avoid null references
-                _settingsManager = App.Settings ?? new SettingsManager();
-                _metadataManager = App.MetadataManager ?? new MetadataManager();
-                _allMainWindows = _allMainWindows ?? new List<MainWindow>();
-                _detachedWindows = new List<MainWindow>();
-                _history = new List<string>();
-                _currentHistoryIndex = -1;
-                
-                // Register in global tracking before any potential exceptions
-                _allMainWindows.Add(this);
-                
-                // Now initialize the component
-                InitializeComponent();
-                
-                // Setup theme handlers
-                SetupThemeHandlers();
-                
-                // Connect events only if MainTabs exists
-                if (MainTabs != null)
-                {
-                    MainTabs.SelectionChanged += MainTabs_SelectionChanged;
-                }
-                else
-                {
-                    Console.WriteLine("WARNING: MainTabs is null after InitializeComponent");
-                }
-                
-                // Set up drag-drop only if the window was properly created
-                if (this.IsInitialized)
-                {
-                    AllowDrop = true;
-                    DragOver += MainWindow_DragOver;
-                    Drop += MainWindow_Drop;
-                }
-                
-                // Handle window closing
-                Closing += MainWindow_Closing;
-                
-                // Initialize UI in a try/catch block
-                try
-                {
-                    InitializeMainWindow();
-                }
-                catch (Exception ex)
-                {
-                    HandleInitializationError(ex);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Critical error in MainWindow constructor: {ex.Message}");
-                MessageBox.Show($"Critical error initializing application: {ex.Message}\n\nThe application may not function correctly.",
-                    "Critical Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            // Create a simple console logger for backward compatibility
+            // Don't use 'using' here as it would dispose the factory before the logger is used
+            var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Information));
+            return loggerFactory.CreateLogger<MainWindow>();
+        }
+
+        /// <summary>
+        /// Creates a default initializer for backward compatibility.
+        /// </summary>
+        private static MainWindowInitializer CreateDefaultInitializer()
+        {
+            // Create a simple console logger for backward compatibility
+            // Don't use 'using' here as it would dispose the factory before the logger is used
+            var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Information));
+            var logger = loggerFactory.CreateLogger<MainWindowInitializer>();
+            return new MainWindowInitializer(logger);
+        }
+
+        /// <summary>
+        /// Initializes core fields that need to be available before InitializeComponent.
+        /// </summary>
+        private void InitializeCoreFields()
+        {
+            _settingsManager = App.Settings ?? new SettingsManager();
+            _metadataManager = App.MetadataManager ?? new MetadataManager();
+            _allMainWindows = _allMainWindows ?? new List<MainWindow>();
+            _detachedWindows = new List<MainWindow>();
+            _history = new List<string>();
+            _currentHistoryIndex = -1;
+            
+            // Register in global tracking
+            _allMainWindows.Add(this);
         }
 
         /// <summary>
@@ -150,6 +178,333 @@ namespace ExplorerPro.UI.MainWindow
                     RefreshThemeElements();
                 });
             };
+        }
+
+        #endregion
+
+        #region Robust Initialization Support Methods
+
+        /// <summary>
+        /// Updates the initialization state in a thread-safe manner.
+        /// </summary>
+        internal void UpdateInitializationState(InitializationState newState)
+        {
+            lock (_stateLock)
+            {
+                var oldState = _initState;
+                _initState = newState;
+                _logger.LogDebug($"Initialization state changed: {oldState} -> {newState}");
+            }
+        }
+
+        /// <summary>
+        /// Sets the MainTabs control reference after validation.
+        /// </summary>
+        internal void SetMainTabsControl(TabControl tabControl)
+        {
+            System.Diagnostics.Debug.Assert(tabControl != null, "TabControl cannot be null");
+            _mainTabsControl = tabControl;
+        }
+
+        /// <summary>
+        /// Safely accesses the MainTabs control with null checking.
+        /// </summary>
+        protected TabControl MainTabsSafe
+        {
+            get
+            {
+                if (_mainTabsControl == null)
+                {
+                    throw new InvalidOperationException(
+                        "MainTabs control is not initialized. Current state: " + _initState);
+                }
+                return _mainTabsControl;
+            }
+        }
+
+
+
+        /// <summary>
+        /// Checks if the window is ready for tab operations.
+        /// </summary>
+        internal bool IsReadyForTabOperations()
+        {
+            lock (_stateLock)
+            {
+                // Allow tab operations during window initialization and when ready
+                return (_initState == InitializationState.Ready || _initState == InitializationState.InitializingWindow) && 
+                       _mainTabsControl != null && 
+                       !_isDisposed;
+            }
+        }
+
+        /// <summary>
+        /// Tests if tab operations can be performed.
+        /// </summary>
+        internal bool CanPerformTabOperations()
+        {
+            try
+            {
+                lock (_stateLock)
+                {
+                    // Check basic readiness
+                    if (!IsReadyForTabOperations()) return false;
+                    
+                    // During initialization, use direct MainTabs access
+                    if (_initState == InitializationState.InitializingWindow)
+                    {
+                        return _mainTabsControl != null && _mainTabsControl.IsLoaded;
+                    }
+                    
+                    // When ready, use safe accessor
+                    return MainTabsSafe.IsLoaded;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Validates the current window state.
+        /// </summary>
+        internal bool ValidateWindowState()
+        {
+            try
+            {
+                lock (_stateLock)
+                {
+                    if (_isDisposed) return false;
+                    
+                    // During initialization, allow validation in InitializingWindow state as well
+                    if (_initState != InitializationState.Ready && 
+                        _initState != InitializationState.InitializingWindow) 
+                    {
+                        return false;
+                    }
+                    
+                    if (_mainTabsControl == null) return false;
+                    if (!IsInitialized) return false;
+                    
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Window state validation failed");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Safely initializes the main window with error handling.
+        /// </summary>
+        internal void InitializeMainWindowSafely()
+        {
+            // Don't call EnsureOperationAllowed here - we're in initialization phase
+            
+            try
+            {
+                _logger.LogDebug("Initializing main window systems");
+                
+                // Setup theme handlers
+                SetupThemeHandlers();
+                
+                // Connect events only if MainTabs exists
+                if (_mainTabsControl != null)
+                {
+                    _mainTabsControl.SelectionChanged += MainTabs_SelectionChanged;
+                }
+                
+                // Set up drag-drop only if the window was properly created
+                if (this.IsInitialized)
+                {
+                    AllowDrop = true;
+                    DragOver += MainWindow_DragOver;
+                    Drop += MainWindow_Drop;
+                }
+                
+                // Handle window closing
+                Closing += MainWindow_Closing;
+                
+                // Original InitializeMainWindow logic with validation
+                RestoreWindowLayout();
+                InitializeKeyboardShortcuts();
+                
+                // Delayed tab creation until the window is fully loaded
+                this.Loaded += MainWindow_Loaded;
+                
+                _logger.LogDebug("Main window systems initialized");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to initialize main window systems");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Handles the window loaded event with robust error handling.
+        /// </summary>
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Create initial tab if needed
+                if (_mainTabsControl != null && _mainTabsControl.Items.Count == 0)
+                {
+                    AddNewMainWindowTabSafely();
+                }
+
+                // Connect all pinned panels
+                ConnectAllPinnedPanels();
+
+                // Refresh pinned panels
+                RefreshAllPinnedPanels();
+                
+                // Refresh theme elements
+                RefreshThemeElements();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in Loaded event");
+                
+                // Make sure we have at least one tab
+                if (_mainTabsControl != null && _mainTabsControl.Items.Count == 0)
+                {
+                    SafeAddNewTab();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Safely adds a new tab with comprehensive error handling.
+        /// </summary>
+        internal void AddNewMainWindowTabSafely()
+        {
+            // Only enforce operation state if we're in ready state
+            if (_initState == InitializationState.Ready)
+            {
+                EnsureOperationAllowed("AddNewMainWindowTab");
+            }
+            
+            try
+            {
+                _logger.LogDebug("Adding new main window tab");
+                
+                // Use direct access to MainTabs during initialization, safe access when ready
+                TabControl tabControl;
+                if (_initState == InitializationState.Ready)
+                {
+                    tabControl = MainTabsSafe;
+                }
+                else
+                {
+                    tabControl = MainTabs; // Use direct XAML access during initialization
+                }
+                
+                // Try to create new tab using existing method
+                var container = AddNewMainWindowTab();
+                if (container == null)
+                {
+                    // Fallback to safe method
+                    SafeAddNewTab();
+                }
+                
+                _logger.LogInformation("New tab added successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to add new tab");
+                // Try fallback method
+                try
+                {
+                    SafeAddNewTab();
+                }
+                catch (Exception fallbackEx)
+                {
+                    _logger.LogError(fallbackEx, "Fallback tab creation also failed");
+                    throw;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Ensures an operation is allowed in the current state.
+        /// </summary>
+        private void EnsureOperationAllowed(string operationName)
+        {
+            lock (_stateLock)
+            {
+                if (_isDisposed)
+                {
+                    throw new ObjectDisposedException(nameof(MainWindow), 
+                        $"Cannot perform {operationName} on disposed window");
+                }
+                
+                if (_initState != InitializationState.Ready)
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot perform {operationName} in state {_initState}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Performs emergency cleanup when initialization fails.
+        /// </summary>
+        internal void PerformEmergencyCleanup()
+        {
+            try
+            {
+                lock (_stateLock)
+                {
+                    _initState = InitializationState.Failed;
+                    _mainTabsControl = null;
+                    
+                    // Unsubscribe from events
+                    try
+                    {
+                        Loaded -= MainWindow_Loaded;
+                        Closing -= MainWindow_Closing;
+                        DragOver -= MainWindow_DragOver;
+                        Drop -= MainWindow_Drop;
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Emergency cleanup encountered an error");
+            }
+        }
+
+        /// <summary>
+        /// Properly disposes of the window and its resources.
+        /// </summary>
+        protected virtual void Dispose()
+        {
+            lock (_stateLock)
+            {
+                if (_isDisposed) return;
+                
+                _initState = InitializationState.Disposing;
+                _isDisposed = true;
+                
+                try
+                {
+                    // Cleanup logic here
+                    _mainTabsControl = null;
+                    
+                    // Remove from global tracking
+                    _allMainWindows.Remove(this);
+                }
+                finally
+                {
+                    _initState = InitializationState.Disposed;
+                }
+            }
         }
 
         #endregion
@@ -2318,21 +2673,23 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
+                _logger.LogInformation("MainWindow closing");
+                
                 // Save window layout
                 SaveWindowLayout();
                 
                 // Save settings
                 _settingsManager.SaveSettings();
                 
-                // Remove from global tracking
-                _allMainWindows.Remove(this);
+                // Dispose properly
+                Dispose();
                 
-                // Clear detached windows
-                _detachedWindows.Clear();
+                _logger.LogInformation("MainWindow closed successfully");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error in closing event: {ex.Message}");
+                _logger.LogError(ex, "Error during window closing");
+                // Continue with closing even if there was an error
             }
         }
 
