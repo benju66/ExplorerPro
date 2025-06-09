@@ -35,8 +35,9 @@ namespace ExplorerPro.UI.MainWindow
     /// Interaction logic for MainWindow.xaml
     /// Main application window that contains the toolbar and tab widget.
     /// Manages the overall application layout and windows.
+    /// ENHANCED FOR FIX 4: Event Handler Memory Leaks - Implements IDisposable
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, IDisposable
     {
         #region Shared Logger Infrastructure - FIX 1: Logger Factory Memory Leaks
 
@@ -144,6 +145,77 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
+        /// <summary>
+        /// IMPLEMENTATION OF FIX 4: Event Handler Memory Leaks
+        /// Safely subscribes to an event and tracks it for cleanup to prevent memory leaks
+        /// </summary>
+        private void SubscribeToEvent<TEventArgs>(
+            Action<EventHandler<TEventArgs>> subscribe,
+            Action<EventHandler<TEventArgs>> unsubscribe,
+            EventHandler<TEventArgs> handler)
+        {
+            lock (_eventCleanupLock)
+            {
+                try
+                {
+                    subscribe(handler);
+                    _eventCleanupActions.Add(() => 
+                    {
+                        try
+                        {
+                            unsubscribe(handler);
+                        }
+                        catch (Exception ex)
+                        {
+                            _instanceLogger?.LogError(ex, "Error unsubscribing event handler");
+                        }
+                    });
+                    
+                    _instanceLogger?.LogDebug($"Subscribed to event handler and added cleanup action (Total: {_eventCleanupActions.Count})");
+                }
+                catch (Exception ex)
+                {
+                    _instanceLogger?.LogError(ex, "Error subscribing to event");
+                    throw;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Safely subscribes to routine events and tracks them for cleanup
+        /// </summary>
+        private void SubscribeToRoutedEvent(
+            Action<RoutedEventHandler> subscribe,
+            Action<RoutedEventHandler> unsubscribe,
+            RoutedEventHandler handler)
+        {
+            lock (_eventCleanupLock)
+            {
+                try
+                {
+                    subscribe(handler);
+                    _eventCleanupActions.Add(() => 
+                    {
+                        try
+                        {
+                            unsubscribe(handler);
+                        }
+                        catch (Exception ex)
+                        {
+                            _instanceLogger?.LogError(ex, "Error unsubscribing routed event handler");
+                        }
+                    });
+                    
+                    _instanceLogger?.LogDebug($"Subscribed to routed event handler and added cleanup action");
+                }
+                catch (Exception ex)
+                {
+                    _instanceLogger?.LogError(ex, "Error subscribing to routed event");
+                    throw;
+                }
+            }
+        }
+
         #endregion
 
         #region Fields
@@ -171,6 +243,10 @@ namespace ExplorerPro.UI.MainWindow
         private InitializationState _initState = InitializationState.Created;
         private TabControl _mainTabsControl;
         private bool _isDisposed;
+
+        // FIX 4: Event Handler Memory Leaks - Event management infrastructure
+        private readonly List<Action> _eventCleanupActions = new List<Action>();
+        private readonly object _eventCleanupLock = new object();
 
         // Value converter for tab count
         // private CountToVisibilityConverter _countToVisibilityConverter;
@@ -610,15 +686,83 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Setup handlers for theme changes
+        /// ENHANCED FOR FIX 4: Event Handler Memory Leaks
         /// </summary>
         private void SetupThemeHandlers()
         {
-            // Subscribe to theme change events
-            ThemeManager.Instance.ThemeChanged += (s, theme) => {
-                Dispatcher.Invoke(() => {
-                    RefreshThemeElements();
-                });
-            };
+            // Create named event handler for proper cleanup
+            EventHandler<AppTheme> themeChangedHandler = OnThemeChanged;
+            
+            // Subscribe using tracked event management
+            SubscribeToEvent(
+                h => ThemeManager.Instance.ThemeChanged += h,
+                h => ThemeManager.Instance.ThemeChanged -= h,
+                themeChangedHandler
+            );
+            
+            _instanceLogger?.LogInformation("Theme change handlers set up with proper cleanup management");
+        }
+
+        /// <summary>
+        /// Named event handler for theme changes - FIX 4: Event Handler Memory Leaks
+        /// </summary>
+        private void OnThemeChanged(object sender, AppTheme theme)
+        {
+            ExecuteOnUIThread(() =>
+            {
+                if (!_isDisposed && _windowState != UIWindowState.Disposed)
+                {
+                    try
+                    {
+                        RefreshThemeElements();
+                        _instanceLogger?.LogInformation($"Theme changed to {theme}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _instanceLogger?.LogError(ex, $"Error handling theme change to {theme}");
+                    }
+                }
+            });
+        }
+
+        /// <summary>
+        /// Named event handler for window loaded event - FIX 4: Event Handler Memory Leaks
+        /// </summary>
+        private void OnMainWindowLoaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Create initial tab if needed
+                if (MainTabs.Items.Count == 0)
+                {
+                    var container = AddNewMainWindowTab();
+                    if (container == null)
+                    {
+                        SafeAddNewTab();
+                    }
+                }
+
+                // Connect all pinned panels
+                ConnectAllPinnedPanels();
+
+                // Refresh pinned panels
+                RefreshAllPinnedPanels();
+                
+                // Refresh theme elements
+                RefreshThemeElements();
+                
+                _instanceLogger?.LogInformation("Main window loaded successfully");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error in window loaded event handler");
+                
+                // Make sure we have at least one tab
+                if (MainTabs.Items.Count == 0)
+                {
+                    SafeAddNewTab();
+                }
+            }
         }
 
         #endregion
@@ -774,7 +918,7 @@ namespace ExplorerPro.UI.MainWindow
                 InitializeKeyboardShortcuts();
                 
                 // Delayed tab creation until the window is fully loaded
-                this.Loaded += MainWindow_Loaded;
+                this.Loaded += OnMainWindowLoaded;
                 
                 _logger.LogDebug("Main window systems initialized");
             }
@@ -970,33 +1114,62 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Properly disposes of the window and its resources.
+        /// ENHANCED FOR FIX 4: Event Handler Memory Leaks
         /// </summary>
-        protected virtual void Dispose()
+        public virtual void Dispose()
         {
-            lock (_stateLock)
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Protected dispose pattern implementation
+        /// ENHANCED FOR FIX 4: Event Handler Memory Leaks
+        /// </summary>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_isDisposed)
             {
-                if (_isDisposed) return;
+                if (disposing)
+                {
+                    try
+                    {
+                        // Unsubscribe all tracked events - FIX 4: Event Handler Memory Leaks
+                        lock (_eventCleanupLock)
+                        {
+                            _instanceLogger?.LogInformation($"Cleaning up {_eventCleanupActions.Count} event subscriptions");
+                            
+                            foreach (var cleanup in _eventCleanupActions)
+                            {
+                                try
+                                {
+                                    cleanup?.Invoke();
+                                }
+                                catch (Exception ex)
+                                {
+                                    _instanceLogger?.LogError(ex, "Error during event cleanup");
+                                }
+                            }
+                            _eventCleanupActions.Clear();
+                        }
+
+                        // Transition to disposed state
+                        _windowState = UIWindowState.Disposed;
+                        
+                        // Clean up other resources
+                        _history?.Clear();
+                        _detachedWindows?.Clear();
+                        
+                        // Log completion
+                        _instanceLogger?.LogInformation("MainWindow disposed successfully with event cleanup");
+                    }
+                    catch (Exception ex)
+                    {
+                        _instanceLogger?.LogError(ex, "Error during disposal");
+                    }
+                }
                 
-                _windowState = UIWindowState.Disposed;
-                _initState = InitializationState.Disposing;
                 _isDisposed = true;
-                
-                try
-                {
-                    // Unregister from lifecycle manager
-                    WindowLifecycleManager.Instance.UnregisterWindow(this);
-                    
-                    // Cleanup logic here
-                    _mainTabsControl = null;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error during window disposal");
-                }
-                finally
-                {
-                    _initState = InitializationState.Disposed;
-                }
             }
         }
 
@@ -1010,13 +1183,28 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Override OnClosed to handle final disposal
+        /// Handle window closed event with cleanup
+        /// ENHANCED FOR FIX 4: Event Handler Memory Leaks
         /// </summary>
         protected override void OnClosed(EventArgs e)
         {
-            _windowState = UIWindowState.Disposed;
-            Dispose();
-            base.OnClosed(e);
+            try
+            {
+                // Transition to disposed state
+                _windowState = UIWindowState.Disposed;
+                _instanceLogger?.LogInformation("Window closed, performing cleanup");
+                
+                // Dispose resources including event handlers
+                Dispose();
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error during window close cleanup");
+            }
+            finally
+            {
+                base.OnClosed(e);
+            }
         }
 
         #endregion
@@ -1064,40 +1252,7 @@ namespace ExplorerPro.UI.MainWindow
                 RestoreWindowLayout();
 
                 // Delayed tab creation until the window is fully loaded
-                this.Loaded += (sender, e) =>
-                {
-                    try
-                    {
-                        // Create initial tab if needed
-                        if (MainTabs.Items.Count == 0)
-                        {
-                            var container = AddNewMainWindowTab();
-                            if (container == null)
-                            {
-                                SafeAddNewTab();
-                            }
-                        }
-
-                        // Connect all pinned panels
-                        ConnectAllPinnedPanels();
-
-                        // Refresh pinned panels
-                        RefreshAllPinnedPanels();
-                        
-                        // Refresh theme elements
-                        RefreshThemeElements();
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error in Loaded event: {ex.Message}");
-                        
-                        // Make sure we have at least one tab
-                        if (MainTabs.Items.Count == 0)
-                        {
-                            SafeAddNewTab();
-                        }
-                    }
-                };
+                this.Loaded += OnMainWindowLoaded;
 
                 // Set up keyboard shortcuts
                 InitializeKeyboardShortcuts();
@@ -3392,6 +3547,54 @@ namespace ExplorerPro.UI.MainWindow
         public static bool HasMultipleWindows()
         {
             return WindowLifecycleManager.Instance.ActiveWindowCount > 1;
+        }
+
+        #endregion
+
+        #region Validation Methods
+
+        /// <summary>
+        /// Gets the current count of tracked event subscriptions for validation
+        /// VALIDATION METHOD FOR FIX 4: Event Handler Memory Leaks
+        /// </summary>
+        public int GetTrackedEventCount()
+        {
+            lock (_eventCleanupLock)
+            {
+                return _eventCleanupActions.Count;
+            }
+        }
+
+        /// <summary>
+        /// Validates that event cleanup is working properly for memory leak testing
+        /// </summary>
+        public bool ValidateEventCleanup()
+        {
+            try
+            {
+                lock (_eventCleanupLock)
+                {
+                    var eventCount = _eventCleanupActions.Count;
+                    var isDisposed = _isDisposed;
+                    var windowState = _windowState;
+                    
+                    _instanceLogger?.LogInformation($"Event validation - Count: {eventCount}, Disposed: {isDisposed}, State: {windowState}");
+                    
+                    // If disposed, should have no tracked events
+                    if (isDisposed && eventCount > 0)
+                    {
+                        _instanceLogger?.LogWarning($"Memory leak detected: {eventCount} events still tracked after disposal");
+                        return false;
+                    }
+                    
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error validating event cleanup");
+                return false;
+            }
         }
 
         #endregion
