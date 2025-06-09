@@ -28,6 +28,7 @@ using System.Runtime.CompilerServices;
 // Add reference to System.Windows.Forms but use an alias
 using WinForms = System.Windows.Forms;
 using WPF = System.Windows;
+using System.Collections.Concurrent;
 
 namespace ExplorerPro.UI.MainWindow
 {
@@ -231,8 +232,9 @@ namespace ExplorerPro.UI.MainWindow
         private List<string> _history = new List<string>();
         private int _currentHistoryIndex = -1;
 
-        // Detached windows tracking
-        private List<MainWindow> _detachedWindows = new List<MainWindow>();
+        // FIX 5: Detached Windows List Management - Replace simple list with managed collection
+        private readonly ConcurrentDictionary<Guid, WeakReference<MainWindow>> _detachedWindows 
+            = new ConcurrentDictionary<Guid, WeakReference<MainWindow>>();
 
         // Robust initialization system fields
         private readonly ILogger<MainWindow> _logger;
@@ -586,7 +588,6 @@ namespace ExplorerPro.UI.MainWindow
         {
             _settingsManager = App.Settings ?? new SettingsManager();
             _metadataManager = App.MetadataManager ?? new MetadataManager();
-            _detachedWindows = new List<MainWindow>();
             _history = new List<string>();
             _currentHistoryIndex = -1;
             
@@ -1184,7 +1185,7 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Handle window closed event with cleanup
-        /// ENHANCED FOR FIX 4: Event Handler Memory Leaks
+        /// ENHANCED FOR FIX 4: Event Handler Memory Leaks & FIX 5: Detached Windows List Management
         /// </summary>
         protected override void OnClosed(EventArgs e)
         {
@@ -1193,6 +1194,23 @@ namespace ExplorerPro.UI.MainWindow
                 // Transition to disposed state
                 _windowState = UIWindowState.Disposed;
                 _instanceLogger?.LogInformation("Window closed, performing cleanup");
+                
+                // FIX 5: Close all detached windows if this is the main window
+                if (Application.Current?.MainWindow == this)
+                {
+                    var windows = GetActiveDetachedWindows().ToList();
+                    foreach (var window in windows)
+                    {
+                        try
+                        {
+                            window.Close();
+                        }
+                        catch (Exception ex)
+                        {
+                            _instanceLogger?.LogError(ex, "Error closing detached window during shutdown");
+                        }
+                    }
+                }
                 
                 // Dispose resources including event handlers
                 Dispose();
@@ -1975,7 +1993,11 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void DetachTabMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            DetachMainTab(MainTabs.SelectedIndex);
+            // FIX 5: Use new managed detachment method
+            if (MainTabs.SelectedItem is TabItem selectedTab)
+            {
+                DetachToNewWindow(selectedTab);
+            }
         }
 
         /// <summary>
@@ -1983,7 +2005,11 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void MoveToNewWindowMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            MoveTabToNewWindow();
+            // FIX 5: Use new managed detachment method
+            if (MainTabs.SelectedItem is TabItem selectedTab)
+            {
+                DetachToNewWindow(selectedTab);
+            }
         }
 
         /// <summary>
@@ -2164,8 +2190,8 @@ namespace ExplorerPro.UI.MainWindow
                     newWindow.ConnectPinnedPanelSignals(container.PinnedPanel);
                 }
                 
-                // Track detached window
-                _detachedWindows.Add(newWindow);
+                // Track detached window - will be replaced with new managed implementation
+                // _detachedWindows[Guid.NewGuid()] = new WeakReference<MainWindow>(newWindow);
                 
                 Console.WriteLine($"Detached tab '{tabTitle}' to new window");
             }
@@ -2176,28 +2202,18 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
-        /// <summary>
-        /// Duplicate the current tab.
-        /// </summary>
-        public void DuplicateCurrentTab()
-        {
-            var currentContainer = GetCurrentContainer();
-            if (currentContainer == null) return;
-            
-            var fileTree = currentContainer.FindFileTree();
-            if (fileTree != null)
-            {
-                string rootPath = fileTree.GetCurrentPath(); // Changed from CurrentPath property to GetCurrentPath method
-                AddNewMainWindowTab(rootPath);
-            }
-        }
+
 
         /// <summary>
         /// Move the current tab to a new window.
+        /// ENHANCED FOR FIX 5: Detached Windows List Management
         /// </summary>
         public void MoveTabToNewWindow()
         {
-            DetachMainTab(MainTabs.SelectedIndex);
+            if (MainTabs.SelectedItem is TabItem selectedTab)
+            {
+                DetachToNewWindow(selectedTab);
+            }
         }
         
         /// <summary>
@@ -3598,6 +3614,213 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         #endregion
+
+        /// <summary>
+        /// IMPLEMENTATION OF FIX 5: Detached Windows List Management
+        /// Represents a managed detached window with lifecycle tracking
+        /// </summary>
+        private class DetachedWindowInfo
+        {
+            public Guid Id { get; set; }
+            public WeakReference<MainWindow> WindowReference { get; set; }
+            public DateTime CreatedAt { get; set; }
+            public string Title { get; set; }
+
+            public DetachedWindowInfo(Guid id, MainWindow window, string title)
+            {
+                Id = id;
+                WindowReference = new WeakReference<MainWindow>(window);
+                CreatedAt = DateTime.Now;
+                Title = title ?? "Detached Window";
+            }
+        }
+
+        /// <summary>
+        /// ENHANCED FOR FIX 5: Detached Windows List Management
+        /// Safely detach a tab to a new window with proper lifecycle management
+        /// </summary>
+        public void DetachToNewWindow(TabItem tabToDetach)
+        {
+            if (tabToDetach == null) 
+            {
+                _instanceLogger?.LogWarning("Cannot detach null tab");
+                return;
+            }
+            
+            try
+            {
+                // Create new window with shared logger
+                var newWindow = new MainWindow
+                {
+                    Owner = null, // Detached windows have no owner
+                    WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                    Width = this.Width * 0.8,
+                    Height = this.Height * 0.8
+                };
+                
+                var windowId = Guid.NewGuid();
+                var tabTitle = tabToDetach.Header?.ToString() ?? "Detached";
+                
+                // Set up window lifecycle management
+                EventHandler cleanupHandler = (s, e) =>
+                {
+                    _detachedWindows.TryRemove(windowId, out _);
+                    _instanceLogger?.LogInformation($"Detached window {windowId} closed and removed from tracking");
+                };
+                
+                // Subscribe to cleanup using our event management system
+                newWindow.Closed += cleanupHandler;
+                
+                // Track cleanup action for proper disposal
+                lock (_eventCleanupLock)
+                {
+                    _eventCleanupActions.Add(() => newWindow.Closed -= cleanupHandler);
+                }
+                
+                // Track the window with weak reference
+                _detachedWindows[windowId] = new WeakReference<MainWindow>(newWindow);
+                
+                // Transfer tab content
+                if (MainTabs != null)
+                {
+                    MainTabs.Items.Remove(tabToDetach);
+                    newWindow.MainTabs?.Items.Add(tabToDetach);
+                }
+                
+                // Configure new window
+                newWindow.Title = $"ExplorerPro - {tabTitle}";
+                
+                // Show the new window
+                newWindow.Show();
+                newWindow.Activate();
+                
+                _instanceLogger?.LogInformation($"Created detached window {windowId} with tab '{tabTitle}'");
+                
+                // Periodic cleanup of dead references if we have many windows
+                if (_detachedWindows.Count > 10)
+                {
+                    Task.Run(() => CleanupDeadReferences());
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error detaching tab to new window");
+                System.Windows.MessageBox.Show("Failed to detach tab to new window", "Error", 
+                               MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// IMPLEMENTATION OF FIX 5: Detached Windows List Management
+        /// Removes dead weak references from the detached windows collection
+        /// </summary>
+        private void CleanupDeadReferences()
+        {
+            var deadKeys = new List<Guid>();
+            
+            foreach (var kvp in _detachedWindows)
+            {
+                if (!kvp.Value.TryGetTarget(out _))
+                {
+                    deadKeys.Add(kvp.Key);
+                }
+            }
+            
+            foreach (var key in deadKeys)
+            {
+                _detachedWindows.TryRemove(key, out _);
+            }
+            
+            if (deadKeys.Count > 0)
+            {
+                _instanceLogger?.LogDebug($"Cleaned up {deadKeys.Count} dead window references");
+            }
+        }
+
+        /// <summary>
+        /// IMPLEMENTATION OF FIX 5: Detached Windows List Management
+        /// Gets all currently active detached windows
+        /// </summary>
+        public IEnumerable<MainWindow> GetActiveDetachedWindows()
+        {
+            var activeWindows = new List<MainWindow>();
+            
+            foreach (var weakRef in _detachedWindows.Values)
+            {
+                if (weakRef.TryGetTarget(out var window) && !window.IsDisposed)
+                {
+                    activeWindows.Add(window);
+                }
+            }
+            
+            return activeWindows;
+        }
+
+        /// <summary>
+        /// IMPLEMENTATION OF FIX 5: Detached Windows List Management
+        /// Broadcasts a message to all detached windows
+        /// </summary>
+        public void BroadcastToDetachedWindows(Action<MainWindow> action)
+        {
+            if (action == null) 
+            {
+                _instanceLogger?.LogWarning("Cannot broadcast null action to detached windows");
+                return;
+            }
+            
+            var activeCount = 0;
+            var errorCount = 0;
+            
+            foreach (var window in GetActiveDetachedWindows())
+            {
+                try
+                {
+                    window.ExecuteOnUIThread(() => action(window));
+                    activeCount++;
+                }
+                catch (Exception ex)
+                {
+                    errorCount++;
+                    _instanceLogger?.LogError(ex, $"Error broadcasting to detached window");
+                }
+            }
+            
+            _instanceLogger?.LogDebug($"Broadcast completed - {activeCount} successful, {errorCount} errors");
+        }
+
+        /// <summary>
+        /// VALIDATION METHOD FOR FIX 5: Detached Windows List Management
+        /// Gets the current count of tracked detached windows for validation
+        /// </summary>
+        public int GetDetachedWindowCount()
+        {
+            return _detachedWindows.Count;
+        }
+
+        /// <summary>
+        /// VALIDATION METHOD FOR FIX 5: Detached Windows List Management  
+        /// Gets the count of active (non-disposed) detached windows
+        /// </summary>
+        public int GetActiveDetachedWindowCount()
+        {
+            return GetActiveDetachedWindows().Count();
+        }
+
+        /// <summary>
+        /// Duplicate the current tab.
+        /// </summary>
+        public void DuplicateCurrentTab()
+        {
+            var currentContainer = GetCurrentContainer();
+            if (currentContainer == null) return;
+            
+            var fileTree = currentContainer.FindFileTree();
+            if (fileTree != null)
+            {
+                string rootPath = fileTree.GetCurrentPath(); // Changed from CurrentPath property to GetCurrentPath method
+                AddNewMainWindowTab(rootPath);
+            }
+        }
     }
 
     #region Window State and Actions for Transactions
