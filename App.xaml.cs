@@ -617,6 +617,9 @@ namespace ExplorerPro
                 // Dispose logger factory
                 DisposeLoggerFactory();
                 
+                // Dispose shared MainWindow logger factory - FIX 1: Logger Factory Memory Leaks
+                DisposeMainWindowSharedLogger();
+                
                 // Log application exit
                 LogApplicationExit();
             }
@@ -780,6 +783,23 @@ namespace ExplorerPro
             catch (Exception ex)
             {
                 Console.WriteLine($"Error disposing logger factory: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Disposes the shared MainWindow logger factory
+        /// IMPLEMENTATION OF FIX 1: Logger Factory Memory Leaks
+        /// </summary>
+        private void DisposeMainWindowSharedLogger()
+        {
+            try
+            {
+                ExplorerPro.UI.MainWindow.MainWindow.DisposeSharedLogger();
+                Console.WriteLine("MainWindow shared logger factory disposed");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing MainWindow shared logger factory: {ex.Message}");
             }
         }
         
