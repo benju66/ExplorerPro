@@ -37,8 +37,8 @@ namespace ExplorerPro.UI.MainWindow
     {
         #region Fields
 
-        // Static list for tracking all main windows
-        private static List<MainWindow> _allMainWindows = new List<MainWindow>();
+        // Window lifecycle management - now handled by WindowLifecycleManager
+        // private static List<MainWindow> _allMainWindows = new List<MainWindow>(); // Replaced by WindowLifecycleManager
 
         // Core managers
         private SettingsManager _settingsManager;
@@ -148,13 +148,12 @@ namespace ExplorerPro.UI.MainWindow
         {
             _settingsManager = App.Settings ?? new SettingsManager();
             _metadataManager = App.MetadataManager ?? new MetadataManager();
-            _allMainWindows = _allMainWindows ?? new List<MainWindow>();
             _detachedWindows = new List<MainWindow>();
             _history = new List<string>();
             _currentHistoryIndex = -1;
             
-            // Register in global tracking
-            _allMainWindows.Add(this);
+            // Register with lifecycle manager for thread-safe tracking
+            WindowLifecycleManager.Instance.RegisterWindow(this);
         }
 
         /// <summary>
@@ -494,11 +493,15 @@ namespace ExplorerPro.UI.MainWindow
                 
                 try
                 {
+                    // Unregister from lifecycle manager
+                    WindowLifecycleManager.Instance.UnregisterWindow(this);
+                    
                     // Cleanup logic here
                     _mainTabsControl = null;
-                    
-                    // Remove from global tracking
-                    _allMainWindows.Remove(this);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error during window disposal");
                 }
                 finally
                 {
@@ -1622,7 +1625,7 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void ConnectAllPinnedPanels()
         {
-            foreach (var window in _allMainWindows)
+            foreach (var window in WindowLifecycleManager.Instance.GetActiveWindows())
             {
                 for (int i = 0; i < window.MainTabs.Items.Count; i++)
                 {
@@ -1645,7 +1648,7 @@ namespace ExplorerPro.UI.MainWindow
             try
             {
                 // Refresh all windows
-                foreach (var window in _allMainWindows)
+                foreach (var window in WindowLifecycleManager.Instance.GetActiveWindows())
                 {
                     for (int i = 0; i < window.MainTabs.Items.Count; i++)
                     {
@@ -2806,6 +2809,22 @@ namespace ExplorerPro.UI.MainWindow
                     yield return grandChild;
                 }
             }
+        }
+
+        /// <summary>
+        /// Gets all active MainWindow instances using the lifecycle manager.
+        /// </summary>
+        public static IEnumerable<MainWindow> GetAllActiveWindows()
+        {
+            return WindowLifecycleManager.Instance.GetActiveWindows();
+        }
+
+        /// <summary>
+        /// Checks if multiple windows are currently open.
+        /// </summary>
+        public static bool HasMultipleWindows()
+        {
+            return WindowLifecycleManager.Instance.ActiveWindowCount > 1;
         }
 
         #endregion
