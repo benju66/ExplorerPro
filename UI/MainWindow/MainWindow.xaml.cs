@@ -228,9 +228,13 @@ namespace ExplorerPro.UI.MainWindow
         private SettingsManager _settingsManager;
         private MetadataManager _metadataManager;
 
-        // Navigation history
-        private List<string> _history = new List<string>();
-        private int _currentHistoryIndex = -1;
+        // FIX 3: Navigation History Unbounded Growth - Replace simple fields with bounded implementation
+        private const int MaxHistorySize = 1000;
+        private const int HistoryTrimSize = 100; // Number to remove when limit reached
+        
+        private readonly LinkedList<NavigationEntry> _navigationHistory = new LinkedList<NavigationEntry>();
+        private LinkedListNode<NavigationEntry>? _currentHistoryNode;
+        private readonly object _historyLock = new object();
 
         // FIX 5: Detached Windows List Management - Replace simple list with managed collection
         private readonly ConcurrentDictionary<Guid, WeakReference<MainWindow>> _detachedWindows 
@@ -588,8 +592,8 @@ namespace ExplorerPro.UI.MainWindow
         {
             _settingsManager = App.Settings ?? new SettingsManager();
             _metadataManager = App.MetadataManager ?? new MetadataManager();
-            _history = new List<string>();
-            _currentHistoryIndex = -1;
+            _navigationHistory.Clear();
+            _currentHistoryNode = null;
             
             // Register with lifecycle manager for thread-safe tracking
             WindowLifecycleManager.Instance.RegisterWindow(this);
@@ -1158,7 +1162,7 @@ namespace ExplorerPro.UI.MainWindow
                         _windowState = UIWindowState.Disposed;
                         
                         // Clean up other resources
-                        _history?.Clear();
+                        _navigationHistory.Clear();
                         _detachedWindows?.Clear();
                         
                         // Log completion
@@ -1194,6 +1198,14 @@ namespace ExplorerPro.UI.MainWindow
                 // Transition to disposed state
                 _windowState = UIWindowState.Disposed;
                 _instanceLogger?.LogInformation("Window closed, performing cleanup");
+                
+                // FIX 3: Clean up navigation history
+                lock (_historyLock)
+                {
+                    _navigationHistory.Clear();
+                    _currentHistoryNode = null;
+                    _instanceLogger?.LogDebug("Navigation history cleared on window close");
+                }
                 
                 // FIX 5: Close all detached windows if this is the main window
                 if (Application.Current?.MainWindow == this)
@@ -2760,20 +2772,158 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Navigate back in history.
+        /// ENHANCED FOR FIX 3: Navigation History Unbounded Growth
         /// </summary>
         public void GoBack()
         {
-            var container = GetCurrentContainer();
-            container?.GoBack();
+            lock (_historyLock)
+            {
+                if (_currentHistoryNode?.Previous != null)
+                {
+                    _currentHistoryNode = _currentHistoryNode.Previous;
+                    PerformNavigation(_currentHistoryNode.Value.Path);
+                }
+                else
+                {
+                    // Fallback to container navigation if no bounded history
+                    var container = GetCurrentContainer();
+                    container?.GoBack();
+                }
+            }
         }
 
         /// <summary>
         /// Navigate forward in history.
+        /// ENHANCED FOR FIX 3: Navigation History Unbounded Growth
         /// </summary>
         public void GoForward()
         {
-            var container = GetCurrentContainer();
-            container?.GoForward();
+            lock (_historyLock)
+            {
+                if (_currentHistoryNode?.Next != null)
+                {
+                    _currentHistoryNode = _currentHistoryNode.Next;
+                    PerformNavigation(_currentHistoryNode.Value.Path);
+                }
+                else
+                {
+                    // Fallback to container navigation if no bounded history
+                    var container = GetCurrentContainer();
+                    container?.GoForward();
+                }
+            }
+        }
+
+        /// <summary>
+        /// IMPLEMENTATION OF FIX 3: Navigation History Unbounded Growth
+        /// Navigate to a specific path with bounded history management
+        /// </summary>
+        public void NavigateToPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            
+            lock (_historyLock)
+            {
+                try
+                {
+                    // Remove forward history if navigating from middle
+                    if (_currentHistoryNode != null && _currentHistoryNode.Next != null)
+                    {
+                        var node = _currentHistoryNode.Next;
+                        while (node != null)
+                        {
+                            var next = node.Next;
+                            _navigationHistory.Remove(node);
+                            node = next;
+                        }
+                    }
+                    
+                    // Add new entry
+                    var entry = new NavigationEntry(path);
+                    _currentHistoryNode = _navigationHistory.AddLast(entry);
+                    
+                    // Enforce size limit
+                    if (_navigationHistory.Count > MaxHistorySize)
+                    {
+                        _instanceLogger?.LogInformation($"Navigation history limit reached ({MaxHistorySize}), trimming oldest {HistoryTrimSize} entries");
+                        
+                        for (int i = 0; i < HistoryTrimSize && _navigationHistory.Count > 0; i++)
+                        {
+                            _navigationHistory.RemoveFirst();
+                        }
+                        
+                        // Ensure current node is still valid
+                        if (_currentHistoryNode?.List == null)
+                        {
+                            _currentHistoryNode = _navigationHistory.Last;
+                        }
+                    }
+                    
+                    // Log memory usage periodically
+                    if (_navigationHistory.Count % 100 == 0)
+                    {
+                        var totalMemory = _navigationHistory.Sum(e => e.MemorySize);
+                        _instanceLogger?.LogDebug($"Navigation history: {_navigationHistory.Count} entries, ~{totalMemory / 1024}KB");
+                    }
+                    
+                    // Perform actual navigation
+                    PerformNavigation(path);
+                }
+                catch (Exception ex)
+                {
+                    _instanceLogger?.LogError(ex, $"Error during navigation to {path}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// IMPLEMENTATION OF FIX 3: Navigation History Unbounded Growth
+        /// Check if we can navigate back in history
+        /// </summary>
+        public bool CanGoBack()
+        {
+            lock (_historyLock)
+            {
+                return _currentHistoryNode?.Previous != null;
+            }
+        }
+
+        /// <summary>
+        /// IMPLEMENTATION OF FIX 3: Navigation History Unbounded Growth
+        /// Check if we can navigate forward in history
+        /// </summary>
+        public bool CanGoForward()
+        {
+            lock (_historyLock)
+            {
+                return _currentHistoryNode?.Next != null;
+            }
+        }
+
+        /// <summary>
+        /// IMPLEMENTATION OF FIX 3: Navigation History Unbounded Growth
+        /// Perform the actual navigation to a path
+        /// </summary>
+        private void PerformNavigation(string path)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                {
+                    // Update address bar and refresh
+                    UpdateToolbarAddressBar(path);
+                    OpenDirectoryInTab(path);
+                    _instanceLogger?.LogDebug($"Navigated to {path}");
+                }
+                else
+                {
+                    _instanceLogger?.LogWarning($"Cannot navigate to non-existent path: {path}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, $"Error performing navigation to {path}");
+            }
         }
 
         /// <summary>
@@ -3636,6 +3786,25 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
+        /// IMPLEMENTATION OF FIX 3: Navigation History Unbounded Growth
+        /// Represents a navigation history entry with metadata
+        /// </summary>
+        private class NavigationEntry
+        {
+            public string Path { get; set; }
+            public DateTime Timestamp { get; set; }
+            public long MemorySize { get; set; } // Approximate memory usage
+            
+            public NavigationEntry(string path)
+            {
+                Path = path ?? string.Empty;
+                Timestamp = DateTime.UtcNow;
+                // Approximate memory: string length * 2 (Unicode) + object overhead
+                MemorySize = (path?.Length ?? 0) * 2 + 64;
+            }
+        }
+
+        /// <summary>
         /// ENHANCED FOR FIX 5: Detached Windows List Management
         /// Safely detach a tab to a new window with proper lifecycle management
         /// </summary>
@@ -3797,14 +3966,56 @@ namespace ExplorerPro.UI.MainWindow
             return _detachedWindows.Count;
         }
 
-        /// <summary>
-        /// VALIDATION METHOD FOR FIX 5: Detached Windows List Management  
-        /// Gets the count of active (non-disposed) detached windows
-        /// </summary>
-        public int GetActiveDetachedWindowCount()
-        {
-            return GetActiveDetachedWindows().Count();
-        }
+                 /// <summary>
+         /// VALIDATION METHOD FOR FIX 5: Detached Windows List Management  
+         /// Gets the count of active (non-disposed) detached windows
+         /// </summary>
+         public int GetActiveDetachedWindowCount()
+         {
+             return GetActiveDetachedWindows().Count();
+         }
+
+         /// <summary>
+         /// VALIDATION METHOD FOR FIX 3: Navigation History Unbounded Growth
+         /// Gets the current count of navigation history entries
+         /// </summary>
+         public int GetNavigationHistoryCount()
+         {
+             lock (_historyLock)
+             {
+                 return _navigationHistory.Count;
+             }
+         }
+
+         /// <summary>
+         /// VALIDATION METHOD FOR FIX 3: Navigation History Unbounded Growth
+         /// Gets the approximate memory usage of navigation history
+         /// </summary>
+         public long GetNavigationHistoryMemoryUsage()
+         {
+             lock (_historyLock)
+             {
+                 return _navigationHistory.Sum(e => e.MemorySize);
+             }
+         }
+
+         /// <summary>
+         /// VALIDATION METHOD FOR FIX 3: Navigation History Unbounded Growth
+         /// Validates that history size stays within bounds
+         /// </summary>
+         public bool ValidateNavigationHistoryBounds()
+         {
+             lock (_historyLock)
+             {
+                 var count = _navigationHistory.Count;
+                 var memoryUsage = _navigationHistory.Sum(e => e.MemorySize);
+                 var withinBounds = count <= MaxHistorySize;
+                 
+                 _instanceLogger?.LogDebug($"Navigation history validation: {count}/{MaxHistorySize} entries, ~{memoryUsage / 1024}KB, within bounds: {withinBounds}");
+                 
+                 return withinBounds;
+             }
+         }
 
         /// <summary>
         /// Duplicate the current tab.
