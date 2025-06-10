@@ -890,10 +890,10 @@ namespace ExplorerPro.UI.Panels.PinnedPanel
             if (string.IsNullOrEmpty(itemPath))
                 return;
                 
-            // If it's a folder, open in a new tab
+            // If it's a folder, open in a new pane
             if (Directory.Exists(itemPath))
             {
-                OpenInNewTab(itemPath);
+                OpenInNewPane(itemPath);
             }
             // Otherwise, open with default app
             else if (File.Exists(itemPath))
@@ -915,8 +915,8 @@ namespace ExplorerPro.UI.Panels.PinnedPanel
             ContextMenu menu = new ContextMenu();
             
             // Quick Access / Open / Navigation
-            MenuItem openTabMenuItem = CreateMenuItem("Open in New Tab", "Assets/Icons/open-tab.png", 
-                () => OpenInNewTab(itemPath));
+            MenuItem openTabMenuItem = CreateMenuItem("Open in New Pane", "Assets/Icons/open-tab.png", 
+                () => OpenInNewPane(itemPath));
             menu.Items.Add(openTabMenuItem);
             
             MenuItem openWindowMenuItem = CreateMenuItem("Open in New Window", "Assets/Icons/open-window.png", 
@@ -1067,10 +1067,10 @@ namespace ExplorerPro.UI.Panels.PinnedPanel
         }
         
         /// <summary>
-        /// Opens a path in a new tab
+        /// Opens a path in a new pane
         /// </summary>
         /// <param name="itemPath">The path to open</param>
-        private void OpenInNewTab(string itemPath)
+        private void OpenInNewPane(string itemPath)
         {
             if (!File.Exists(itemPath) && !Directory.Exists(itemPath))
             {

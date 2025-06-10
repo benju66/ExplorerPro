@@ -355,7 +355,7 @@
                                     <!-- Ultra-Modern Add Tab Button -->
                                     <Button x:Name="AddTabButton" 
                                            Content="＋" 
-                                           ToolTip="Open a new tab"
+                                           ToolTip="Open a new pane"
                                            Click="AddTabButton_Click"
                                            Width="32" 
                                            Height="32" 

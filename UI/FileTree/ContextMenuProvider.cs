@@ -70,8 +70,8 @@ namespace ExplorerPro.UI.FileTree
             
             if (isDirectory)
             {
-                AddMenuItem(contextMenu, "Open in New _Tab", iconPath + "tab-plus.png", 
-                    () => OpenInNewTab(selectedPath), Key.T, ModifierKeys.Control);
+                AddMenuItem(contextMenu, "Open in New _Pane", iconPath + "tab-plus.png", 
+                    () => OpenInNewPane(selectedPath), Key.T, ModifierKeys.Control);
                     
                 AddMenuItem(contextMenu, "Open in New _Window", iconPath + "window-plus.png", 
                     () => OpenInNewWindow(selectedPath), Key.N, ModifierKeys.Control | ModifierKeys.Shift);
@@ -647,11 +647,11 @@ namespace ExplorerPro.UI.FileTree
             catch { }
         }
 
-        private void OpenInNewTab(string path)
+        private void OpenInNewPane(string path)
         {
-            // This would need to be implemented based on your tab system
+            // This would need to be implemented based on your pane system
             var window = Application.Current.MainWindow;
-            // Example: ((MainWindow)window).CreateNewTab(path);
+            // Example: ((MainWindow)window).CreateNewPane(path);
         }
 
         private void OpenInNewWindow(string path)
