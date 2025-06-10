@@ -6,7 +6,7 @@ using System.Linq;
 namespace ExplorerPro.UI.TabManagement
 {
     /// <summary>
-    /// Manages navigation history for tabs in the TabManager.
+    /// Manages navigation history for tabs in the PaneManager.
     /// Tracks back/forward history for each tab and provides navigation methods.
     /// </summary>
     public class TabHistoryManager

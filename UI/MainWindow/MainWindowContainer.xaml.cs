@@ -1455,7 +1455,7 @@ namespace ExplorerPro.UI.MainWindow
                 try
                 {
                     string fallback = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                    _paneManager?.AddNewFileTreeTab("Documents", fallback);
+                    _paneManager?.AddNewFileTreePane("Documents", fallback);
                 }
                 catch
                 {
@@ -1635,7 +1635,7 @@ namespace ExplorerPro.UI.MainWindow
                 // Open path in right tab manager
                 string fileName = Path.GetFileName(validPath);
                 string title = string.IsNullOrEmpty(fileName) ? validPath : fileName;
-                _rightPaneManager?.AddNewFileTreeTab(title, validPath);
+                                    _rightPaneManager?.AddNewFileTreePane(title, validPath);
                 
                 // Update state
                 _splitViewActive = true;
@@ -2067,8 +2067,8 @@ namespace ExplorerPro.UI.MainWindow
                 // Update all content controls
                 UpdateContentControls();
                 
-                // Update tab managers
-                RefreshTabManagers();
+                // Update pane managers
+                RefreshPaneManagers();
                 
                 // Update file tree
                 var fileTree = FindFileTree();
@@ -2160,16 +2160,16 @@ namespace ExplorerPro.UI.MainWindow
         }
         
         /// <summary>
-        /// Refreshes tab managers in the split view
+        /// Refreshes pane managers in the split view
         /// </summary>
-        private void RefreshTabManagers()
+        private void RefreshPaneManagers()
         {
             try
             {
-                // Refresh main tab manager
+                // Refresh main pane manager
                 if (_paneManager != null)
                 {
-                    // The tab manager might need its own RefreshThemeElements method
+                    // The pane manager might need its own RefreshThemeElements method
                     // For now, we'll update the TabControl background directly
                     var tabControl = FindTabControl(_paneManager);
                     if (tabControl != null)
@@ -2178,7 +2178,7 @@ namespace ExplorerPro.UI.MainWindow
                     }
                 }
                 
-                // Refresh right tab manager if in split view
+                // Refresh right pane manager if in split view
                 if (_rightPaneManager != null && _splitViewActive)
                 {
                     var tabControl = FindTabControl(_rightPaneManager);
@@ -2190,18 +2190,18 @@ namespace ExplorerPro.UI.MainWindow
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error refreshing tab managers: {ex.Message}");
+                Console.WriteLine($"Error refreshing pane managers: {ex.Message}");
             }
         }
         
         /// <summary>
-        /// Helper to find TabControl within a TabManager
+        /// Helper to find TabControl within a PaneManager
         /// </summary>
-        private TabControl FindTabControl(object tabManager)
+        private TabControl FindTabControl(object paneManager)
         {
             try
             {
-                if (tabManager is DependencyObject dependencyObject)
+                if (paneManager is DependencyObject dependencyObject)
                 {
                     return FindVisualChildren<TabControl>(dependencyObject).FirstOrDefault();
                 }
@@ -2267,15 +2267,15 @@ namespace ExplorerPro.UI.MainWindow
                 // Remove from tracking
                 _allContainers.Remove(this);
                 
-                // Dispose tab managers
-                if (_paneManager is IDisposable tabManagerDisposable)
+                // Dispose pane managers
+                if (_paneManager is IDisposable paneManagerDisposable)
                 {
-                    tabManagerDisposable.Dispose();
+                    paneManagerDisposable.Dispose();
                 }
                 
-                if (_rightPaneManager is IDisposable rightTabManagerDisposable)
+                if (_rightPaneManager is IDisposable rightPaneManagerDisposable)
                 {
-                    rightTabManagerDisposable.Dispose();
+                    rightPaneManagerDisposable.Dispose();
                 }
             }
             catch (Exception ex)
