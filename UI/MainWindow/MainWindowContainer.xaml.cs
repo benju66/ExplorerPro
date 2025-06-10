@@ -15,6 +15,7 @@ using ExplorerPro.UI.Panels.BookmarksPanel;
 using ExplorerPro.UI.Panels.ToDoPanel;
 using ExplorerPro.UI.Panels.ProcoreLinksPanel;
 using ExplorerPro.Themes;
+using ExplorerPro.Core;
 
 namespace ExplorerPro.UI.MainWindow
 {
@@ -101,7 +102,7 @@ namespace ExplorerPro.UI.MainWindow
                 InitializeComponent();
 
                 _parentWindow = parentWindow;
-                _settingsManager = App.Settings ?? new SettingsManager(); // Use App.Settings instead of SettingsManager.Instance
+                _settingsManager = App.Settings ?? new SettingsManager();
                 _activeTabManager = null;
                 _splitViewActive = false;
 

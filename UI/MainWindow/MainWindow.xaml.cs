@@ -225,7 +225,7 @@ namespace ExplorerPro.UI.MainWindow
         // private static List<MainWindow> _allMainWindows = new List<MainWindow>(); // Replaced by WindowLifecycleManager
 
         // Core managers
-        private SettingsManager _settingsManager;
+        private readonly ISettingsService _settingsService;
         private MetadataManager _metadataManager;
 
         // FIX 3: Navigation History Unbounded Growth - Replace simple fields with bounded implementation
@@ -460,7 +460,8 @@ namespace ExplorerPro.UI.MainWindow
         public MainWindow(
             ILogger<MainWindow> logger, 
             MainWindowInitializer initializer,
-            ExceptionHandler exceptionHandler)
+            ExceptionHandler exceptionHandler,
+            ISettingsService settingsService = null)
         {
             // Use provided logger or fall back to shared logger
             _logger = logger ?? _staticLogger;
@@ -471,6 +472,7 @@ namespace ExplorerPro.UI.MainWindow
             
             _initializer = initializer ?? throw new ArgumentNullException(nameof(initializer));
             _exceptionHandler = exceptionHandler ?? throw new ArgumentNullException(nameof(exceptionHandler));
+            _settingsService = settingsService ?? new SettingsService(App.Settings ?? new SettingsManager(), _logger);
 
             try
             {
@@ -531,6 +533,7 @@ namespace ExplorerPro.UI.MainWindow
                 // Initialize with shared logger components
                 _initializer = CreateDefaultInitializer();
                 _exceptionHandler = CreateDefaultExceptionHandler();
+                _settingsService = new SettingsService(App.Settings ?? new SettingsManager(), _logger);
                 
                 // Initialize core fields
                 InitializeCoreFields();
@@ -642,7 +645,6 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void InitializeCoreFields()
         {
-            _settingsManager = App.Settings ?? new SettingsManager();
             _metadataManager = App.MetadataManager ?? new MetadataManager();
             _navigationHistory.Clear();
             _currentHistoryNode = null;
@@ -1353,7 +1355,28 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                var (geometryBytes, stateBytes) = _settingsManager.RetrieveMainWindowLayout();
+                var windowSettings = _settingsService.GetWindowSettings(GetWindowId());
+                if (windowSettings != null && windowSettings.IsValid)
+                {
+                    windowSettings.ApplyTo(this, _instanceLogger);
+                    return;
+                }
+                
+                // Legacy fallback - try to get geometry bytes from SettingsManager for compatibility
+                byte[] geometryBytes = null, stateBytes = null;
+                try
+                {
+                    if (App.Settings != null)
+                    {
+                        var (legacyGeometry, legacyState) = App.Settings.RetrieveMainWindowLayout();
+                        geometryBytes = legacyGeometry;
+                        stateBytes = legacyState;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _instanceLogger?.LogError(ex, "Error retrieving legacy window layout");
+                }
                 if (geometryBytes != null)
                 {
                     // Restore window geometry
@@ -1708,9 +1731,9 @@ namespace ExplorerPro.UI.MainWindow
                     
                 Themes.ThemeManager.Instance.SwitchTheme(themeEnum);
                 
-                // Save the theme to settings
-                _settingsManager.UpdateSetting("theme", theme.ToLower());
-                _settingsManager.UpdateSetting("ui_preferences.Enable Dark Mode", theme.ToLower() == "dark");
+                // Save the theme to settings using the service
+                _settingsService.UpdateSetting("theme", theme.ToLower());
+                _settingsService.UpdateSetting("ui_preferences.Enable Dark Mode", theme.ToLower() == "dark");
                 
                 Console.WriteLine($"Applied theme: {theme}");
             }
@@ -2603,13 +2626,12 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                // Apply theme
-                string theme = _settingsManager.GetSetting<string>("theme", "light");
+                // Apply theme using the settings service
+                string theme = _settingsService.GetTheme();
                 ApplyTheme(theme);
 
-                // Apply panel visibility
-                Dictionary<string, bool> panels = _settingsManager.GetSetting<Dictionary<string, bool>>(
-                    "dockable_panels", new Dictionary<string, bool>());
+                // Apply panel visibility using the settings service
+                Dictionary<string, bool> panels = _settingsService.GetPanelSettings();
                 
                 var container = GetCurrentContainer();
                 if (container != null)
@@ -2619,6 +2641,7 @@ namespace ExplorerPro.UI.MainWindow
             }
             catch (Exception ex)
             {
+                _instanceLogger?.LogError(ex, "Error applying saved settings");
                 Console.WriteLine($"Error applying saved settings: {ex.Message}");
             }
         }
@@ -3267,8 +3290,8 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void SaveCommand_Executed(object sender, ExecutedRoutedEventArgs e)
         {
-            // Save settings
-            _settingsManager.SaveSettings();
+            // Save settings using the service
+            _ = _settingsService.SaveSettingsAsync();
         }
 
         /// <summary>
@@ -3521,7 +3544,9 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         public void OpenSettings()
         {
-            var settingsDialog = new SettingsDialog(_settingsManager);
+            // For now, use the legacy SettingsManager for the dialog
+            // TODO: Update SettingsDialog to accept ISettingsService
+            var settingsDialog = new SettingsDialog(App.Settings ?? new SettingsManager());
             
             if (settingsDialog.ShowDialog() == true)
             {
@@ -3643,8 +3668,8 @@ namespace ExplorerPro.UI.MainWindow
                 // Save window layout
                 SaveWindowLayout();
                 
-                // Save settings
-                _settingsManager.SaveSettings();
+                // Save settings using the service
+                _ = _settingsService.SaveSettingsAsync();
                 
                 // Dispose properly
                 Dispose();
@@ -3667,10 +3692,24 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void SaveWindowLayout()
         {
-            byte[] geometryBytes = GetWindowGeometryBytes();
-            byte[] stateBytes = GetWindowStateBytes();
-            
-            _settingsManager.StoreMainWindowLayout(geometryBytes, stateBytes);
+            try
+            {
+                var windowSettings = ExplorerPro.Models.WindowSettings.FromWindow(this, _instanceLogger);
+                _ = _settingsService.SaveWindowSettingsAsync(GetWindowId(), windowSettings);
+                
+                // Legacy fallback for compatibility
+                byte[] geometryBytes = GetWindowGeometryBytes();
+                byte[] stateBytes = GetWindowStateBytes();
+                
+                if (App.Settings != null)
+                {
+                    App.Settings.StoreMainWindowLayout(geometryBytes, stateBytes);
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error saving window layout");
+            }
         }
 
         /// <summary>
