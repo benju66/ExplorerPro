@@ -220,7 +220,7 @@ namespace ExplorerPro.UI.MainWindow
                 }
 
                 // Add a file tree tab with validated path
-                _paneManager?.AddNewFileTreeTab(name, validPath);
+                _paneManager?.AddNewFileTreePane(name, validPath);
             }
             catch (Exception ex)
             {
@@ -229,14 +229,14 @@ namespace ExplorerPro.UI.MainWindow
                 string fallbackPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
                 try
                 {
-                    _paneManager?.AddNewFileTreeTab("Documents", fallbackPath);
+                    _paneManager?.AddNewFileTreePane("Documents", fallbackPath);
                 }
                 catch (Exception innerEx)
                 {
                     Console.WriteLine($"Failed to initialize with fallback path: {innerEx.Message}");
                     // Try one more time with user profile as a last resort
                     string userPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                    _paneManager?.AddNewFileTreeTab("Home", userPath);
+                    _paneManager?.AddNewFileTreePane("Home", userPath);
                 }
             }
         }
@@ -1443,7 +1443,7 @@ namespace ExplorerPro.UI.MainWindow
                 string title = string.IsNullOrEmpty(fileName) ? validPath : fileName;
                 
                 // Add new tab
-                _paneManager?.AddNewFileTreeTab(title, validPath);
+                _paneManager?.AddNewFileTreePane(title, validPath);
             }
             catch (Exception ex)
             {

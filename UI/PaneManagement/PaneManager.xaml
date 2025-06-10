@@ -54,6 +54,17 @@
                 </DrawingGroup>
             </DrawingImage.Drawing>
         </DrawingImage>
+
+        <!-- Context Menu for Pane Management -->
+        <ContextMenu x:Key="PaneContextMenu">
+            <MenuItem Header="📁 New File Tree Pane" Click="NewPaneMenuItem_Click" />
+            <MenuItem Header="📋 Duplicate Pane" Click="DuplicatePaneMenuItem_Click" />
+            <MenuItem Header="📌 Pin/Unpin Pane" Click="PinPaneButton_Click" />
+            <MenuItem Header="✕ Close Pane" Click="ClosePaneMenuItem_Click" />
+            <MenuItem Header="🔄 Refresh Pane" Click="RefreshPane_Click" />
+            <MenuItem Header="🔄 Refresh All Panes" Click="RefreshAllPanes_Click" />
+            <MenuItem Header="🪟 Detach Pane" Click="DetachPaneMenuItem_Click" />
+        </ContextMenu>
     </UserControl.Resources>
     
     <Grid>
@@ -65,7 +76,8 @@
                    BorderThickness="0"
                    Style="{x:Null}"
                    Padding="0"
-                   Margin="0">
+                   Margin="0"
+                   ContextMenu="{StaticResource PaneContextMenu}">
         </TabControl>
     </Grid>
 </UserControl> 

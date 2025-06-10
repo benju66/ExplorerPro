@@ -45,7 +45,7 @@ namespace ExplorerPro.UI.PaneManagement
         private bool _isDragging;
 
         // Memory monitoring
-        private Dictionary<TabItem, long> _tabMemoryUsage = new Dictionary<TabItem, long>();
+        private Dictionary<TabItem, long> _paneMemoryUsage = new Dictionary<TabItem, long>();
         private System.Windows.Threading.DispatcherTimer _memoryMonitorTimer;
 
         #endregion
@@ -115,7 +115,7 @@ namespace ExplorerPro.UI.PaneManagement
         {
             _memoryMonitorTimer = new System.Windows.Threading.DispatcherTimer();
             _memoryMonitorTimer.Interval = TimeSpan.FromSeconds(30); // Monitor every 30 seconds
-            _memoryMonitorTimer.Tick += (s, e) => MonitorTabMemory();
+            _memoryMonitorTimer.Tick += (s, e) => MonitorPaneMemory();
             _memoryMonitorTimer.Start();
         }
 
@@ -124,12 +124,12 @@ namespace ExplorerPro.UI.PaneManagement
         #region Essential Methods Required by MainWindow
 
         /// <summary>
-        /// Adds a new tab with a ImprovedFileTreeListView
+        /// Adds a new pane with a ImprovedFileTreeListView
         /// </summary>
-        /// <param name="title">Title for the tab</param>
+        /// <param name="title">Title for the pane</param>
         /// <param name="rootPath">Root path for the file tree</param>
-        /// <returns>The created tab content</returns>
-        public TabItem? AddNewFileTreeTab(string title, string rootPath)
+        /// <returns>The created pane content</returns>
+        public TabItem? AddNewFileTreePane(string title, string rootPath)
         {
             try
             {
@@ -268,9 +268,9 @@ namespace ExplorerPro.UI.PaneManagement
         }
 
         /// <summary>
-        /// Refresh the current tab
+        /// Refresh the current pane
         /// </summary>
-        public void RefreshCurrentTab()
+        public void RefreshCurrentPane()
         {
             try
             {
@@ -281,6 +281,25 @@ namespace ExplorerPro.UI.PaneManagement
             {
                 Console.WriteLine($"Error refreshing current tab: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Alias for AddNewFileTreePane - used by MainWindowContainer for compatibility
+        /// </summary>
+        /// <param name="title">Title for the tab</param>
+        /// <param name="rootPath">Root path for the file tree</param>
+        /// <returns>The created tab item</returns>
+        public TabItem? AddNewFileTreeTab(string title, string rootPath)
+        {
+            return AddNewFileTreePane(title, rootPath);
+        }
+
+        /// <summary>
+        /// Alias for RefreshCurrentPane - used by MainWindowContainer for compatibility
+        /// </summary>
+        public void RefreshCurrentTab()
+        {
+            RefreshCurrentPane();
         }
 
         #endregion
@@ -341,7 +360,7 @@ namespace ExplorerPro.UI.PaneManagement
             // Handle drop operations
         }
 
-        private void MonitorTabMemory()
+        private void MonitorPaneMemory()
         {
             // Monitor memory usage
         }
@@ -349,6 +368,154 @@ namespace ExplorerPro.UI.PaneManagement
         private void UpdateReattachVisibility()
         {
             // Update UI visibility for reattach button
+        }
+
+        #endregion
+
+        #region Context Menu Event Handlers
+
+        /// <summary>
+        /// Handle new pane menu item click
+        /// </summary>
+        private void NewPaneMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                AddNewFileTreePane("New Pane", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error creating new pane: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Handle duplicate pane menu item click
+        /// </summary>
+        private void DuplicatePaneMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var selectedTab = TabControl.SelectedItem as TabItem;
+                if (selectedTab?.Content is ImprovedFileTreeListView fileTree)
+                {
+                    string currentPath = fileTree.CurrentPath ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                    string tabName = selectedTab.Header?.ToString() ?? "Duplicate";
+                    AddNewFileTreePane($"{tabName} - Copy", currentPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error duplicating pane: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Handle pin/unpin pane button click
+        /// </summary>
+        private void PinPaneButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var selectedTab = TabControl.SelectedItem as TabItem;
+                if (selectedTab?.Content is ImprovedFileTreeListView fileTree)
+                {
+                    string currentPath = fileTree.CurrentPath ?? "";
+                    if (!string.IsNullOrEmpty(currentPath))
+                    {
+                        PinItemRequested?.Invoke(this, currentPath);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error pinning pane: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Handle close pane menu item click
+        /// </summary>
+        private void ClosePaneMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var selectedTab = TabControl.SelectedItem as TabItem;
+                if (selectedTab != null && TabControl.Items.Count > 1)
+                {
+                    TabControl.Items.Remove(selectedTab);
+                    
+                    // Dispose the file tree if it's disposable
+                    if (selectedTab.Content is IDisposable disposable)
+                    {
+                        disposable.Dispose();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error closing pane: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Handle refresh pane menu item click
+        /// </summary>
+        private void RefreshPane_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                RefreshCurrentPane();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error refreshing pane: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Handle refresh all panes menu item click
+        /// </summary>
+        private void RefreshAllPanes_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                foreach (TabItem tab in TabControl.Items)
+                {
+                    if (tab.Content is ImprovedFileTreeListView fileTree)
+                    {
+                        string currentPath = fileTree.CurrentPath ?? "";
+                        if (!string.IsNullOrEmpty(currentPath))
+                        {
+                            fileTree.RefreshDirectory(currentPath);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error refreshing all panes: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Handle detach pane menu item click
+        /// </summary>
+        private void DetachPaneMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var selectedTab = TabControl.SelectedItem as TabItem;
+                if (selectedTab != null)
+                {
+                    // TODO: Implement pane detachment functionality
+                    Console.WriteLine("Detach pane functionality not yet implemented");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error detaching pane: {ex.Message}");
+            }
         }
 
         #endregion
