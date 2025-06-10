@@ -20,49 +20,174 @@ using ExplorerPro.Core;
 namespace ExplorerPro.UI.MainWindow
 {
     /// <summary>
-    /// Interaction logic for MainWindowContainer.xaml
-    /// Container that hosts dockable panels and a tab manager.
-    /// Multiple instances can be created as tabs within MainWindow.
+    /// Container component that hosts dockable panels and file management functionality within MainWindow tabs.
+    /// 
+    /// This class represents a single tab's content area within the MainWindow, providing:
+    /// - Resizable left and right sidebars with dockable panels
+    /// - Split-view file browser functionality
+    /// - Panel management (Pinned items, Bookmarks, Todo, Procore)
+    /// - Drag-and-drop operations for panels and files
+    /// - Theme-aware UI with modern styling
+    /// 
+    /// Architecture:
+    /// - Each MainWindow tab contains one MainWindowContainer instance
+    /// - Supports both single and dual-pane file navigation
+    /// - Implements responsive panel layout with collapsible sidebars
+    /// - Provides centralized panel state management
+    /// 
+    /// Panel Management:
+    /// - Left sidebar: Pinned items and Bookmarks panels
+    /// - Right sidebar: Todo and Procore links panels
+    /// - Dynamic layout adjustment based on panel visibility
+    /// - Proportional sizing with user-customizable ratios
+    /// - Smooth animations for show/hide operations
+    /// 
+    /// Performance Features:
+    /// - Efficient panel creation and disposal
+    /// - Memory-conscious event handling
+    /// - Optimized rendering for large directory structures
+    /// - Background operations for non-blocking UI updates
     /// </summary>
     public partial class MainWindowContainer : UserControl
     {
-        #region Fields
+        #region Core Dependencies and State Management
 
-        // Track all instances
+        /// <summary>
+        /// Static collection tracking all active MainWindowContainer instances.
+        /// Used for coordinated operations across multiple containers and cleanup on application shutdown.
+        /// </summary>
         private static List<MainWindowContainer> _allContainers = new List<MainWindowContainer>();
 
-        // Parent window reference
+        /// <summary>
+        /// Reference to the parent MainWindow that hosts this container instance.
+        /// Provides access to global operations and shared services.
+        /// </summary>
         private readonly MainWindow _parentWindow;
 
-        // Core managers
+        /// <summary>
+        /// Settings manager for persisting panel layout, visibility, and user preferences.
+        /// Handles container-specific settings like panel ratios and sidebar states.
+        /// </summary>
         private readonly SettingsManager _settingsManager;
 
-        // Tab management
+        #endregion
+
+        #region Pane Management
+
+        /// <summary>
+        /// Primary pane manager for the main content area (left side in split view).
+        /// Handles file navigation, tree views, and primary file operations.
+        /// </summary>
         private PaneManager? _paneManager;
-        private PaneManager? _rightPaneManager; // For split view
+
+        /// <summary>
+        /// Secondary pane manager used when split view is active (right side).
+        /// Allows parallel navigation and comparison of different directories.
+        /// </summary>
+        private PaneManager? _rightPaneManager;
+
+        /// <summary>
+        /// Currently active pane manager that receives input focus and commands.
+        /// Switches between _paneManager and _rightPaneManager based on user selection.
+        /// </summary>
         private PaneManager? _activePaneManager;
-        
-        // Panel references
+
+        #endregion
+
+        #region Panel References
+
+        /// <summary>
+        /// Panel for managing pinned/favorite file and folder shortcuts.
+        /// Provides quick access to frequently used locations.
+        /// </summary>
         private PinnedPanel? _pinnedPanel;
+
+        /// <summary>
+        /// Panel for managing bookmarked locations and saved searches.
+        /// Offers organized storage of important file system locations.
+        /// </summary>
         private BookmarksPanel? _bookmarksPanel;
+
+        /// <summary>
+        /// Panel for task management and notes related to file operations.
+        /// Helps users track work items and reminders within the file explorer context.
+        /// </summary>
         private ToDoPanel? _toDoPanel;
+
+        /// <summary>
+        /// Panel for Procore-specific links and integrations.
+        /// Provides specialized functionality for construction project management workflows.
+        /// </summary>
         private ProcoreLinksPanel? _procorePanel;
 
-        // Panel state tracking
+        #endregion
+
+        #region Panel State and Animation Management
+
+        /// <summary>
+        /// Flag indicating whether split view mode is currently active.
+        /// When true, both left and right pane managers are visible and functional.
+        /// </summary>
         private bool _splitViewActive;
+
+        /// <summary>
+        /// Dictionary storing custom width preferences for each panel type.
+        /// Allows users to resize panels and persist their preferred layout.
+        /// Key: Panel name, Value: Width in pixels
+        /// </summary>
         private Dictionary<string, double> _panelWidths = new Dictionary<string, double>();
+
+        /// <summary>
+        /// Set tracking which panels are currently displayed in console/debug mode.
+        /// Used for specialized panel states during development and troubleshooting.
+        /// </summary>
         private HashSet<string> _panelsInConsole = new HashSet<string>();
+
+        /// <summary>
+        /// Timer for managing smooth panel show/hide animations.
+        /// Provides visual feedback during panel state transitions.
+        /// </summary>
         private DispatcherTimer? _consoleAnimationTimer;
+
+        /// <summary>
+        /// Flag indicating whether a console animation is currently in progress.
+        /// Prevents concurrent animations that could cause visual conflicts.
+        /// </summary>
         private bool _consoleAnimationActive;
         
-        // Constants for optimal user experience
-        private const double DEFAULT_SIDEBAR_WIDTH = 250;    // Comfortable default width
-        private const double MIN_SIDEBAR_WIDTH = 200;        // Minimum usable width  
-        private const double COLLAPSED_PANEL_WIDTH = 3;      // Visual separator when collapsed
+        #endregion
+
+        #region Layout Constants
+
+        /// <summary>
+        /// Default width for sidebars when first displayed.
+        /// Provides comfortable viewing and interaction space for panel content.
+        /// </summary>
+        private const double DEFAULT_SIDEBAR_WIDTH = 250;
+
+        /// <summary>
+        /// Minimum allowable width for sidebars to maintain usability.
+        /// Prevents users from resizing panels to unusable dimensions.
+        /// </summary>
+        private const double MIN_SIDEBAR_WIDTH = 200;
+
+        /// <summary>
+        /// Width of collapsed panels to maintain visual separation.
+        /// Provides subtle visual indication of panel presence when collapsed.
+        /// </summary>
+        private const double COLLAPSED_PANEL_WIDTH = 3;
         
-        // Panel proportional sizing constants
-        private const double DEFAULT_PANEL_RATIO = 0.6;      // Default panel ratio within sidebar
-        private const double MIN_PANEL_HEIGHT = 120;         // Minimum panel height for usability
+        /// <summary>
+        /// Default proportional size ratio for panels within a sidebar.
+        /// When multiple panels are visible, this determines relative sizing.
+        /// </summary>
+        private const double DEFAULT_PANEL_RATIO = 0.6;
+
+        /// <summary>
+        /// Minimum height for individual panels to ensure usability.
+        /// Prevents panels from becoming too small to interact with effectively.
+        /// </summary>
+        private const double MIN_PANEL_HEIGHT = 120;
 
         #endregion
 

@@ -45,8 +45,8 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 │   │   ├── MainWindow.xaml.cs               # Main window logic and event handlers
 │   │   ├── MainWindowContainer.xaml          # Container layout for main window
 │   │   ├── MainWindowContainer.xaml.cs      # Container logic and management
-│   │   ├── MainWindowTabs.xaml              # Tab management interface
-│   │   └── MainWindowTabs.xaml.cs           # Tab functionality and navigation
+│   │   ├── MainWindowTabs.xaml              # Pane management interface
+│   │   └── MainWindowTabs.xaml.cs           # Pane functionality and navigation
 │   │
 │   ├── FileTree/                            # File tree view components
 │   │   ├── ImprovedFileTreeListView.xaml    # Enhanced file tree list view XAML
@@ -106,7 +106,7 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 │   │   ├── Toolbar.xaml                     # Toolbar layout definition
 │   │   └── Toolbar.xaml.cs                 # Toolbar logic and event handlers
 │   │
-│   ├── TabManagement/                       # Tab system components
+│   ├── PaneManagement/                      # Pane system components
 │   │
 │   ├── Panels/                              # Various UI panels
 │   │   ├── ToDoPanel/                       # To-do panel components
@@ -210,7 +210,7 @@ ExplorerPro/                                    # Enhanced File Explorer WPF App
 
 **ExplorerPro** is an enhanced file explorer application built with:
 - **.NET 9.0** and **WPF** for the user interface
-- **Modern tabbed interface** for better file management
+- **Modern paned interface** for better file management
 - **Advanced features** including file metadata, pinned items, and recurring tasks
 - **PDF and image preview** capabilities
 - **Theming support** with light and dark modes

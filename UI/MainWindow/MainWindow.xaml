@@ -15,27 +15,52 @@
         Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
 
     <Window.Resources>
-        <!-- Converters -->
+        <!-- 
+        =============================================================================
+        VALUE CONVERTERS
+        =============================================================================
+        Converters for binding UI element properties to data values
+        -->
+        
+        <!-- Converts numeric count to Visibility (useful for hiding elements when count is 0) -->
         <local:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
+        
+        <!-- Converts numeric count to boolean enabled state (useful for disabling buttons when count is 0) -->
         <local:CountToEnableConverter x:Key="CountToEnableConverter"/>
         
-        <!-- Modern Gradients and Brushes for Tabs -->
+        <!-- 
+        =============================================================================
+        MODERN TAB STYLING RESOURCES
+        =============================================================================
+        Gradient brushes and visual effects for Chrome-style tab appearance
+        -->
+        
+        <!-- Active tab gradient: Clean white to light gray for selected tabs -->
         <LinearGradientBrush x:Key="TabActiveGradient" StartPoint="0,0" EndPoint="0,1">
             <GradientStop Color="#FFFFFF" Offset="0"/>
             <GradientStop Color="#F8F9FA" Offset="1"/>
         </LinearGradientBrush>
         
+        <!-- Hover tab gradient: Subtle blue tint for mouse-over state -->
         <LinearGradientBrush x:Key="TabHoverGradient" StartPoint="0,0" EndPoint="0,1">
             <GradientStop Color="#F0F7FF" Offset="0"/>
             <GradientStop Color="#E3F2FD" Offset="1"/>
         </LinearGradientBrush>
         
+        <!-- Inactive tab gradient: Neutral gray for unselected tabs -->
         <LinearGradientBrush x:Key="TabInactiveGradient" StartPoint="0,0" EndPoint="0,1">
             <GradientStop Color="#FAFAFA" Offset="0"/>
             <GradientStop Color="#F0F0F0" Offset="1"/>
         </LinearGradientBrush>
 
-        <!-- Enhanced Animation Storyboards -->
+        <!-- 
+        =============================================================================
+        TAB ANIMATION STORYBOARDS
+        =============================================================================
+        Smooth animations for tab interactions and visual feedback
+        -->
+        
+        <!-- Tab hover animation: Subtle scale effect on mouse enter -->
         <Storyboard x:Key="TabHoverStoryboard">
             <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" 
                            To="1.08" Duration="0:0:0.2">
@@ -45,6 +70,7 @@
             </DoubleAnimation>
         </Storyboard>
         
+        <!-- Tab hover exit animation: Return to normal scale on mouse leave -->
         <Storyboard x:Key="TabHoverExitStoryboard">
             <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" 
                            To="1.0" Duration="0:0:0.2">

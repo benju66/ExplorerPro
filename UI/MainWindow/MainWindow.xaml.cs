@@ -33,9 +33,34 @@ using System.Collections.Concurrent;
 namespace ExplorerPro.UI.MainWindow
 {
     /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// Main application window that contains the toolbar and tab widget.
-    /// Manages the overall application layout and windows.
+    /// Main application window that serves as the primary user interface for the ExplorerPro file manager.
+    /// 
+    /// This class implements a modern, tabbed file explorer interface with support for:
+    /// - Multi-tab navigation with individual file tree views
+    /// - Dockable side panels (Pinned items, Bookmarks, Todo, Procore)
+    /// - Split-view functionality for comparing directories
+    /// - Drag-and-drop file operations
+    /// - Keyboard shortcuts and command routing
+    /// - Theme management and customization
+    /// - Window state persistence and restoration
+    /// 
+    /// Architecture:
+    /// - Follows MVVM pattern with command binding
+    /// - Implements IDisposable for proper resource cleanup
+    /// - Uses dependency injection for services
+    /// - Supports window detachment and multi-window scenarios
+    /// 
+    /// Performance Features:
+    /// - Shared logger factory to prevent memory leaks
+    /// - Event handler cleanup tracking
+    /// - Navigation history with memory management
+    /// - Tab hibernation for resource conservation
+    /// 
+    /// Thread Safety:
+    /// - UI thread safety enforced with ExecuteOnUIThread
+    /// - Thread-safe navigation history management
+    /// - Concurrent collection usage for window tracking
+    /// 
     /// ENHANCED FOR FIX 4: Event Handler Memory Leaks - Implements IDisposable
     /// </summary>
     public partial class MainWindow : Window, IDisposable
@@ -69,18 +94,21 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         
         /// <summary>
-        /// Shared logger factory for all MainWindow instances to prevent memory leaks
+        /// Shared logger factory for all MainWindow instances to prevent memory leaks.
+        /// This static instance is created once and reused across all window instances.
         /// </summary>
         private static readonly ILoggerFactory _sharedLoggerFactory = CreateSharedLoggerFactory();
         
         /// <summary>
-        /// Shared static logger for class-level operations
+        /// Shared static logger for class-level operations and diagnostics.
         /// </summary>
         private static readonly ILogger<MainWindow> _staticLogger = _sharedLoggerFactory.CreateLogger<MainWindow>();
 
         /// <summary>
-        /// Creates a single shared logger factory for all MainWindow instances
+        /// Creates a single shared logger factory for all MainWindow instances.
+        /// Configured with console output and appropriate logging levels.
         /// </summary>
+        /// <returns>Configured ILoggerFactory instance</returns>
         private static ILoggerFactory CreateSharedLoggerFactory()
         {
             return LoggerFactory.Create(builder =>
@@ -91,21 +119,25 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Public property to access the shared logger factory for other components
+        /// Public property to access the shared logger factory for other components.
+        /// Enables dependency injection scenarios and external service access.
         /// </summary>
         public static ILoggerFactory SharedLoggerFactory => _sharedLoggerFactory;
 
         /// <summary>
-        /// Creates an instance-specific logger with window ID context
+        /// Creates an instance-specific logger with window ID context.
+        /// Each window instance gets its own logger for proper context isolation.
         /// </summary>
+        /// <param name="windowId">Unique identifier for this window instance</param>
+        /// <returns>Logger instance configured for this window</returns>
         private ILogger<MainWindow> CreateInstanceLogger(string windowId)
         {
             return _sharedLoggerFactory.CreateLogger<MainWindow>();
         }
 
         /// <summary>
-        /// Application-level cleanup method for the shared logger factory
-        /// Call this from App.xaml.cs OnExit method
+        /// Application-level cleanup method for the shared logger factory.
+        /// IMPORTANT: Call this from App.xaml.cs OnExit method to prevent resource leaks.
         /// </summary>
         public static void DisposeSharedLogger()
         {
@@ -122,17 +154,19 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Validation method to verify shared logger factory usage
-        /// Returns true if this instance is using the shared logger factory
+        /// Validation method to verify shared logger factory usage.
+        /// Useful for unit testing and monitoring proper initialization.
         /// </summary>
+        /// <returns>True if this instance is using the shared logger factory</returns>
         public bool IsUsingSharedLogger()
         {
             return _instanceLogger != null && _sharedLoggerFactory != null;
         }
 
         /// <summary>
-        /// Gets statistics about the shared logger factory for validation
+        /// Gets statistics about the shared logger factory for validation and monitoring.
         /// </summary>
+        /// <returns>Formatted string with logger factory statistics</returns>
         public static string GetSharedLoggerStats()
         {
             try
@@ -146,10 +180,21 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
+        #endregion
+
+        #region Event Handler Memory Management - FIX 4: Event Handler Memory Leaks
+
         /// <summary>
         /// IMPLEMENTATION OF FIX 4: Event Handler Memory Leaks
-        /// Safely subscribes to an event and tracks it for cleanup to prevent memory leaks
+        /// Safely subscribes to an event and tracks it for cleanup to prevent memory leaks.
+        /// 
+        /// This method ensures that all event subscriptions are properly tracked and cleaned up
+        /// during disposal, preventing memory leaks in long-running applications.
         /// </summary>
+        /// <typeparam name="TEventArgs">Type of event arguments</typeparam>
+        /// <param name="subscribe">Action to subscribe to the event</param>
+        /// <param name="unsubscribe">Action to unsubscribe from the event</param>
+        /// <param name="handler">Event handler to manage</param>
         private void SubscribeToEvent<TEventArgs>(
             Action<EventHandler<TEventArgs>> subscribe,
             Action<EventHandler<TEventArgs>> unsubscribe,
@@ -183,8 +228,12 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Safely subscribes to routine events and tracks them for cleanup
+        /// Safely subscribes to routed events and tracks them for cleanup.
+        /// Specialized version for WPF routed events.
         /// </summary>
+        /// <param name="subscribe">Action to subscribe to the routed event</param>
+        /// <param name="unsubscribe">Action to unsubscribe from the routed event</param>
+        /// <param name="handler">Routed event handler to manage</param>
         private void SubscribeToRoutedEvent(
             Action<RoutedEventHandler> subscribe,
             Action<RoutedEventHandler> unsubscribe,
@@ -219,56 +268,180 @@ namespace ExplorerPro.UI.MainWindow
 
         #endregion
 
-        #region Fields
+        #region Core Dependencies and Managers
 
-        // Window lifecycle management - now handled by WindowLifecycleManager
-        // private static List<MainWindow> _allMainWindows = new List<MainWindow>(); // Replaced by WindowLifecycleManager
-
-        // Core managers
+        /// <summary>
+        /// Settings service for managing user preferences and application configuration.
+        /// Handles window layout, theme preferences, panel visibility, and keyboard shortcuts.
+        /// Injected via constructor for testability, or created as singleton for standalone use.
+        /// </summary>
         private readonly ISettingsService _settingsService;
+
+        /// <summary>
+        /// Metadata manager for handling file properties, tags, and extended attributes.
+        /// Used by the Properties dialog and metadata display features.
+        /// </summary>
         private MetadataManager _metadataManager;
 
-        // FIX 3: Navigation History Unbounded Growth - Replace simple fields with bounded implementation
+        #endregion
+
+        #region Navigation History Management - FIX 3: Unbounded Growth Prevention
+
+        /// <summary>
+        /// Maximum number of navigation history entries to maintain.
+        /// Prevents unbounded memory growth during extended use.
+        /// </summary>
         private const int MaxHistorySize = 1000;
-        private const int HistoryTrimSize = 100; // Number to remove when limit reached
+
+        /// <summary>
+        /// Number of entries to remove when MaxHistorySize is exceeded.
+        /// Removes older entries to maintain performance.
+        /// </summary>
+        private const int HistoryTrimSize = 100;
         
+        /// <summary>
+        /// Doubly-linked list storing navigation history entries.
+        /// Provides efficient insertion/removal for history trimming.
+        /// </summary>
         private readonly LinkedList<NavigationEntry> _navigationHistory = new LinkedList<NavigationEntry>();
+
+        /// <summary>
+        /// Current position in the navigation history for back/forward operations.
+        /// Null when no navigation has occurred yet.
+        /// </summary>
         private LinkedListNode<NavigationEntry>? _currentHistoryNode;
+
+        /// <summary>
+        /// Thread synchronization lock for navigation history operations.
+        /// Ensures thread-safe access when multiple threads update navigation state.
+        /// </summary>
         private readonly object _historyLock = new object();
 
-        // FIX 5: Detached Windows List Management - Replace simple list with managed collection
+        #endregion
+
+        #region Window Management - FIX 5: Detached Windows List Management
+
+        /// <summary>
+        /// Thread-safe collection of detached windows using weak references.
+        /// Prevents memory leaks by allowing garbage collection of closed windows.
+        /// Key: Unique window identifier, Value: Weak reference to MainWindow instance.
+        /// </summary>
         private readonly ConcurrentDictionary<Guid, WeakReference<MainWindow>> _detachedWindows 
             = new ConcurrentDictionary<Guid, WeakReference<MainWindow>>();
 
-        // Robust initialization system fields
+        #endregion
+
+        #region Initialization and Lifecycle Management
+
+        /// <summary>
+        /// Logger instance for this specific MainWindow instance.
+        /// Provides contextual logging with window-specific information.
+        /// </summary>
         private readonly ILogger<MainWindow> _logger;
+
+        /// <summary>
+        /// Handles the complex initialization sequence for MainWindow components.
+        /// Manages async initialization, error recovery, and state transitions.
+        /// </summary>
         private readonly MainWindowInitializer _initializer;
+
+        /// <summary>
+        /// Centralized exception handling for this window instance.
+        /// Provides consistent error reporting and recovery mechanisms.
+        /// </summary>
         private readonly ExceptionHandler _exceptionHandler;
+
+        /// <summary>
+        /// Thread synchronization lock for initialization state management.
+        /// Prevents race conditions during window startup and shutdown.
+        /// </summary>
         private readonly object _stateLock = new object();
+
+        /// <summary>
+        /// Context object containing initialization parameters and state.
+        /// Used for complex initialization scenarios and error recovery.
+        /// </summary>
         private WindowInitializationContext _initContext;
         
+        /// <summary>
+        /// Current initialization state of the window.
+        /// Tracks progression through: Created -> Initializing -> Ready -> Disposed
+        /// </summary>
         private InitializationState _initState = InitializationState.Created;
+
+        /// <summary>
+        /// Reference to the main TabControl hosting MainWindowContainer instances.
+        /// Cached for safe access during initialization and disposal.
+        /// </summary>
         private TabControl _mainTabsControl;
+
+        /// <summary>
+        /// Flag indicating whether this window instance has been disposed.
+        /// Used for safe resource cleanup and preventing use-after-disposal.
+        /// </summary>
         private bool _isDisposed;
 
-        // FIX 4: Event Handler Memory Leaks - Event management infrastructure
+        #endregion
+
+        #region Event Handler Memory Management - FIX 4
+
+        /// <summary>
+        /// Collection of cleanup actions for registered event handlers.
+        /// Each action removes a specific event subscription to prevent memory leaks.
+        /// </summary>
         private readonly List<Action> _eventCleanupActions = new List<Action>();
+
+        /// <summary>
+        /// Thread synchronization lock for event cleanup operations.
+        /// Ensures thread-safe access to the cleanup actions collection.
+        /// </summary>
         private readonly object _eventCleanupLock = new object();
 
-        // Value converter for tab count
-        // private CountToVisibilityConverter _countToVisibilityConverter;
-        // private CountToEnableConverter _countToEnableConverter;
+        #endregion
 
-        // Window state tracking for safe UI access
+        #region UI State Management
+
+        /// <summary>
+        /// Enumeration defining the various states of the UI window lifecycle.
+        /// Used to ensure safe access to UI elements during state transitions.
+        /// </summary>
         private enum UIWindowState
         {
+            /// <summary>
+            /// Window is in the process of being created and initialized.
+            /// UI elements may not be fully available yet.
+            /// </summary>
             Initializing,
+
+            /// <summary>
+            /// Window is fully initialized and ready for user interaction.
+            /// All UI elements are available and functional.
+            /// </summary>
             Ready,
+
+            /// <summary>
+            /// Window is in the process of closing.
+            /// UI operations should be minimized and may be ignored.
+            /// </summary>
             Closing,
+
+            /// <summary>
+            /// Window has been disposed and is no longer valid.
+            /// All UI operations should be prevented.
+            /// </summary>
             Disposed
         }
 
+        /// <summary>
+        /// Current state of the UI window. Marked as volatile for thread-safe reads.
+        /// Used to prevent UI operations during invalid states.
+        /// </summary>
         private volatile UIWindowState _windowState = UIWindowState.Initializing;
+
+        /// <summary>
+        /// Instance-specific logger created from the shared logger factory.
+        /// Provides logging with this window's specific context.
+        /// </summary>
         private ILogger<MainWindow> _instanceLogger;
 
         /// <summary>
@@ -379,9 +552,21 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
+        #region Public Tab Management Interface
+
         /// <summary>
-        /// Safely adds a tab with the given header and content
+        /// Safely adds a new tab to the main tab control with the specified header and content.
+        /// 
+        /// This method provides thread-safe tab creation with proper validation and error handling.
+        /// It ensures the UI is in a valid state before attempting to add the tab and automatically
+        /// selects the new tab once added.
         /// </summary>
+        /// <param name="header">Display text for the tab header</param>
+        /// <param name="content">Content object to display in the tab (typically a MainWindowContainer)</param>
+        /// <remarks>
+        /// This method is thread-safe and can be called from any thread. The actual UI operations
+        /// are marshaled to the UI thread automatically.
+        /// </remarks>
         public void AddTab(string header, object content)
         {
             ExecuteOnUIThread(() =>
@@ -403,8 +588,17 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Safely removes a tab at the specified index
+        /// Safely removes a tab at the specified index with automatic tab selection management.
+        /// 
+        /// This method provides thread-safe tab removal with proper validation and error handling.
+        /// After removal, it automatically selects an appropriate remaining tab to maintain
+        /// consistent user experience.
         /// </summary>
+        /// <param name="index">Zero-based index of the tab to remove</param>
+        /// <remarks>
+        /// If the index is invalid, the operation is logged but no exception is thrown.
+        /// This method is thread-safe and can be called from any thread.
+        /// </remarks>
         public void RemoveTab(int index)
         {
             ExecuteOnUIThread(() =>
@@ -433,8 +627,12 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Gets the current tab count safely
+        /// Gets the current number of tabs in a thread-safe manner.
+        /// 
+        /// This method safely accesses the tab control and returns the count of tabs,
+        /// handling cases where the UI is not yet initialized or has been disposed.
         /// </summary>
+        /// <returns>The number of tabs currently open, or 0 if tabs are not accessible</returns>
         public int GetTabCount()
         {
             var tabs = SafeMainTabs;
@@ -442,8 +640,12 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Checks if there are any tabs
+        /// Determines whether any tabs are currently open.
+        /// 
+        /// This is a convenience method that provides a boolean check for tab presence,
+        /// useful for enabling/disabling UI controls based on tab availability.
         /// </summary>
+        /// <returns>True if one or more tabs are open; otherwise, false</returns>
         public bool HasTabs()
         {
             return GetTabCount() > 0;
@@ -4453,6 +4655,8 @@ namespace ExplorerPro.UI.MainWindow
                 AddNewMainWindowTab(rootPath);
             }
         }
+
+        #endregion
     }
 
     #region Window State and Actions for Transactions

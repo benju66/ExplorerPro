@@ -16,34 +16,123 @@ using ExplorerPro.UI.Converters;
 namespace ExplorerPro.UI.MainWindow
 {
     /// <summary>
-    /// Hibernation state for tabs
+    /// Data structure representing the hibernated state of a tab to optimize memory usage.
+    /// 
+    /// When tabs are inactive for extended periods, their content can be hibernated
+    /// to reduce memory consumption while preserving user state for quick restoration.
     /// </summary>
     public class TabHibernationState
     {
+        /// <summary>
+        /// Reference to the original MainWindowContainer that was hibernated.
+        /// Set to null during hibernation to allow garbage collection.
+        /// </summary>
         public MainWindowContainer? Container { get; set; }
+
+        /// <summary>
+        /// Display title of the hibernated tab for user identification.
+        /// </summary>
         public string Title { get; set; } = "";
+
+        /// <summary>
+        /// Last active file system path before hibernation.
+        /// Used to restore navigation state when tab is reactivated.
+        /// </summary>
         public string LastPath { get; set; } = "";
+
+        /// <summary>
+        /// Timestamp when the tab was last actively used.
+        /// Used to determine hibernation eligibility and cleanup priorities.
+        /// </summary>
         public DateTime LastAccessTime { get; set; }
+
+        /// <summary>
+        /// Estimated memory usage of the tab before hibernation.
+        /// Used for memory optimization metrics and hibernation decisions.
+        /// </summary>
         public long MemoryUsage { get; set; }
     }
 
     /// <summary>
-    /// Interaction logic for MainWindowTabs.xaml
-    /// Tab widget that contains MainWindowContainer instances.
-    /// Handles tab management, detachment, hibernation, and panel toggling.
+    /// Advanced tab management control for MainWindow container instances with modern features.
+    /// 
+    /// This control provides a sophisticated tabbed interface that goes beyond basic tab functionality:
+    /// 
+    /// Core Features:
+    /// - Dynamic tab creation and management with MainWindowContainer content
+    /// - Drag-and-drop tab reordering within the same window
+    /// - Cross-window tab movement and detachment capabilities
+    /// - Tab hibernation for memory optimization during extended use
+    /// - Context menu integration for tab operations
+    /// - Visual feedback and animations for user interactions
+    /// 
+    /// Memory Management:
+    /// - Automatic hibernation of inactive tabs after configurable timeout
+    /// - Placeholder content during hibernation to maintain UI consistency
+    /// - Lazy restoration of hibernated tabs when accessed
+    /// - Memory usage tracking and optimization metrics
+    /// 
+    /// User Experience:
+    /// - Smooth animations for tab state transitions
+    /// - Intuitive drag-and-drop for tab manipulation
+    /// - Keyboard navigation support
+    /// - Accessibility features for screen readers
+    /// - Modern visual styling with theme support
+    /// 
+    /// Architecture:
+    /// - Implements IDisposable for proper resource cleanup
+    /// - Event-driven communication with parent MainWindow
+    /// - Pluggable hibernation strategies
+    /// - Thread-safe operations for UI updates
     /// </summary>
     public partial class MainWindowTabs : UserControl, IDisposable
     {
-        #region Fields
+        #region Window and Drag Management
 
+        /// <summary>
+        /// Collection of windows that have been detached from this tab control.
+        /// Maintained for cleanup and coordination purposes.
+        /// </summary>
         private readonly List<Window> _detachedWindows = new List<Window>();
+
+        /// <summary>
+        /// Starting point coordinates for drag operations.
+        /// Used to calculate drag distance and determine when to initiate tab dragging.
+        /// </summary>
         private Point _dragStartPoint;
+
+        /// <summary>
+        /// Flag indicating whether a drag operation is currently in progress.
+        /// Prevents multiple concurrent drag operations and manages drag state.
+        /// </summary>
         private bool _isDragging;
+
+        /// <summary>
+        /// Reference to the tab item currently being dragged.
+        /// Null when no drag operation is active.
+        /// </summary>
         private TabItem? _draggedItem;
-        
-        // Tab hibernation fields
+
+        #endregion
+
+        #region Tab Hibernation Management
+
+        /// <summary>
+        /// Dictionary mapping hibernated tabs to their saved state information.
+        /// Key: TabItem reference, Value: Hibernation state data
+        /// </summary>
         private readonly Dictionary<TabItem, TabHibernationState> _hibernatedTabs = new();
+
+        /// <summary>
+        /// Timer that periodically checks for tabs eligible for hibernation.
+        /// Runs at regular intervals to evaluate tab inactivity.
+        /// </summary>
         private DispatcherTimer? _hibernationTimer;
+
+        /// <summary>
+        /// Time threshold for tab hibernation eligibility.
+        /// Tabs inactive for longer than this duration become candidates for hibernation.
+        /// </summary>
         private readonly TimeSpan _hibernationTimeout = TimeSpan.FromMinutes(10);
         
         #endregion

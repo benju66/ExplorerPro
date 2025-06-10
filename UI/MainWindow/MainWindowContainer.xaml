@@ -14,14 +14,21 @@
              d:DesignHeight="600" d:DesignWidth="800">
     
     <UserControl.Resources>
-        <!-- Dock area styles -->
+        <!-- 
+        =============================================================================
+        CONTAINER STYLING RESOURCES
+        =============================================================================
+        Styles and resources for the dockable panel container layout
+        -->
+        
+        <!-- Base style for dock areas with transparent background -->
         <Style x:Key="DockAreaStyle" TargetType="DockPanel">
             <Setter Property="Background" Value="Transparent"/>
         </Style>
         
-        <!-- Modern splitter styling is now inline within each GridSplitter -->
+        <!-- Modern splitter styling is defined inline within each GridSplitter for context-specific appearance -->
         
-        <!-- Drop indicator style -->
+        <!-- Visual feedback style for drag-and-drop target areas -->
         <Style x:Key="DropIndicatorStyle" TargetType="Border">
             <Setter Property="Background" Value="#D00083DB"/>
             <Setter Property="BorderBrush" Value="White"/>
@@ -32,18 +39,24 @@
     </UserControl.Resources>
     
     <Grid x:Name="MainGrid">
-        <!-- Main window with resizable dockable layout -->
+        <!-- 
+        =============================================================================
+        MAIN CONTAINER LAYOUT
+        =============================================================================
+        Three-column layout: Left Sidebar | Main Content | Right Sidebar
+        Each section is resizable with splitters between them
+        -->
         <Grid x:Name="DockArea" AllowDrop="True" Background="Transparent">
             <Grid.ColumnDefinitions>
-                <!-- Left Column (resizable) -->
+                <!-- Left Column: Pinned items and Bookmarks panels (resizable, 250px default) -->
                 <ColumnDefinition x:Name="LeftColumn" Width="250" MinWidth="200"/>
-                <!-- Left Splitter -->
+                <!-- Left Splitter: Drag handle for resizing left sidebar -->
                 <ColumnDefinition Width="Auto"/>
-                <!-- Main Content (takes remaining space) -->
+                <!-- Main Content: Primary file browser area (takes remaining space, 300px minimum) -->
                 <ColumnDefinition Width="*" MinWidth="300"/>
-                <!-- Right Splitter -->
+                <!-- Right Splitter: Drag handle for resizing right sidebar -->
                 <ColumnDefinition Width="Auto"/>
-                <!-- Right Column (resizable) -->
+                <!-- Right Column: Todo and Procore panels (resizable, 250px default) -->
                 <ColumnDefinition x:Name="RightColumn" Width="250" MinWidth="200"/>
             </Grid.ColumnDefinitions>
             

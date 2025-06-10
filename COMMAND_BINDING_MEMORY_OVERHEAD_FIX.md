@@ -42,7 +42,7 @@ public static string GetPoolStatistics() // For monitoring
 - File Operations (New Folder/File, etc.)
 - Panel Toggles (Pinned, Bookmarks, ToDo, Procore)
 - Sidebar Controls (Left/Right sidebar toggles)
-- Tab Management (New, Close, Switch tabs)
+- Pane Management (New, Close, Switch panes)
 - View Controls (Fullscreen, Zoom)
 - Utility Functions (Help, Settings, Hidden files)
 
