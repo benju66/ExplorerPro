@@ -122,19 +122,27 @@
             </Grid>
         </Border>
         
-        <!-- Tree content - TreeView with its own ScrollViewer enabled -->
+        <!-- Tree content - TreeView with enhanced virtualization -->
         <TreeView Grid.Row="1" 
                   x:Name="fileTreeView" 
                   BorderThickness="0"
                   Background="{DynamicResource TreeViewBackground}"
-                  VirtualizingStackPanel.IsVirtualizing="True"
-                  VirtualizingStackPanel.VirtualizationMode="Standard"
-                  ScrollViewer.CanContentScroll="False"
+                  VirtualizingPanel.IsVirtualizing="True"
+                  VirtualizingPanel.VirtualizationMode="Recycling"
+                  VirtualizingPanel.ScrollUnit="Pixel"
+                  VirtualizingPanel.CacheLength="2"
+                  VirtualizingPanel.CacheLengthUnit="Page"
+                  ScrollViewer.CanContentScroll="True"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
                   ScrollViewer.VerticalScrollBarVisibility="Auto"
                   ScrollViewer.PanningMode="Both"
                   Tag="{Binding SelectionService.IsMultiSelectMode, Converter={StaticResource BoolToMultiSelectTagConverter}}"
                   ItemsSource="{Binding RootItems}">
+            <TreeView.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel />
+                </ItemsPanelTemplate>
+            </TreeView.ItemsPanel>
             
             <!-- Enhanced TreeView Resources with Smooth Animations -->
             <TreeView.Resources>

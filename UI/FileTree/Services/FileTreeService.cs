@@ -1,5 +1,6 @@
 // UI/FileTree/Services/FileTreeService.cs - Fixed Threading Issues
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -581,6 +582,161 @@ namespace ExplorerPro.UI.FileTree.Services
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Loads multiple directories in batch for improved performance
+        /// </summary>
+        public async Task<IEnumerable<FileTreeItem>> LoadDirectoryBatchAsync(
+            IEnumerable<string> directoryPaths,
+            bool showHiddenFiles = false,
+            CancellationToken cancellationToken = default)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(FileTreeService));
+
+            var batchOperation = new BatchFileOperation();
+            var results = new System.Collections.Concurrent.ConcurrentBag<FileTreeItem>();
+            
+            foreach (var path in directoryPaths)
+            {
+                batchOperation.AddOperation(new FileOperation
+                {
+                    Description = $"Loading {path}",
+                    ExecuteAsync = async (ct) =>
+                    {
+                        try
+                        {
+                            var items = await LoadDirectoryAsync(path, showHiddenFiles, 0).ConfigureAwait(false);
+                            foreach (var item in items)
+                            {
+                                results.Add(item);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to load directory {path}: {ex.Message}");
+                            // Continue with other directories
+                        }
+                    }
+                });
+            }
+            
+            var progress = new Progress<BatchOperationProgress>(p =>
+            {
+                System.Diagnostics.Debug.WriteLine($"[BATCH] Loaded {p.CompletedOperations}/{p.TotalOperations} directories");
+            });
+            
+            await batchOperation.ExecuteAsync(progress, cancellationToken);
+            batchOperation.Dispose();
+            
+            return results.OrderBy(item => item.IsDirectory ? 0 : 1).ThenBy(item => item.Name);
+        }
+
+        /// <summary>
+        /// Loads a large directory with paging support for improved performance
+        /// </summary>
+        public async Task<IEnumerable<FileTreeItem>> LoadLargeDirectoryAsync(
+            string directoryPath, 
+            bool showHiddenFiles = false, 
+            int pageSize = 500,
+            int? maxItems = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(FileTreeService));
+
+            if (string.IsNullOrEmpty(directoryPath) || !Directory.Exists(directoryPath))
+            {
+                OnErrorOccurred($"Invalid directory path: {directoryPath}");
+                return Enumerable.Empty<FileTreeItem>();
+            }
+
+            try
+            {
+                var items = new List<FileTreeItem>();
+                var (directories, files) = await Task.Run(() =>
+                {
+                    IEnumerable<string> dirs = Directory.GetDirectories(directoryPath).OrderBy(d => Path.GetFileName(d));
+                    IEnumerable<string> filesList = Directory.GetFiles(directoryPath).OrderBy(f => Path.GetFileName(f));
+                    
+                    if (maxItems.HasValue)
+                    {
+                        var totalItems = dirs.Count() + filesList.Count();
+                        if (totalItems > maxItems.Value)
+                        {
+                            dirs = dirs.Take(maxItems.Value / 2);
+                            filesList = filesList.Take(maxItems.Value - dirs.Count());
+                        }
+                    }
+                    
+                    return (dirs, filesList);
+                }, cancellationToken);
+
+                var allPaths = directories.Concat(files).ToList();
+                
+                // Process items in batches
+                for (int i = 0; i < allPaths.Count; i += pageSize)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        break;
+
+                    var batch = allPaths.Skip(i).Take(pageSize);
+                    var batchItems = await ProcessBatchAsync(batch, showHiddenFiles, cancellationToken);
+                    items.AddRange(batchItems);
+                    
+                    // Allow UI updates between batches
+                    await Task.Delay(1, cancellationToken);
+                }
+
+                return items;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                OnErrorOccurred($"Failed to load large directory: {ex.Message}");
+                return Enumerable.Empty<FileTreeItem>();
+            }
+        }
+
+        private async Task<IEnumerable<FileTreeItem>> ProcessBatchAsync(
+            IEnumerable<string> paths, 
+            bool showHiddenFiles, 
+            CancellationToken cancellationToken)
+        {
+            var items = new List<FileTreeItem>();
+            var metadataBatch = _metadataManager.GetBatchMetadata(paths);
+
+            foreach (var path in paths)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    break;
+
+                try
+                {
+                    if (!showHiddenFiles && IsHidden(path))
+                        continue;
+
+                    var item = await CreateFileTreeItemInternalAsync(path, 0, showHiddenFiles, cancellationToken);
+                    
+                    if (metadataBatch.TryGetValue(path, out var metadata))
+                    {
+                        await ApplyBatchMetadataStylingAsync(item, metadata);
+                    }
+                    
+                    items.Add(item);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ERROR] Error processing {path}: {ex.Message}");
+                    continue;
+                }
+            }
+
+            return items;
         }
 
         protected virtual void OnErrorOccurred(string error)

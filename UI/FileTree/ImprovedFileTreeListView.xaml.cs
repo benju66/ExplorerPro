@@ -507,6 +507,74 @@ namespace ExplorerPro.UI.FileTree
                 await _coordinator.SetRootDirectoryAsync(directory).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Sets root directory with performance optimization for large directories
+        /// </summary>
+        public async Task SetRootDirectoryOptimizedAsync(string directory, int maxItems = 10000)
+        {
+            var dependencies = CreateServiceDependencies();
+            if (dependencies?.FileTreeService == null) return;
+
+            try
+            {
+                // Use the new large directory loading method for better performance
+                var items = await dependencies.FileTreeService.LoadLargeDirectoryAsync(
+                    directory, 
+                    ShowHiddenFiles, 
+                    pageSize: 500, 
+                    maxItems: maxItems);
+
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    _rootItems.Clear();
+                    foreach (var item in items)
+                    {
+                        _rootItems.Add(item);
+                    }
+                    
+                    // Optimize performance based on item count
+                    OptimizePerformanceForTreeSize();
+                });
+
+                LocationChanged?.Invoke(this, directory);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to set root directory optimized: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Loads multiple directories in batch for improved performance
+        /// </summary>
+        public async Task LoadDirectoriesBatchAsync(IEnumerable<string> directories)
+        {
+            var dependencies = CreateServiceDependencies();
+            if (dependencies?.FileTreeService == null) return;
+
+            try
+            {
+                var items = await dependencies.FileTreeService.LoadDirectoryBatchAsync(
+                    directories, 
+                    ShowHiddenFiles);
+
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    _rootItems.Clear();
+                    foreach (var item in items)
+                    {
+                        _rootItems.Add(item);
+                    }
+                    
+                    OptimizePerformanceForTreeSize();
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to load directories batch: {ex.Message}");
+            }
+        }
+
         public void NavigateAndHighlight(string path)
         {
             if (string.IsNullOrEmpty(path)) return;

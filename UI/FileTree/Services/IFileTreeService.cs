@@ -87,6 +87,34 @@ namespace ExplorerPro.UI.FileTree.Services
         FileTreeItem FindItemByPathRecursive(FileTreeItem parent, string path);
 
         /// <summary>
+        /// Loads multiple directories in batch for improved performance
+        /// </summary>
+        /// <param name="directoryPaths">Collection of directory paths to load</param>
+        /// <param name="showHiddenFiles">Whether to include hidden files</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns>Collection of file tree items from all directories</returns>
+        Task<IEnumerable<FileTreeItem>> LoadDirectoryBatchAsync(
+            IEnumerable<string> directoryPaths,
+            bool showHiddenFiles = false,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Loads a large directory with paging support for improved performance
+        /// </summary>
+        /// <param name="directoryPath">Directory path to load</param>
+        /// <param name="showHiddenFiles">Whether to include hidden files</param>
+        /// <param name="pageSize">Number of items to process per batch</param>
+        /// <param name="maxItems">Maximum number of items to load (optional)</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns>Collection of file tree items</returns>
+        Task<IEnumerable<FileTreeItem>> LoadLargeDirectoryAsync(
+            string directoryPath, 
+            bool showHiddenFiles = false, 
+            int pageSize = 500,
+            int? maxItems = null,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Event raised when an error occurs during file operations
         /// </summary>
         event EventHandler<string> ErrorOccurred;
