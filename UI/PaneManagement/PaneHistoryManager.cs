@@ -6,10 +6,10 @@ using System.Linq;
 namespace ExplorerPro.UI.PaneManagement
 {
     /// <summary>
-    /// Manages navigation history for tabs in the PaneManager.
-    /// Tracks back/forward history for each tab and provides navigation methods.
+    /// Manages navigation history for panes in the PaneManager.
+    /// Tracks back/forward history for each pane and provides navigation methods.
     /// </summary>
-    public class TabHistoryManager
+    public class PaneHistoryManager
     {
         #region Fields
 

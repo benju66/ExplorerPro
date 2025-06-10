@@ -31,7 +31,7 @@ namespace ExplorerPro.UI.PaneManagement
         private PaneManager? _originalPaneManager;
         
         // Navigation history 
-        private TabHistoryManager _historyManager = null!;
+        private PaneHistoryManager _historyManager = null!;
         
         // Track detached windows
         private List<Window> _detachedWindows = new List<Window>();
@@ -74,8 +74,8 @@ namespace ExplorerPro.UI.PaneManagement
             {
                 InitializeComponent();
                 
-                // Initialize tab history manager
-                _historyManager = new TabHistoryManager();
+                // Initialize pane history manager
+                _historyManager = new PaneHistoryManager();
                 
                 // Setup event handling - safe navigation for XAML elements
                 if (TabControl != null)
@@ -103,7 +103,7 @@ namespace ExplorerPro.UI.PaneManagement
                 // Create history manager anyway to avoid null reference
                 if (_historyManager == null)
                 {
-                    _historyManager = new TabHistoryManager();
+                    _historyManager = new PaneHistoryManager();
                 }
             }
         }

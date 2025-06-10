@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ExplorerPro.UI.MainWindow"
         xmlns:toolbar="clr-namespace:ExplorerPro.UI.Toolbar"
-        xmlns:tabManagement="clr-namespace:ExplorerPro.UI.TabManagement"
+        xmlns:tabManagement="clr-namespace:ExplorerPro.UI.PaneManagement"
         mc:Ignorable="d"
         Title="Enhanced File Explorer"
         Height="800" 

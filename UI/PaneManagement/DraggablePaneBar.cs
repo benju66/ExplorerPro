@@ -1,4 +1,4 @@
-// UI/TabManagement/DraggableTabBar.cs
+// UI/PaneManagement/DraggablePaneBar.cs
 
 using System;
 using System.Windows;
@@ -8,13 +8,13 @@ using System.Windows.Input;
 using System.Windows.Media;
 using ExplorerPro.UI.PaneManagement;
 
-namespace ExplorerPro.UI.TabManagement
+namespace ExplorerPro.UI.PaneManagement
 {
     /// <summary>
-    /// A custom TabPanel implementation that allows for drag-and-drop functionality to detach tabs.
+    /// A custom TabPanel implementation that allows for drag-and-drop functionality to detach panes.
     /// Works in conjunction with PaneManager to enable pane detachment and reattachment.
     /// </summary>
-    public class DraggableTabBar : TabPanel
+    public class DraggablePaneBar : TabPanel
     {
         // Point where drag operation started
         private Point? dragStartPosition;
@@ -30,7 +30,7 @@ namespace ExplorerPro.UI.TabManagement
         /// </summary>
         public event EventHandler<PaneDetachEventArgs> PaneDetached;
         
-        public DraggableTabBar() : base()
+        public DraggablePaneBar() : base()
         {
             // Enable drop functionality
             AllowDrop = true;
