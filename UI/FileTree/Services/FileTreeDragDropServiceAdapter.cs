@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using ExplorerPro.Models;
 
 namespace ExplorerPro.UI.FileTree.Services
 {
@@ -104,6 +105,30 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             ThrowIfDisposed();
             _enhancedService.CancelOutlookExtraction();
+        }
+
+        public DragDropValidationResult ValidateDrop(IDataObject data, string targetPath, DragDropKeyStates keyStates)
+        {
+            ThrowIfDisposed();
+            return _enhancedService.ValidateDrop(data, targetPath, keyStates);
+        }
+
+        public bool ValidateDropPath(string sourcePath, string targetPath)
+        {
+            ThrowIfDisposed();
+            return _enhancedService.ValidateDropPath(sourcePath, targetPath);
+        }
+
+        public DragDropEffects DetermineDropEffect(DragDropKeyStates keyStates, string targetPath)
+        {
+            ThrowIfDisposed();
+            return _enhancedService.DetermineDropEffect(keyStates, targetPath);
+        }
+
+        public List<string> ExtractPaths(IDataObject data)
+        {
+            ThrowIfDisposed();
+            return _enhancedService.ExtractPaths(data);
         }
         
         /// <summary>

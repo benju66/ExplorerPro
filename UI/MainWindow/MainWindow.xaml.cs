@@ -3625,14 +3625,305 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Handler for drop on the main window.
+        /// Handler for drop on the main window with comprehensive error handling and validation.
         /// </summary>
-        private void MainWindow_Drop(object sender, System.Windows.DragEventArgs e)
+        private async void MainWindow_Drop(object sender, System.Windows.DragEventArgs e)
+        {
+            try
+            {
+                var validation = ValidateDrop(e);
+                if (!validation.IsValid)
+                {
+                    ShowDropError(validation.ErrorMessage);
+                    e.Effects = DragDropEffects.None;
+                    return;
+                }
+
+                // Show confirmation for large operations
+                if (validation.RequiresConfirmation)
+                {
+                    var result = MessageBox.Show(
+                        validation.ConfirmationMessage,
+                        "Confirm Operation",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (result != MessageBoxResult.Yes)
+                    {
+                        e.Effects = DragDropEffects.None;
+                        return;
+                    }
+                }
+
+                var operation = CreateDragDropOperation(e, validation);
+                if (operation != null)
+                {
+                    // For large operations, show progress dialog
+                    if (operation.IsLargeOperation)
+                    {
+                        await ExecuteOperationWithProgress(operation);
+                    }
+                    else
+                    {
+                        await operation.ExecuteAsync();
+                    }
+
+                    e.Effects = operation.Effect;
+                }
+                else
+                {
+                    // Fallback to existing behavior
+                    await HandleDropFallback(e);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger?.LogInformation("Drop operation was cancelled by user");
+                e.Effects = DragDropEffects.None;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Drop operation failed");
+                ShowDropError($"Drop failed: {ex.Message}");
+                e.Effects = DragDropEffects.None;
+            }
+            finally
+            {
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>
+        /// Validates a drop operation before execution
+        /// </summary>
+        private DragDropValidationResult ValidateDrop(System.Windows.DragEventArgs e)
+        {
+            try
+            {
+                // Check if data is present
+                if (!e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
+                {
+                    return DragDropValidationResult.Failure("No file data present");
+                }
+
+                var files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
+                if (files == null || files.Length == 0)
+                {
+                    return DragDropValidationResult.Failure("No files to drop");
+                }
+
+                // Get current directory from active file tree
+                var fileTree = GetActiveFileTree();
+                var targetPath = fileTree?.GetCurrentPath() ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+                // Validate directory access
+                if (!Directory.Exists(targetPath))
+                {
+                    return DragDropValidationResult.Failure("Target directory does not exist");
+                }
+
+                // Check write permissions
+                try
+                {
+                    var testFile = Path.Combine(targetPath, $"test_{Guid.NewGuid()}.tmp");
+                    File.WriteAllText(testFile, "");
+                    File.Delete(testFile);
+                }
+                catch
+                {
+                    return DragDropValidationResult.Failure("No write permission to target directory");
+                }
+
+                var validation = new DragDropValidationResult { IsValid = true };
+                long totalSize = 0;
+
+                foreach (var file in files)
+                {
+                    if (ValidateDropFile(file, targetPath))
+                    {
+                        validation.ValidFiles.Add(file);
+                        totalSize += EstimateFileSize(file);
+                    }
+                    else
+                    {
+                        validation.InvalidFiles.Add(file);
+                    }
+                }
+
+                if (!validation.ValidFiles.Any())
+                {
+                    return DragDropValidationResult.Failure("No valid files to drop");
+                }
+
+                validation.EstimatedSize = totalSize;
+                validation.IsLargeOperation = validation.ValidFiles.Count > 10 || totalSize > 100 * 1024 * 1024;
+                validation.AllowedEffects = DragDropEffects.Copy; // Default to copy for main window drops
+
+                if (validation.IsLargeOperation)
+                {
+                    validation.RequiresConfirmation = true;
+                    validation.ConfirmationMessage = $"This will copy {validation.ValidFiles.Count} files ({FormatFileSize(totalSize)}). Continue?";
+                }
+
+                return validation;
+            }
+            catch (Exception ex)
+            {
+                return DragDropValidationResult.Failure($"Validation error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Validates a single file for dropping
+        /// </summary>
+        private bool ValidateDropFile(string filePath, string targetPath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(filePath) || (!File.Exists(filePath) && !Directory.Exists(filePath)))
+                    return false;
+
+                // Check for circular references
+                var fullSourcePath = Path.GetFullPath(filePath);
+                var fullTargetPath = Path.GetFullPath(targetPath);
+
+                if (fullTargetPath.StartsWith(fullSourcePath, StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Estimates the size of a file or directory
+        /// </summary>
+        private long EstimateFileSize(string path)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    return new FileInfo(path).Length;
+                }
+                else if (Directory.Exists(path))
+                {
+                    // Rough estimate for directories
+                    var fileCount = Directory.GetFiles(path, "*", SearchOption.AllDirectories).Length;
+                    return fileCount * 1024 * 1024; // Assume 1MB per file
+                }
+            }
+            catch
+            {
+                // Ignore errors and return 0
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// Creates a drag drop operation from the event arguments
+        /// </summary>
+        private DragDropOperation? CreateDragDropOperation(System.Windows.DragEventArgs e, DragDropValidationResult validation)
+        {
+            try
+            {
+                var fileTree = GetActiveFileTree();
+                var targetPath = fileTree?.GetCurrentPath() ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+                return new DragDropOperation(
+                    validation.AllowedEffects,
+                    targetPath,
+                    validation.ValidFiles,
+                    _logger);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to create drag drop operation");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Executes an operation with progress dialog for large operations
+        /// </summary>
+        private async Task ExecuteOperationWithProgress(DragDropOperation operation)
+        {
+            var progressWindow = new Window
+            {
+                Title = "Processing Files",
+                Width = 400,
+                Height = 150,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.NoResize
+            };
+
+            var progressBar = new System.Windows.Controls.ProgressBar
+            {
+                Height = 20,
+                Margin = new Thickness(20),
+                IsIndeterminate = false
+            };
+
+            var statusLabel = new System.Windows.Controls.Label
+            {
+                Content = "Preparing...",
+                Margin = new Thickness(20, 0, 20, 0),
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+
+            var cancelButton = new System.Windows.Controls.Button
+            {
+                Content = "Cancel",
+                Width = 80,
+                Height = 25,
+                Margin = new Thickness(20)
+            };
+
+            var stackPanel = new System.Windows.Controls.StackPanel();
+            stackPanel.Children.Add(statusLabel);
+            stackPanel.Children.Add(progressBar);
+            stackPanel.Children.Add(cancelButton);
+
+            progressWindow.Content = stackPanel;
+
+            var cancellationTokenSource = new CancellationTokenSource();
+            cancelButton.Click += (s, e) => cancellationTokenSource.Cancel();
+
+            // Subscribe to progress updates
+            operation.ProgressUpdated += (s, e) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    progressBar.Value = e.ProgressPercentage;
+                    statusLabel.Content = $"{e.CurrentAction} ({e.CompletedItems}/{e.TotalItems})";
+                });
+            };
+
+            progressWindow.Show();
+
+            try
+            {
+                await operation.ExecuteAsync(cancellationTokenSource.Token);
+            }
+            finally
+            {
+                progressWindow.Close();
+            }
+        }
+
+        /// <summary>
+        /// Fallback drop handling for legacy compatibility
+        /// </summary>
+        private async Task HandleDropFallback(System.Windows.DragEventArgs e)
         {
             if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop))
             {
                 string[] files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
-                
+
                 // Get active file tree and forward the drop
                 var fileTree = GetActiveFileTree();
                 if (fileTree != null)
@@ -3651,9 +3942,26 @@ namespace ExplorerPro.UI.MainWindow
                         }
                     }
                 }
-                
-                e.Handled = true;
             }
+        }
+
+        /// <summary>
+        /// Shows a drop error message to the user
+        /// </summary>
+        private void ShowDropError(string message)
+        {
+            MessageBox.Show(message, "Drop Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        /// <summary>
+        /// Formats file size for display
+        /// </summary>
+        private static string FormatFileSize(long bytes)
+        {
+            if (bytes < 1024) return $"{bytes} B";
+            if (bytes < 1024 * 1024) return $"{bytes / 1024:N1} KB";
+            if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024 * 1024):N1} MB";
+            return $"{bytes / (1024 * 1024 * 1024):N1} GB";
         }
 
         /// <summary>

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows;
+using ExplorerPro.Models;
 
 namespace ExplorerPro.UI.FileTree.Services
 {
@@ -109,6 +110,38 @@ namespace ExplorerPro.UI.FileTree.Services
         /// Cancels the current Outlook extraction operation
         /// </summary>
         void CancelOutlookExtraction();
+
+        /// <summary>
+        /// Validates a drop operation before execution
+        /// </summary>
+        /// <param name="data">Data object being dropped</param>
+        /// <param name="targetPath">Target directory path</param>
+        /// <param name="keyStates">Current key states (Ctrl, Shift, etc.)</param>
+        /// <returns>Validation result indicating whether the drop is valid</returns>
+        DragDropValidationResult ValidateDrop(IDataObject data, string targetPath, DragDropKeyStates keyStates);
+
+        /// <summary>
+        /// Validates a specific file path for dropping
+        /// </summary>
+        /// <param name="sourcePath">Source file or directory path</param>
+        /// <param name="targetPath">Target directory path</param>
+        /// <returns>True if the path can be dropped to the target</returns>
+        bool ValidateDropPath(string sourcePath, string targetPath);
+
+        /// <summary>
+        /// Determines the appropriate drop effect based on key states and source/target
+        /// </summary>
+        /// <param name="keyStates">Current key states</param>
+        /// <param name="targetPath">Target directory path</param>
+        /// <returns>The appropriate drag drop effect</returns>
+        DragDropEffects DetermineDropEffect(DragDropKeyStates keyStates, string targetPath);
+
+        /// <summary>
+        /// Extracts file paths from a data object
+        /// </summary>
+        /// <param name="data">Data object to extract paths from</param>
+        /// <returns>List of extracted file paths</returns>
+        List<string> ExtractPaths(IDataObject data);
 
         #endregion
     }

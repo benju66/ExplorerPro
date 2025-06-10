@@ -1078,13 +1078,238 @@ namespace ExplorerPro.UI.FileTree.Services
             ErrorOccurred?.Invoke(this, message);
         }
         
-        private void OnOutlookExtractionCompleted(OutlookExtractionCompletedEventArgs e)
+                private void OnOutlookExtractionCompleted(OutlookExtractionCompletedEventArgs e)
         {
             OutlookExtractionCompleted?.Invoke(this, e);
         }
-        
+
         #endregion
-        
+
+        #region Validation Methods
+
+        /// <summary>
+        /// Validates a drop operation before execution
+        /// </summary>
+        public DragDropValidationResult ValidateDrop(IDataObject data, string targetPath, DragDropKeyStates keyStates)
+        {
+            try
+            {
+                // Check if target directory exists and is writable
+                if (string.IsNullOrEmpty(targetPath) || !Directory.Exists(targetPath))
+                {
+                    return DragDropValidationResult.Failure("Invalid target directory");
+                }
+
+                // Check write permissions
+                try
+                {
+                    var testFile = Path.Combine(targetPath, $"test_{Guid.NewGuid()}.tmp");
+                    File.WriteAllText(testFile, "");
+                    File.Delete(testFile);
+                }
+                catch
+                {
+                    return DragDropValidationResult.Failure("No write permission to target directory");
+                }
+
+                var paths = ExtractPaths(data);
+                if (!paths.Any())
+                {
+                    return DragDropValidationResult.Failure("No valid files to drop");
+                }
+
+                var validation = new DragDropValidationResult { IsValid = true };
+                long totalSize = 0;
+
+                foreach (var path in paths)
+                {
+                    if (ValidateDropPath(path, targetPath))
+                    {
+                        validation.ValidFiles.Add(path);
+                        
+                        // Calculate size for progress estimation
+                        try
+                        {
+                            if (File.Exists(path))
+                            {
+                                var fileInfo = new FileInfo(path);
+                                totalSize += fileInfo.Length;
+                            }
+                            else if (Directory.Exists(path))
+                            {
+                                // Estimate directory size
+                                var fileCount = Directory.GetFiles(path, "*", SearchOption.AllDirectories).Length;
+                                totalSize += fileCount * 1024 * 1024; // 1MB per file estimate
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore size calculation errors
+                        }
+                    }
+                    else
+                    {
+                        validation.InvalidFiles.Add(path);
+                    }
+                }
+
+                if (!validation.ValidFiles.Any())
+                {
+                    return DragDropValidationResult.Failure("No valid files to drop");
+                }
+
+                // Add warnings for invalid files
+                if (validation.InvalidFiles.Any())
+                {
+                    validation.Warnings.Add($"{validation.InvalidFiles.Count} files will be skipped (invalid or duplicate)");
+                }
+
+                // Determine effect based on key state and context
+                validation.AllowedEffects = DetermineDropEffect(keyStates, targetPath);
+                validation.EstimatedSize = totalSize;
+                validation.IsLargeOperation = validation.ValidFiles.Count > 10 || totalSize > 100 * 1024 * 1024; // 100MB
+
+                // Check for confirmation requirements
+                if (validation.IsLargeOperation)
+                {
+                    var action = validation.AllowedEffects == DragDropEffects.Move ? "move" : "copy";
+                    validation.RequiresConfirmation = true;
+                    validation.ConfirmationMessage = $"This will {action} {validation.ValidFiles.Count} files ({FormatFileSize(totalSize)}). Continue?";
+                }
+
+                return validation;
+            }
+            catch (Exception ex)
+            {
+                return DragDropValidationResult.Failure($"Validation error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Validates a specific file path for dropping
+        /// </summary>
+        public bool ValidateDropPath(string sourcePath, string targetPath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(sourcePath) || string.IsNullOrEmpty(targetPath))
+                    return false;
+
+                // Check if source exists
+                if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
+                    return false;
+
+                // Check if trying to drop into itself or a subdirectory
+                var fullSourcePath = Path.GetFullPath(sourcePath);
+                var fullTargetPath = Path.GetFullPath(targetPath);
+
+                if (fullTargetPath.StartsWith(fullSourcePath, StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                // Check for circular references in directories
+                if (Directory.Exists(sourcePath))
+                {
+                    var sourceDirInfo = new DirectoryInfo(fullSourcePath);
+                    var targetDirInfo = new DirectoryInfo(fullTargetPath);
+
+                    // Check if target is a subdirectory of source
+                    var current = targetDirInfo;
+                    while (current != null)
+                    {
+                        if (current.FullName.Equals(sourceDirInfo.FullName, StringComparison.OrdinalIgnoreCase))
+                            return false;
+                        current = current.Parent;
+                    }
+                }
+
+                // Check for duplicate names in target
+                var fileName = Path.GetFileName(sourcePath);
+                var targetFilePath = Path.Combine(targetPath, fileName);
+                
+                // Allow dropping if it's not the exact same file
+                if (File.Exists(targetFilePath) || Directory.Exists(targetFilePath))
+                {
+                    var fullTargetFilePath = Path.GetFullPath(targetFilePath);
+                    if (fullTargetFilePath.Equals(fullSourcePath, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                }
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Determines the appropriate drop effect based on key states and source/target
+        /// </summary>
+        public DragDropEffects DetermineDropEffect(DragDropKeyStates keyStates, string targetPath)
+        {
+            // Check for explicit key modifiers
+            if (keyStates.HasFlag(DragDropKeyStates.ControlKey))
+                return DragDropEffects.Copy;
+            
+            if (keyStates.HasFlag(DragDropKeyStates.ShiftKey))
+                return DragDropEffects.Move;
+
+            // Default behavior: copy for external drops, move for internal
+            return DragDropEffects.Copy;
+        }
+
+        /// <summary>
+        /// Extracts file paths from a data object
+        /// </summary>
+        public List<string> ExtractPaths(IDataObject data)
+        {
+            var paths = new List<string>();
+
+            try
+            {
+                // Check for file drop list
+                if (data.GetDataPresent(DataFormats.FileDrop))
+                {
+                    var files = (string[])data.GetData(DataFormats.FileDrop);
+                    if (files != null)
+                    {
+                        paths.AddRange(files);
+                    }
+                }
+
+                // Check for internal format
+                if (data.GetDataPresent(INTERNAL_FORMAT))
+                {
+                    var internalPaths = data.GetData(INTERNAL_FORMAT) as string[];
+                    if (internalPaths != null)
+                    {
+                        paths.AddRange(internalPaths);
+                    }
+                }
+
+                // Remove duplicates and invalid paths
+                return paths.Distinct().Where(p => !string.IsNullOrEmpty(p) && 
+                    (File.Exists(p) || Directory.Exists(p))).ToList();
+            }
+            catch
+            {
+                return new List<string>();
+            }
+        }
+
+        /// <summary>
+        /// Formats file size for display
+        /// </summary>
+        private static string FormatFileSize(long bytes)
+        {
+            if (bytes < 1024) return $"{bytes} B";
+            if (bytes < 1024 * 1024) return $"{bytes / 1024:N1} KB";
+            if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024 * 1024):N1} MB";
+            return $"{bytes / (1024 * 1024 * 1024):N1} GB";
+        }
+
+        #endregion
+
         #region IDisposable
         
         private bool _disposed;
