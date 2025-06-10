@@ -6,12 +6,13 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using ExplorerPro.UI.PaneManagement;
 
 namespace ExplorerPro.UI.TabManagement
 {
     /// <summary>
     /// A custom TabPanel implementation that allows for drag-and-drop functionality to detach tabs.
-    /// Works in conjunction with TabManager to enable tab detachment and reattachment.
+    /// Works in conjunction with PaneManager to enable pane detachment and reattachment.
     /// </summary>
     public class DraggableTabBar : TabPanel
     {
@@ -25,9 +26,9 @@ namespace ExplorerPro.UI.TabManagement
         private const double DragThreshold = 10.0;
         
         /// <summary>
-        /// Event raised when a tab is detached via drag operation.
+        /// Event raised when a pane is detached via drag operation.
         /// </summary>
-        public event EventHandler<TabDetachEventArgs> TabDetached;
+        public event EventHandler<PaneDetachEventArgs> PaneDetached;
         
         public DraggableTabBar() : base()
         {
@@ -104,9 +105,8 @@ namespace ExplorerPro.UI.TabManagement
             // Create data object for drag operation
             DataObject dragData = new DataObject();
             
-            // Store tab index in the drag data
-            int tabIndex = GetTabItemIndex(draggedTabItem);
-            dragData.SetData("TabIndex", tabIndex);
+            // Store tab item in the drag data
+            dragData.SetData("TabItem", draggedTabItem);
             
             try
             {
@@ -116,8 +116,8 @@ namespace ExplorerPro.UI.TabManagement
                 // If the drag operation completed successfully and resulted in a "Move"
                 if (result == DragDropEffects.Move)
                 {
-                    // Raise the TabDetached event to notify parent controls
-                    OnTabDetached(tabIndex);
+                    // Raise the PaneDetached event to notify parent controls
+                    OnPaneDetached(draggedTabItem);
                 }
             }
             finally
@@ -129,11 +129,30 @@ namespace ExplorerPro.UI.TabManagement
         }
         
         /// <summary>
-        /// Raises the TabDetached event
+        /// Raises the PaneDetached event
         /// </summary>
-        protected virtual void OnTabDetached(int tabIndex)
+        protected virtual void OnPaneDetached(TabItem detachedPane)
         {
-            TabDetached?.Invoke(this, new TabDetachEventArgs(tabIndex));
+            // Find the source PaneManager
+            PaneManager sourceManager = FindSourcePaneManager(detachedPane);
+            PaneDetached?.Invoke(this, new PaneDetachEventArgs(detachedPane, sourceManager));
+        }
+        
+        /// <summary>
+        /// Finds the PaneManager that contains this draggable tab bar
+        /// </summary>
+        private PaneManager FindSourcePaneManager(TabItem tabItem)
+        {
+            DependencyObject parent = VisualTreeHelper.GetParent(this);
+            while (parent != null)
+            {
+                if (parent is PaneManager paneManager)
+                {
+                    return paneManager;
+                }
+                parent = VisualTreeHelper.GetParent(parent);
+            }
+            return null;
         }
         
         /// <summary>
@@ -184,18 +203,24 @@ namespace ExplorerPro.UI.TabManagement
     }
     
     /// <summary>
-    /// Event arguments for the TabDetached event
+    /// Event arguments for the PaneDetached event
     /// </summary>
-    public class TabDetachEventArgs : EventArgs
+    public class PaneDetachEventArgs : EventArgs
     {
         /// <summary>
-        /// The index of the tab that was detached
+        /// The TabItem representing the detached pane
         /// </summary>
-        public int TabIndex { get; }
+        public TabItem DetachedPane { get; set; }
         
-        public TabDetachEventArgs(int tabIndex)
+        /// <summary>
+        /// The PaneManager that the pane was detached from
+        /// </summary>
+        public PaneManager SourceManager { get; set; }
+        
+        public PaneDetachEventArgs(TabItem pane, PaneManager source)
         {
-            TabIndex = tabIndex;
+            DetachedPane = pane;
+            SourceManager = source;
         }
     }
 }
