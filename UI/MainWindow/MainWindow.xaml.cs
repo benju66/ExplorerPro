@@ -18,7 +18,7 @@ using ExplorerPro.Models;
 using ExplorerPro.FileOperations;
 using ExplorerPro.UI.Dialogs;
 using ExplorerPro.UI.FileTree;
-using ExplorerPro.UI.TabManagement;
+using ExplorerPro.UI.PaneManagement;
 using ExplorerPro.UI.Panels;
 using ExplorerPro.UI.Panels.PinnedPanel;
 using ExplorerPro.Utilities;

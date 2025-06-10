@@ -93,7 +93,7 @@ C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Panels\BookmarksPanel\BookmarksPanel.
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Panels\PinnedPanel\PinnedPanel.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Panels\ProcoreLinksPanel\ProcoreLinksPanel.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Panels\ToDoPanel\ToDoPanel.g.cs
-C:\ExplorerPro\obj\Debug\net9.0-windows\UI\TabManagement\TabManager.g.cs
+C:\ExplorerPro\obj\Debug\net9.0-windows\UI\PaneManagement\PaneManager.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Toolbar\Toolbar.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\App.g.cs
 C:\ExplorerPro\obj\Debug\net9.0-windows\ExplorerPro_Content.g.cs
@@ -120,7 +120,7 @@ C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Panels\BookmarksPanel\BookmarksPanel.
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Panels\PinnedPanel\PinnedPanel.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Panels\ProcoreLinksPanel\ProcoreLinksPanel.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Panels\ToDoPanel\ToDoPanel.baml
-C:\ExplorerPro\obj\Debug\net9.0-windows\UI\TabManagement\TabManager.baml
+C:\ExplorerPro\obj\Debug\net9.0-windows\UI\PaneManagement\PaneManager.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\UI\Toolbar\Toolbar.baml
 C:\ExplorerPro\obj\Debug\net9.0-windows\ExplorerPro.g.resources
 C:\ExplorerPro\obj\Debug\net9.0-windows\ExplorerPro.GeneratedMSBuildEditorConfig.editorconfig

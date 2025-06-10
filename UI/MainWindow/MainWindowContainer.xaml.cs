@@ -9,7 +9,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using ExplorerPro.Models;
 using ExplorerPro.UI.FileTree;
-using ExplorerPro.UI.TabManagement;
+using ExplorerPro.UI.PaneManagement;
 using ExplorerPro.UI.Panels.PinnedPanel;
 using ExplorerPro.UI.Panels.BookmarksPanel;
 using ExplorerPro.UI.Panels.ToDoPanel;
@@ -38,9 +38,9 @@ namespace ExplorerPro.UI.MainWindow
         private readonly SettingsManager _settingsManager;
 
         // Tab management
-        private TabManager? _tabManager;
-        private TabManager? _rightTabManager; // For split view
-        private TabManager? _activeTabManager;
+        private PaneManager? _paneManager;
+        private PaneManager? _rightPaneManager; // For split view
+        private PaneManager? _activePaneManager;
         
         // Panel references
         private PinnedPanel? _pinnedPanel;
@@ -71,7 +71,7 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Gets the active tab manager
         /// </summary>
-        public TabManager? ActiveTabManager => _activeTabManager;
+        public PaneManager? ActivePaneManager => _activePaneManager;
 
         /// <summary>
         /// Gets the pinned panel
@@ -103,7 +103,7 @@ namespace ExplorerPro.UI.MainWindow
 
                 _parentWindow = parentWindow;
                 _settingsManager = App.Settings ?? new SettingsManager();
-                _activeTabManager = null;
+                _activePaneManager = null;
                 _splitViewActive = false;
 
                 // Track this instance
@@ -140,14 +140,14 @@ namespace ExplorerPro.UI.MainWindow
             try
             {
                 // Create tab manager
-                _tabManager = new TabManager();
-                _tabManager.CurrentPathChanged += TabManager_CurrentPathChanged;
-                _tabManager.PinItemRequested += TabManager_PinItemRequested;
-                _tabManager.ActiveManagerChanged += TabManager_ActiveManagerChanged;
-                MainContent.Content = _tabManager;
+                _paneManager = new PaneManager();
+                _paneManager.CurrentPathChanged += PaneManager_CurrentPathChanged;
+                _paneManager.PinItemRequested += PaneManager_PinItemRequested;
+                _paneManager.ActiveManagerChanged += PaneManager_ActiveManagerChanged;
+                MainContent.Content = _paneManager;
 
-                // Set initial active tab manager
-                _activeTabManager = _tabManager;
+                // Set initial active pane manager
+                _activePaneManager = _paneManager;
 
                 // Create panels
                 CreatePanels();
@@ -183,13 +183,13 @@ namespace ExplorerPro.UI.MainWindow
                     "Container Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 
                 // Try to at least initialize the tab manager if it failed
-                if (_tabManager == null)
+                if (_paneManager == null)
                 {
                     try
                     {
-                        _tabManager = new TabManager();
-                        MainContent.Content = _tabManager;
-                        _activeTabManager = _tabManager;
+                                              _paneManager = new PaneManager();
+                      MainContent.Content = _paneManager;
+                      _activePaneManager = _paneManager;
                     }
                     catch
                     {
@@ -220,7 +220,7 @@ namespace ExplorerPro.UI.MainWindow
                 }
 
                 // Add a file tree tab with validated path
-                _tabManager?.AddNewFileTreeTab(name, validPath);
+                _paneManager?.AddNewFileTreeTab(name, validPath);
             }
             catch (Exception ex)
             {
@@ -229,14 +229,14 @@ namespace ExplorerPro.UI.MainWindow
                 string fallbackPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
                 try
                 {
-                    _tabManager?.AddNewFileTreeTab("Documents", fallbackPath);
+                    _paneManager?.AddNewFileTreeTab("Documents", fallbackPath);
                 }
                 catch (Exception innerEx)
                 {
                     Console.WriteLine($"Failed to initialize with fallback path: {innerEx.Message}");
                     // Try one more time with user profile as a last resort
                     string userPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                    _tabManager?.AddNewFileTreeTab("Home", userPath);
+                    _paneManager?.AddNewFileTreeTab("Home", userPath);
                 }
             }
         }
@@ -1350,66 +1350,57 @@ namespace ExplorerPro.UI.MainWindow
         #region Tab Management
 
         /// <summary>
-        /// Handle tab manager path changed event
+        /// Handles current path changed events from the active pane manager
         /// </summary>
-        private void TabManager_CurrentPathChanged(object? sender, string path)
+        private void PaneManager_CurrentPathChanged(object? sender, string path)
         {
             try
             {
-                // Update parent window address bar
-                _parentWindow?.UpdateAddressBar(path);
-                
-                // Notify subscribers
+                // Update status bar or any other components that need to know the current path
                 PathChanged?.Invoke(this, path);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error in CurrentPathChanged handler: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Handle pin item request from tab manager
-        /// </summary>
-        private void TabManager_PinItemRequested(object? sender, string path)
-        {
-            try
-            {
-                if (_pinnedPanel != null && !string.IsNullOrEmpty(path))
-                {
-                    if (File.Exists(path) || Directory.Exists(path))
-                    {
-                        _pinnedPanel.PinItem(path);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error in PinItemRequested handler: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Handle tab manager active changed event
-        /// </summary>
-        private void TabManager_ActiveManagerChanged(object? sender, string path)
-        {
-            try
-            {
-                _activeTabManager = sender as TabManager;
                 
-                // Update UI to reflect active tab manager
+                // Update parent window's address bar
+                var parentWindow = Window.GetWindow(this) as MainWindow;
+                parentWindow?.UpdateToolbarAddressBar(path);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error handling path changed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Handles pin item requests from pane managers
+        /// </summary>
+        private void PaneManager_PinItemRequested(object? sender, string path)
+        {
+            try
+            {
+                // Pin the item in the pinned panel
+                _pinnedPanel?.AddPinnedItem(path);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error handling pin request: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Handles active manager change events
+        /// </summary>
+        private void PaneManager_ActiveManagerChanged(object? sender, string path)
+        {
+            try
+            {
+                // Update the active pane manager reference
+                _activePaneManager = sender as PaneManager;
+                
+                // Update any UI that depends on the active manager
                 UpdateActiveTab();
-                
-                // Update address bar with current path
-                if (!string.IsNullOrEmpty(path))
-                {
-                    _parentWindow?.UpdateAddressBar(path);
-                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error in ActiveManagerChanged handler: {ex.Message}");
+                Console.WriteLine($"Error handling active manager change: {ex.Message}");
             }
         }
 
@@ -1452,7 +1443,7 @@ namespace ExplorerPro.UI.MainWindow
                 string title = string.IsNullOrEmpty(fileName) ? validPath : fileName;
                 
                 // Add new tab
-                _tabManager?.AddNewFileTreeTab(title, validPath);
+                _paneManager?.AddNewFileTreeTab(title, validPath);
             }
             catch (Exception ex)
             {
@@ -1464,7 +1455,7 @@ namespace ExplorerPro.UI.MainWindow
                 try
                 {
                     string fallback = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                    _tabManager?.AddNewFileTreeTab("Documents", fallback);
+                    _paneManager?.AddNewFileTreeTab("Documents", fallback);
                 }
                 catch
                 {
@@ -1481,9 +1472,9 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                if (_activeTabManager != null)
+                if (_activePaneManager != null)
                 {
-                    return _activeTabManager.FindActiveFileTree();
+                    return _activePaneManager.FindActiveFileTree();
                 }
             }
             catch (Exception ex)
@@ -1500,7 +1491,7 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                _activeTabManager?.GoUp();
+                _activePaneManager?.GoUp();
             }
             catch (Exception ex)
             {
@@ -1515,7 +1506,7 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                _activeTabManager?.GoBack();
+                _activePaneManager?.GoBack();
             }
             catch (Exception ex)
             {
@@ -1530,7 +1521,7 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                _activeTabManager?.GoForward();
+                _activePaneManager?.GoForward();
             }
             catch (Exception ex)
             {
@@ -1545,7 +1536,7 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                _activeTabManager?.RefreshCurrentTab();
+                _activePaneManager?.RefreshCurrentTab();
             }
             catch (Exception ex)
             {
@@ -1596,10 +1587,10 @@ namespace ExplorerPro.UI.MainWindow
                 string path = targetPath ?? DetermineSplitViewPath();
 
                 // Create right tab manager
-                _rightTabManager = new TabManager();
-                _rightTabManager.CurrentPathChanged += TabManager_CurrentPathChanged;
-                _rightTabManager.PinItemRequested += TabManager_PinItemRequested;
-                _rightTabManager.ActiveManagerChanged += TabManager_ActiveManagerChanged;
+                _rightPaneManager = new PaneManager();
+                _rightPaneManager.CurrentPathChanged += PaneManager_CurrentPathChanged;
+                _rightPaneManager.PinItemRequested += PaneManager_PinItemRequested;
+                _rightPaneManager.ActiveManagerChanged += PaneManager_ActiveManagerChanged;
                 
                 // Create splitter
                 Grid grid = new Grid();
@@ -1621,18 +1612,18 @@ namespace ExplorerPro.UI.MainWindow
                 MainContent.Content = null;
                 
                 // Add to grid
-                if (_tabManager != null)
+                if (_paneManager != null)
                 {
-                    Grid.SetColumn(_tabManager, 0);
-                    grid.Children.Add(_tabManager);
+                    Grid.SetColumn(_paneManager, 0);
+                    grid.Children.Add(_paneManager);
                 }
                 
                 grid.Children.Add(splitter);
                 
-                if (_rightTabManager != null)
+                if (_rightPaneManager != null)
                 {
-                    Grid.SetColumn(_rightTabManager, 2);
-                    grid.Children.Add(_rightTabManager);
+                    Grid.SetColumn(_rightPaneManager, 2);
+                    grid.Children.Add(_rightPaneManager);
                 }
                 
                 // Add grid to main content
@@ -1644,7 +1635,7 @@ namespace ExplorerPro.UI.MainWindow
                 // Open path in right tab manager
                 string fileName = Path.GetFileName(validPath);
                 string title = string.IsNullOrEmpty(fileName) ? validPath : fileName;
-                _rightTabManager?.AddNewFileTreeTab(title, validPath);
+                _rightPaneManager?.AddNewFileTreeTab(title, validPath);
                 
                 // Update state
                 _splitViewActive = true;
@@ -1664,18 +1655,18 @@ namespace ExplorerPro.UI.MainWindow
             try
             {
                 // Remove tab managers from grid
-                if (_rightTabManager is IDisposable disposable)
+                if (_rightPaneManager is IDisposable disposable)
                 {
                     disposable.Dispose();
                 }
-                _rightTabManager = null;
+                _rightPaneManager = null;
                 
                 // Restore single tab manager
-                MainContent.Content = _tabManager;
+                MainContent.Content = _paneManager;
                 
                 // Update state
                 _splitViewActive = false;
-                _activeTabManager = _tabManager;
+                _activePaneManager = _paneManager;
             }
             catch (Exception ex)
             {
@@ -2176,11 +2167,11 @@ namespace ExplorerPro.UI.MainWindow
             try
             {
                 // Refresh main tab manager
-                if (_tabManager != null)
+                if (_paneManager != null)
                 {
                     // The tab manager might need its own RefreshThemeElements method
                     // For now, we'll update the TabControl background directly
-                    var tabControl = FindTabControl(_tabManager);
+                    var tabControl = FindTabControl(_paneManager);
                     if (tabControl != null)
                     {
                         tabControl.Background = GetResource<SolidColorBrush>("TabControlBackground");
@@ -2188,9 +2179,9 @@ namespace ExplorerPro.UI.MainWindow
                 }
                 
                 // Refresh right tab manager if in split view
-                if (_rightTabManager != null && _splitViewActive)
+                if (_rightPaneManager != null && _splitViewActive)
                 {
-                    var tabControl = FindTabControl(_rightTabManager);
+                    var tabControl = FindTabControl(_rightPaneManager);
                     if (tabControl != null)
                     {
                         tabControl.Background = GetResource<SolidColorBrush>("TabControlBackground");
@@ -2277,12 +2268,12 @@ namespace ExplorerPro.UI.MainWindow
                 _allContainers.Remove(this);
                 
                 // Dispose tab managers
-                if (_tabManager is IDisposable tabManagerDisposable)
+                if (_paneManager is IDisposable tabManagerDisposable)
                 {
                     tabManagerDisposable.Dispose();
                 }
                 
-                if (_rightTabManager is IDisposable rightTabManagerDisposable)
+                if (_rightPaneManager is IDisposable rightTabManagerDisposable)
                 {
                     rightTabManagerDisposable.Dispose();
                 }
