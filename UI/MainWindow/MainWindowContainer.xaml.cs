@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using ExplorerPro.Core.Disposables;
 using ExplorerPro.Models;
 using ExplorerPro.UI.FileTree;
 using ExplorerPro.UI.PaneManagement;
@@ -48,15 +51,29 @@ namespace ExplorerPro.UI.MainWindow
     /// - Optimized rendering for large directory structures
     /// - Background operations for non-blocking UI updates
     /// </summary>
-    public partial class MainWindowContainer : UserControl
+    public partial class MainWindowContainer : UserControl, IDisposable
     {
         #region Core Dependencies and State Management
 
         /// <summary>
-        /// Static collection tracking all active MainWindowContainer instances.
+        /// Static collection tracking all active MainWindowContainer instances using weak references.
         /// Used for coordinated operations across multiple containers and cleanup on application shutdown.
+        /// Prevents memory leaks by allowing containers to be garbage collected when no longer referenced.
         /// </summary>
-        private static List<MainWindowContainer> _allContainers = new List<MainWindowContainer>();
+        private static readonly List<WeakReference<MainWindowContainer>> _allContainers = 
+            new List<WeakReference<MainWindowContainer>>();
+        private static readonly object _containersLock = new object();
+        
+        /// <summary>
+        /// Composite disposable for managing all disposable resources in this container.
+        /// Ensures proper cleanup of all managed resources when the container is disposed.
+        /// </summary>
+        private readonly CompositeDisposable _disposables = new CompositeDisposable();
+        private bool _disposed;
+        
+        #if DEBUG
+        private static int _instanceCount;
+        #endif
 
         /// <summary>
         /// Reference to the parent MainWindow that hosts this container instance.
@@ -69,6 +86,74 @@ namespace ExplorerPro.UI.MainWindow
         /// Handles container-specific settings like panel ratios and sidebar states.
         /// </summary>
         private readonly SettingsManager _settingsManager;
+
+        #endregion
+
+        #region Static Container Management
+
+        /// <summary>
+        /// Add a container to the static collection using weak reference
+        /// </summary>
+        private static void AddContainer(MainWindowContainer container)
+        {
+            lock (_containersLock)
+            {
+                CleanupDeadReferences();
+                _allContainers.Add(new WeakReference<MainWindowContainer>(container));
+                
+                #if DEBUG
+                var count = Interlocked.Increment(ref _instanceCount);
+                Debug.WriteLine($"MainWindowContainer added to collection. Active count: {count}");
+                #endif
+            }
+        }
+
+        /// <summary>
+        /// Remove a container from the static collection
+        /// </summary>
+        private static void RemoveContainer(MainWindowContainer container)
+        {
+            lock (_containersLock)
+            {
+                _allContainers.RemoveAll(wr => 
+                {
+                    return !wr.TryGetTarget(out var target) || ReferenceEquals(target, container);
+                });
+                
+                #if DEBUG
+                var count = Interlocked.Decrement(ref _instanceCount);
+                Debug.WriteLine($"MainWindowContainer removed from collection. Active count: {count}");
+                #endif
+            }
+        }
+
+        /// <summary>
+        /// Clean up dead weak references from the collection
+        /// </summary>
+        private static void CleanupDeadReferences()
+        {
+            _allContainers.RemoveAll(wr => !wr.TryGetTarget(out _));
+        }
+
+        /// <summary>
+        /// Get all live container instances
+        /// </summary>
+        public static IEnumerable<MainWindowContainer> GetAllContainers()
+        {
+            lock (_containersLock)
+            {
+                CleanupDeadReferences();
+                var containers = new List<MainWindowContainer>();
+                foreach (var weakRef in _allContainers)
+                {
+                    if (weakRef.TryGetTarget(out var container))
+                    {
+                        containers.Add(container);
+                    }
+                }
+                return containers;
+            }
+        }
 
         #endregion
 
@@ -231,8 +316,13 @@ namespace ExplorerPro.UI.MainWindow
                 _activePaneManager = null;
                 _splitViewActive = false;
 
+                #if DEBUG
+                var count = Interlocked.Increment(ref _instanceCount);
+                Debug.WriteLine($"MainWindowContainer created. Instance count: {count}");
+                #endif
+                
                 // Track this instance
-                _allContainers.Add(this);
+                AddContainer(this);
 
                 // Configure drop handling
                 DockArea.AllowDrop = true;
@@ -2380,35 +2470,99 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         public void Dispose()
         {
-            try
-            {
-                // Stop timers
-                if (_consoleAnimationTimer != null)
-                {
-                    _consoleAnimationTimer.Stop();
-                    _consoleAnimationTimer = null;
-                }
-                
-                // Remove from tracking
-                _allContainers.Remove(this);
-                
-                // Dispose pane managers
-                if (_paneManager is IDisposable paneManagerDisposable)
-                {
-                    paneManagerDisposable.Dispose();
-                }
-                
-                if (_rightPaneManager is IDisposable rightPaneManagerDisposable)
-                {
-                    rightPaneManagerDisposable.Dispose();
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error in Dispose: {ex.Message}");
-                // Continue with disposal even if some parts fail
-            }
+            Dispose(true);
+            GC.SuppressFinalize(this);
         }
+
+        /// <summary>
+        /// Protected dispose pattern implementation
+        /// </summary>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed) return;
+
+            if (disposing)
+            {
+                try
+                {
+                    // Remove from static collection first
+                    RemoveContainer(this);
+                    
+                    // Dispose managed resources using CompositeDisposable
+                    _disposables?.Dispose();
+                    
+                    // Stop and dispose timers
+                    if (_consoleAnimationTimer != null)
+                    {
+                        _consoleAnimationTimer.Stop();
+                        _consoleAnimationTimer.Tick -= ConsoleAnimationTimer_Tick;
+                        _consoleAnimationTimer = null;
+                    }
+                    
+                    // Dispose panels
+                    (_pinnedPanel as IDisposable)?.Dispose();
+                    (_bookmarksPanel as IDisposable)?.Dispose();
+                    (_toDoPanel as IDisposable)?.Dispose();
+                    (_procorePanel as IDisposable)?.Dispose();
+                    
+                    // Dispose pane managers
+                    if (_paneManager != null)
+                    {
+                        _paneManager.CurrentPathChanged -= PaneManager_CurrentPathChanged;
+                        _paneManager.PinItemRequested -= PaneManager_PinItemRequested;
+                        _paneManager.ActiveManagerChanged -= PaneManager_ActiveManagerChanged;
+                        (_paneManager as IDisposable)?.Dispose();
+                        _paneManager = null;
+                    }
+                    
+                    if (_rightPaneManager != null)
+                    {
+                        (_rightPaneManager as IDisposable)?.Dispose();
+                        _rightPaneManager = null;
+                    }
+                    
+                    // Unhook drag/drop events
+                    if (DockArea != null)
+                    {
+                        DockArea.DragEnter -= DockArea_DragEnter;
+                        DockArea.DragOver -= DockArea_DragOver;
+                        DockArea.DragLeave -= DockArea_DragLeave;
+                        DockArea.Drop -= DockArea_Drop;
+                    }
+                    
+                    // Clear collections
+                    _panelWidths?.Clear();
+                    _panelsInConsole?.Clear();
+                    
+                    // Clear references
+                    _activePaneManager = null;
+                    DataContext = null;
+                    
+                    #if DEBUG
+                    var count = Interlocked.Decrement(ref _instanceCount);
+                    Debug.WriteLine($"MainWindowContainer disposed. Remaining: {count}");
+                    #endif
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error during MainWindowContainer disposal: {ex.Message}");
+                    // Continue with disposal even if some parts fail
+                }
+            }
+
+            _disposed = true;
+        }
+
+        #if DEBUG
+        /// <summary>
+        /// Finalizer for debugging - should not be called if properly disposed
+        /// </summary>
+        ~MainWindowContainer()
+        {
+            Debug.WriteLine($"MainWindowContainer finalized. This should not happen if properly disposed!");
+            Dispose(false);
+        }
+        #endif
 
         #endregion
 
