@@ -45,12 +45,13 @@ namespace ExplorerPro.Core
 
     /// <summary>
     /// Exception thrown when window initialization fails.
+    /// Updated to use unified WindowState enum instead of separate InitializationState.
     /// </summary>
     public class WindowInitializationException : Exception
     {
-        public InitializationState FailedState { get; }
+        public WindowState FailedState { get; }
         
-        public WindowInitializationException(string message, InitializationState failedState, Exception innerException = null)
+        public WindowInitializationException(string message, WindowState failedState, Exception innerException = null)
             : base(message, innerException)
         {
             FailedState = failedState;
