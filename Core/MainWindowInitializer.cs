@@ -74,7 +74,7 @@ namespace ExplorerPro.Core
                         context.CurrentState);
                 }
                 
-                context.TransitionTo(InitializationState.Ready);
+                context.TransitionTo(WindowState.Ready);
                 _logger.LogInformation("Window initialization completed successfully");
                 
                 return InitializationResult.Success();
@@ -82,7 +82,7 @@ namespace ExplorerPro.Core
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Window initialization failed with exception");
-                context.TransitionTo(InitializationState.Failed);
+                context.TransitionTo(WindowState.Failed);
                 
                 // Attempt cleanup
                 try
@@ -132,9 +132,9 @@ namespace ExplorerPro.Core
         {
             context.RecordStep("InitializeCoreComponents");
             
-            if (!context.TransitionTo(InitializationState.InitializingComponents))
+            if (!context.TransitionTo(WindowState.Initializing))
             {
-                _logger.LogError("Failed to transition to InitializingComponents state");
+                _logger.LogError("Failed to transition to Initializing state");
                 return false;
             }
             
@@ -171,7 +171,7 @@ namespace ExplorerPro.Core
         {
             context.RecordStep("InitializeUIElements");
             
-            if (!context.TransitionTo(InitializationState.InitializingWindow))
+            if (!context.TransitionTo(WindowState.ComponentsReady))
             {
                 return false;
             }
@@ -273,10 +273,10 @@ namespace ExplorerPro.Core
     {
         public bool IsSuccess { get; }
         public string ErrorMessage { get; }
-        public InitializationState State { get; }
+        public WindowState State { get; }
         public Exception Error { get; }
         
-        private InitializationResult(bool success, string errorMessage, InitializationState state, Exception error)
+        private InitializationResult(bool success, string errorMessage, WindowState state, Exception error)
         {
             IsSuccess = success;
             ErrorMessage = errorMessage;
@@ -286,10 +286,10 @@ namespace ExplorerPro.Core
         
         public static InitializationResult Success()
         {
-            return new InitializationResult(true, null, InitializationState.Ready, null);
+            return new InitializationResult(true, null, WindowState.Ready, null);
         }
         
-        public static InitializationResult Failure(string message, InitializationState state, Exception error = null)
+        public static InitializationResult Failure(string message, WindowState state, Exception error = null)
         {
             return new InitializationResult(false, message, state, error);
         }

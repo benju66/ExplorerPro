@@ -7,6 +7,7 @@ namespace ExplorerPro.Core
 {
     /// <summary>
     /// Thread-safe context for window initialization with proper state tracking
+    /// Updated to use unified WindowState enum instead of separate InitializationState
     /// </summary>
     public sealed class WindowInitializationContext : IDisposable
     {
@@ -15,18 +16,18 @@ namespace ExplorerPro.Core
         private readonly List<string> _completedSteps = new List<string>();
         private readonly Dictionary<string, object> _contextData = new Dictionary<string, object>();
         
-        public InitializationState CurrentState { get; private set; }
+        public WindowState CurrentState { get; private set; }
         public Exception LastError { get; private set; }
         public bool IsDisposed { get; private set; }
         public DateTime StartTime { get; }
         
         public WindowInitializationContext()
         {
-            CurrentState = InitializationState.Created;
+            CurrentState = WindowState.Created;
             StartTime = DateTime.UtcNow;
         }
         
-        public bool TransitionTo(InitializationState newState)
+        public bool TransitionTo(WindowState newState)
         {
             lock (_lock)
             {
@@ -46,15 +47,16 @@ namespace ExplorerPro.Core
             }
         }
         
-        private bool IsValidTransition(InitializationState from, InitializationState to)
+        private bool IsValidTransition(WindowState from, WindowState to)
         {
-            // Define valid state transitions
+            // Define valid state transitions for initialization context
             return (from, to) switch
             {
-                (InitializationState.Created, InitializationState.InitializingComponents) => true,
-                (InitializationState.InitializingComponents, InitializationState.InitializingWindow) => true,
-                (InitializationState.InitializingWindow, InitializationState.Ready) => true,
-                (_, InitializationState.Failed) => true, // Can fail from any state
+                (WindowState.Created, WindowState.Initializing) => true,
+                (WindowState.Initializing, WindowState.ComponentsReady) => true,
+                (WindowState.ComponentsReady, WindowState.LoadingUI) => true,
+                (WindowState.LoadingUI, WindowState.Ready) => true,
+                (_, WindowState.Failed) => true, // Can fail from any state
                 _ => false
             };
         }

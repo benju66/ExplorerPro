@@ -370,22 +370,16 @@ namespace ExplorerPro.UI.MainWindow
         private WindowInitializationContext _initContext;
         
         /// <summary>
-        /// Current initialization state of the window.
-        /// Tracks progression through: Created -> Initializing -> Ready -> Disposed
+        /// Unified window state manager for thread-safe state tracking.
+        /// Replaces the previous fragmented state system (InitializationState + UIWindowState + _isDisposed).
         /// </summary>
-        private InitializationState _initState = InitializationState.Created;
+        private readonly WindowStateManager _stateManager = new WindowStateManager();
 
         /// <summary>
         /// Reference to the main TabControl hosting MainWindowContainer instances.
         /// Cached for safe access during initialization and disposal.
         /// </summary>
         private TabControl _mainTabsControl;
-
-        /// <summary>
-        /// Flag indicating whether this window instance has been disposed.
-        /// Used for safe resource cleanup and preventing use-after-disposal.
-        /// </summary>
-        private bool _isDisposed;
 
         #endregion
 
@@ -403,43 +397,6 @@ namespace ExplorerPro.UI.MainWindow
         #region UI State Management
 
         /// <summary>
-        /// Enumeration defining the various states of the UI window lifecycle.
-        /// Used to ensure safe access to UI elements during state transitions.
-        /// </summary>
-        private enum UIWindowState
-        {
-            /// <summary>
-            /// Window is in the process of being created and initialized.
-            /// UI elements may not be fully available yet.
-            /// </summary>
-            Initializing,
-
-            /// <summary>
-            /// Window is fully initialized and ready for user interaction.
-            /// All UI elements are available and functional.
-            /// </summary>
-            Ready,
-
-            /// <summary>
-            /// Window is in the process of closing.
-            /// UI operations should be minimized and may be ignored.
-            /// </summary>
-            Closing,
-
-            /// <summary>
-            /// Window has been disposed and is no longer valid.
-            /// All UI operations should be prevented.
-            /// </summary>
-            Disposed
-        }
-
-        /// <summary>
-        /// Current state of the UI window. Marked as volatile for thread-safe reads.
-        /// Used to prevent UI operations during invalid states.
-        /// </summary>
-        private volatile UIWindowState _windowState = UIWindowState.Initializing;
-
-        /// <summary>
         /// Instance-specific logger created from the shared logger factory.
         /// Provides logging with this window's specific context.
         /// </summary>
@@ -448,8 +405,9 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Public property to check if the window has been disposed
         /// IMPLEMENTATION OF FIX 2: Thread-Safety Issues in UI Updates
+        /// Now uses unified state manager instead of separate _isDisposed field
         /// </summary>
-        public bool IsDisposed => _isDisposed;
+        public bool IsDisposed => _stateManager.IsClosing;
 
         #endregion
 
@@ -488,19 +446,21 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Safe accessor properties for all frequently accessed UI elements
+        /// Now uses unified state manager for disposal and state checking
         /// </summary>
-        private TabControl SafeMainTabs => MainTabs != null && !_isDisposed && _windowState != UIWindowState.Disposed ? MainTabs : null;
-        private TextBlock SafeStatusText => StatusText != null && !_isDisposed && _windowState != UIWindowState.Disposed ? StatusText : null;
-        private TextBlock SafeItemCountText => ItemCountText != null && !_isDisposed && _windowState != UIWindowState.Disposed ? ItemCountText : null;
-        private TextBlock SafeSelectionText => SelectionText != null && !_isDisposed && _windowState != UIWindowState.Disposed ? SelectionText : null;
+        private TabControl SafeMainTabs => MainTabs != null && _stateManager.IsOperational ? MainTabs : null;
+        private TextBlock SafeStatusText => StatusText != null && _stateManager.IsOperational ? StatusText : null;
+        private TextBlock SafeItemCountText => ItemCountText != null && _stateManager.IsOperational ? ItemCountText : null;
+        private TextBlock SafeSelectionText => SelectionText != null && _stateManager.IsOperational ? SelectionText : null;
 
         /// <summary>
         /// Safely executes an action on a UI element with null and disposal checks
+        /// Now uses unified state manager for state checking
         /// </summary>
         private bool TryAccessUIElement<T>(T element, Action<T> action, [CallerMemberName] string callerName = "") 
             where T : UIElement
         {
-            if (element == null || _isDisposed || _windowState == UIWindowState.Disposed)
+            if (element == null || _stateManager.IsClosing || _stateManager.HasFailed)
             {
                 _instanceLogger?.LogDebug($"{callerName}: UI element not available (null or disposed)");
                 return false;
@@ -700,7 +660,7 @@ namespace ExplorerPro.UI.MainWindow
             }
             catch (Exception ex)
             {
-                _initContext.TransitionTo(InitializationState.Failed);
+                _initContext.TransitionTo(Core.WindowState.Failed);
                 DecrementLoggerRef();
                 
                 // Log and rethrow - window creation must fail cleanly
@@ -739,6 +699,9 @@ namespace ExplorerPro.UI.MainWindow
             {
                 _instanceLogger.LogInformation("Starting async window initialization");
                 
+                // Progress through proper state transitions during initialization
+                _stateManager.TryTransitionTo(Core.WindowState.Initializing, out _);
+                
                 var result = await _initializer.InitializeWindowAsync(this, _initContext);
                 
                 if (!result.IsSuccess)
@@ -749,20 +712,30 @@ namespace ExplorerPro.UI.MainWindow
                         result.Error);
                 }
                 
-                _windowState = UIWindowState.Ready;
-                _initializationComplete.SetResult(true);
+                // Progress through the remaining states
+                _stateManager.TryTransitionTo(Core.WindowState.ComponentsReady, out _);
+                _stateManager.TryTransitionTo(Core.WindowState.LoadingUI, out _);
                 
-                _instanceLogger.LogInformation("Window initialization completed");
-                
-                // Create initial tab if needed
-                if (MainTabs?.Items.Count == 0)
+                if (_stateManager.TryTransitionTo(Core.WindowState.Ready, out string error))
                 {
-                    AddNewMainWindowTabSafely();
+                    _initializationComplete.SetResult(true);
+                    _instanceLogger.LogInformation("Window initialization completed");
+                    
+                    // Create initial tab if needed
+                    if (MainTabs?.Items.Count == 0)
+                    {
+                        AddNewMainWindowTabSafely();
+                    }
+                }
+                else
+                {
+                    _instanceLogger.LogError($"Failed to transition to Ready state: {error}");
+                    throw new InvalidOperationException($"State transition failed: {error}");
                 }
             }
             catch (Exception ex)
             {
-                _windowState = UIWindowState.Disposed;
+                _stateManager.TryTransitionTo(Core.WindowState.Failed, out _);
                 _initializationComplete.SetException(ex);
                 
                 _instanceLogger.LogError(ex, "Window initialization failed");
@@ -788,11 +761,11 @@ namespace ExplorerPro.UI.MainWindow
 
         #endregion
 
-        private void SetInitializationState(InitializationState state)
+        private void SetInitializationState(Core.WindowState state)
         {
             lock (_stateLock)
             {
-                _initState = state;
+                _stateManager.TryTransitionTo(state, out _);
                 _instanceLogger?.LogDebug($"Window state changed to: {state}");
             }
         }
@@ -802,11 +775,11 @@ namespace ExplorerPro.UI.MainWindow
             try
             {
                 await InitializeWindowAsync();
-                SetInitializationState(InitializationState.Ready);
+                SetInitializationState(Core.WindowState.Ready);
             }
             catch (Exception ex)
             {
-                SetInitializationState(InitializationState.Failed);
+                SetInitializationState(Core.WindowState.Failed);
                 _instanceLogger?.LogError(ex, "Window initialization failed");
                 MessageBox.Show($"Failed to initialize window: {ex.Message}", 
                     "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -1008,19 +981,19 @@ namespace ExplorerPro.UI.MainWindow
         {
             ExecuteOnUIThread(() =>
             {
-                if (!_isDisposed && _windowState != UIWindowState.Disposed)
+                if (_stateManager.IsOperational)
                 {
                     try
                     {
                         RefreshThemeElements();
-                        _instanceLogger?.LogInformation($"Theme changed to {theme}");
+                        _instanceLogger?.LogDebug($"Theme changed to: {theme}");
                     }
                     catch (Exception ex)
                     {
-                        _instanceLogger?.LogError(ex, $"Error handling theme change to {theme}");
+                        _instanceLogger?.LogError(ex, "Error applying theme change");
                     }
                 }
-            });
+            }, nameof(OnThemeChanged));
         }
 
         /// <summary>
@@ -1070,12 +1043,12 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Updates the initialization state in a thread-safe manner.
         /// </summary>
-        internal void UpdateInitializationState(InitializationState newState)
+        internal void UpdateInitializationState(Core.WindowState newState)
         {
             lock (_stateLock)
             {
-                var oldState = _initState;
-                _initState = newState;
+                var oldState = _stateManager.CurrentState;
+                _stateManager.TryTransitionTo(newState, out _);
                 _logger.LogDebug($"Initialization state changed: {oldState} -> {newState}");
             }
         }
@@ -1099,7 +1072,7 @@ namespace ExplorerPro.UI.MainWindow
                 if (_mainTabsControl == null)
                 {
                     throw new InvalidOperationException(
-                        "MainTabs control is not initialized. Current state: " + _initState);
+                        "MainTabs control is not initialized. Current state: " + _stateManager.CurrentState);
                 }
                 return _mainTabsControl;
             }
@@ -1112,13 +1085,8 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         internal bool IsReadyForTabOperations()
         {
-            lock (_stateLock)
-            {
-                // Allow tab operations during window initialization and when ready
-                return (_initState == InitializationState.Ready || _initState == InitializationState.InitializingWindow) && 
-                       _mainTabsControl != null && 
-                       !_isDisposed;
-            }
+            return _stateManager.IsOperational &&
+                   _mainTabsControl != null;
         }
 
         /// <summary>
@@ -1126,27 +1094,12 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         internal bool CanPerformTabOperations()
         {
-            try
+            if (_stateManager.CurrentState == Core.WindowState.LoadingUI)
             {
-                lock (_stateLock)
-                {
-                    // Check basic readiness
-                    if (!IsReadyForTabOperations()) return false;
-                    
-                    // During initialization, use direct MainTabs access
-                    if (_initState == InitializationState.InitializingWindow)
-                    {
-                        return _mainTabsControl != null && _mainTabsControl.IsLoaded;
-                    }
-                    
-                    // When ready, use safe accessor
-                    return MainTabsSafe.IsLoaded;
-                }
+                return _mainTabsControl != null;
             }
-            catch
-            {
-                return false;
-            }
+            
+            return IsReadyForTabOperations();
         }
 
         /// <summary>
@@ -1154,30 +1107,16 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         internal bool ValidateWindowState()
         {
-            try
+            if (_stateManager.IsClosing || _stateManager.HasFailed) return false;
+            
+            // Check initialization state
+            if (!_stateManager.IsOperational && _stateManager.CurrentState != Core.WindowState.LoadingUI)
             {
-                lock (_stateLock)
-                {
-                    if (_isDisposed) return false;
-                    
-                    // During initialization, allow validation in InitializingWindow state as well
-                    if (_initState != InitializationState.Ready && 
-                        _initState != InitializationState.InitializingWindow) 
-                    {
-                        return false;
-                    }
-                    
-                    if (_mainTabsControl == null) return false;
-                    if (!IsInitialized) return false;
-                    
-                    return true;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Window state validation failed");
+                _instanceLogger?.LogWarning($"Window not ready for operations. State: {_stateManager.CurrentState}");
                 return false;
             }
+            
+            return true;
         }
 
         /// <summary>
@@ -1232,37 +1171,7 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                // Transition to Ready state
-                _windowState = UIWindowState.Ready;
-                _instanceLogger?.LogInformation("MainWindow fully loaded and ready");
-                
-                // Create initial tab if needed
-                if (_mainTabsControl != null && _mainTabsControl.Items.Count == 0)
-                {
-                    AddNewMainWindowTabSafely();
-                }
-
-                // Connect all pinned panels
-                ConnectAllPinnedPanels();
-
-                // Refresh pinned panels
-                RefreshAllPinnedPanels();
-                
-                // Refresh theme elements
-                RefreshThemeElements();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error in Loaded event");
-                
-                // Make sure we have at least one tab
-                if (_mainTabsControl != null && _mainTabsControl.Items.Count == 0)
-                {
-                    SafeAddNewTab();
-                }
-            }
+            _stateManager.TryTransitionTo(Core.WindowState.Ready, out _);
         }
 
         /// <summary>
@@ -1291,13 +1200,11 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         public void PerformOperation()
         {
-            if (_windowState != UIWindowState.Ready)
+            if (!_stateManager.IsOperational)
             {
-                _instanceLogger?.LogWarning($"Operation attempted in {_windowState} state");
+                _instanceLogger?.LogWarning($"Operation attempted in {_stateManager.CurrentState} state");
                 return;
             }
-            
-            // Proceed with operation...
         }
 
         /// <summary>
@@ -1305,7 +1212,7 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private bool IsWindowReadyForOperations()
         {
-            return _windowState == UIWindowState.Ready && !_isDisposed;
+            return _stateManager.IsOperational;
         }
 
         /// <summary>
@@ -1313,50 +1220,13 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         internal void AddNewMainWindowTabSafely()
         {
-            // Only enforce operation state if we're in ready state
-            if (_initState == InitializationState.Ready)
+            if (_stateManager.CurrentState == Core.WindowState.Ready)
             {
-                EnsureOperationAllowed("AddNewMainWindowTab");
+                AddNewMainWindowTab();
             }
-            
-            try
+            else if (_stateManager.CurrentState == Core.WindowState.Ready)
             {
-                _logger.LogDebug("Adding new main window tab");
-                
-                // Use direct access to MainTabs during initialization, safe access when ready
-                TabControl tabControl;
-                if (_initState == InitializationState.Ready)
-                {
-                    tabControl = MainTabsSafe;
-                }
-                else
-                {
-                    tabControl = MainTabs; // Use direct XAML access during initialization
-                }
-                
-                // Try to create new tab using existing method
-                var container = AddNewMainWindowTab();
-                if (container == null)
-                {
-                    // Fallback to safe method
-                    SafeAddNewTab();
-                }
-                
-                _logger.LogInformation("New tab added successfully");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to add new tab");
-                // Try fallback method
-                try
-                {
-                    SafeAddNewTab();
-                }
-                catch (Exception fallbackEx)
-                {
-                    _logger.LogError(fallbackEx, "Fallback tab creation also failed");
-                    throw;
-                }
+                _instanceLogger?.LogDebug("Deferring tab creation until window is ready");
             }
         }
 
@@ -1365,19 +1235,16 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void EnsureOperationAllowed(string operationName)
         {
-            lock (_stateLock)
+            if (_stateManager.IsClosing)
             {
-                if (_isDisposed)
-                {
-                    throw new ObjectDisposedException(nameof(MainWindow), 
-                        $"Cannot perform {operationName} on disposed window");
-                }
-                
-                if (_initState != InitializationState.Ready)
-                {
-                    throw new InvalidOperationException(
-                        $"Cannot perform {operationName} in state {_initState}");
-                }
+                throw new ObjectDisposedException(nameof(MainWindow), 
+                    $"Cannot perform {operationName} on disposed window");
+            }
+
+            if (!_stateManager.IsOperational)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot perform {operationName} in state {_stateManager.CurrentState}");
             }
         }
 
@@ -1388,25 +1255,17 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                lock (_stateLock)
-                {
-                    _initState = InitializationState.Failed;
-                    _mainTabsControl = null;
-                    
-                    // Unsubscribe from events
-                    try
-                    {
-                        Loaded -= MainWindow_Loaded;
-                        Closing -= MainWindow_Closing;
-                        DragOver -= MainWindow_DragOver;
-                        Drop -= MainWindow_Drop;
-                    }
-                    catch { }
-                }
+                _stateManager.TryTransitionTo(Core.WindowState.Failed, out _);
+                
+                // Emergency cleanup operations
+                _eventSubscriptions?.Dispose();
+                ClearNavigationHistory();
+                
+                _instanceLogger?.LogWarning("Emergency cleanup performed");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Emergency cleanup encountered an error");
+                System.Diagnostics.Debug.WriteLine($"Error during emergency cleanup: {ex.Message}");
             }
         }
 
@@ -1416,8 +1275,11 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         public virtual void Dispose()
         {
-            Dispose(true);
-            GC.SuppressFinalize(this);
+            if (!_stateManager.IsClosing)
+            {
+                Dispose(true);
+                GC.SuppressFinalize(this);
+            }
         }
 
         /// <summary>
@@ -1426,47 +1288,38 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         protected virtual void Dispose(bool disposing)
         {
-            if (!_isDisposed)
+            if (!_stateManager.IsClosing)
             {
                 if (disposing)
                 {
                     try
                     {
-                        // ENHANCED FOR FIX 4: Event Handler Memory Leak Resolution
-                        // Dispose all weak event subscriptions automatically
-                        try
-                        {
-                            _instanceLogger?.LogInformation($"Disposing {_eventSubscriptions.Count} weak event subscriptions");
-                            _eventSubscriptions?.Dispose();
-                            _instanceLogger?.LogInformation("Weak event subscriptions disposed successfully");
-                        }
-                        catch (Exception ex)
-                        {
-                            _instanceLogger?.LogError(ex, "Error disposing weak event subscriptions");
-                        }
-
-                        // Transition to disposed state
-                        _windowState = UIWindowState.Disposed;
+                        _stateManager.TryTransitionTo(Core.WindowState.Disposed, out _);
                         
-                        // Clean up other resources
-                        _navigationHistory.Clear();
-                        _detachedWindows?.Clear();
+                        // Cleanup event subscriptions
+                        _eventSubscriptions?.Dispose();
                         
-                        // Log completion
-                        _instanceLogger?.LogInformation("MainWindow disposed successfully with event cleanup");
+                        // Cleanup logger reference
+                        DecrementLoggerRef();
+                        
+                        // Clear navigation history
+                        ClearNavigationHistory();
+                        
+                        // Unregister from lifecycle manager
+                        UnregisterFromLifecycleManager();
+                        
+                        _instanceLogger?.LogInformation("MainWindow disposed successfully");
                     }
                     catch (Exception ex)
                     {
-                        _instanceLogger?.LogError(ex, "Error during disposal");
-                    }
-                    finally
-                    {
-                        DecrementLoggerRef(); // Add this line
+                        System.Diagnostics.Debug.WriteLine($"Error during MainWindow disposal: {ex.Message}");
                     }
                 }
                 
-                _isDisposed = true;
+                _stateManager.TryTransitionTo(Core.WindowState.Disposed, out _);
             }
+            
+            // Don't call base.Dispose() as Window doesn't implement IDisposable
         }
 
         /// <summary>
@@ -1474,7 +1327,22 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         protected override void OnClosing(CancelEventArgs e)
         {
-            _windowState = UIWindowState.Closing;
+            try
+            {
+                _stateManager.TryTransitionTo(Core.WindowState.Closing, out _);
+                
+                // Save window layout
+                SaveWindowLayout();
+                
+                // Additional cleanup can be performed here
+                
+                _instanceLogger?.LogInformation("Window closing initiated");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error during window closing");
+            }
+            
             base.OnClosing(e);
         }
 
@@ -1484,48 +1352,8 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         protected override void OnClosed(EventArgs e)
         {
-            try
-            {
-                // Transition to disposed state
-                _windowState = UIWindowState.Disposed;
-                _instanceLogger?.LogInformation("Window closed, performing cleanup");
-                
-                // FIX 3: Clean up navigation history
-                lock (_historyLock)
-                {
-                    _navigationHistory.Clear();
-                    _currentHistoryNode = null;
-                    _instanceLogger?.LogDebug("Navigation history cleared on window close");
-                }
-                
-                // FIX 5: Close all detached windows if this is the main window
-                if (Application.Current?.MainWindow == this)
-                {
-                    var windows = GetActiveDetachedWindows().ToList();
-                    foreach (var window in windows)
-                    {
-                        try
-                        {
-                            window.Close();
-                        }
-                        catch (Exception ex)
-                        {
-                            _instanceLogger?.LogError(ex, "Error closing detached window during shutdown");
-                        }
-                    }
-                }
-                
-                // Dispose resources including event handlers
-                Dispose();
-            }
-            catch (Exception ex)
-            {
-                _instanceLogger?.LogError(ex, "Error during window close cleanup");
-            }
-            finally
-            {
-                base.OnClosed(e);
-            }
+            _stateManager.TryTransitionTo(Core.WindowState.Disposed, out _);
+            base.OnClosed(e);
         }
 
         #endregion
@@ -1784,7 +1612,7 @@ namespace ExplorerPro.UI.MainWindow
                                     _instanceLogger?.LogError(ex, "Error executing shortcut: {ShortcutName}", shortcut.Name);
                                 }
                             },
-                            (s, e) => e.CanExecute = !_isDisposed && _windowState != UIWindowState.Disposed));
+                            (s, e) => e.CanExecute = !_stateManager.IsClosing && _stateManager.IsOperational));
                     }
                 }
                 
@@ -4394,16 +4222,15 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                var eventCount = _eventSubscriptions?.Count ?? 0;
-                var isDisposed = _isDisposed;
-                var windowState = _windowState;
+                var isDisposed = _stateManager.IsClosing;
+                var windowState = _stateManager.CurrentState;
                 
-                _instanceLogger?.LogInformation($"Weak event validation - Count: {eventCount}, Disposed: {isDisposed}, State: {windowState}");
+                _instanceLogger?.LogDebug($"Event cleanup validation - Disposed: {isDisposed}, State: {windowState}");
                 
                 // If disposed, should have no tracked events (weak events auto-cleanup)
-                if (isDisposed && eventCount > 0)
+                if (isDisposed && _eventSubscriptions?.Count > 0)
                 {
-                    _instanceLogger?.LogWarning($"Potential memory issue: {eventCount} weak events still tracked after disposal");
+                    _instanceLogger?.LogWarning($"Potential memory issue: {_eventSubscriptions.Count} weak events still tracked after disposal");
                     return false;
                 }
                 
@@ -4411,7 +4238,7 @@ namespace ExplorerPro.UI.MainWindow
             }
             catch (Exception ex)
             {
-                _instanceLogger?.LogError(ex, "Error validating weak event cleanup");
+                _instanceLogger?.LogError(ex, "Error during event cleanup validation");
                 return false;
             }
         }
@@ -4761,10 +4588,11 @@ namespace ExplorerPro.UI.MainWindow
 
         internal bool ValidateInitialization()
         {
-            return MainTabs != null && 
-                   _metadataManager != null && 
-                   IsInitialized && 
-                   _windowState != UIWindowState.Disposed;
+            return MainTabs != null &&
+                   StatusText != null &&
+                   ItemCountText != null &&
+                   SelectionText != null &&
+                   !_stateManager.IsClosing;
         }
 
         #endregion
@@ -4778,7 +4606,7 @@ namespace ExplorerPro.UI.MainWindow
     public class WindowInitState
     {
         public MainWindow Window { get; set; }
-        public InitializationState State { get; set; }
+        public Core.WindowState State { get; set; }
         public List<string> CompletedSteps { get; set; } = new List<string>();
         public Dictionary<string, object> Properties { get; set; } = new Dictionary<string, object>();
     }
@@ -4813,7 +4641,7 @@ namespace ExplorerPro.UI.MainWindow
         public void Undo(object state)
         {
             // Cannot truly undo InitializeComponent, but we can mark state
-            _window.UpdateInitializationState(InitializationState.Failed);
+            _window.UpdateInitializationState(Core.WindowState.Failed);
             
             if (state is WindowInitState windowState)
             {
