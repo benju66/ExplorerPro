@@ -1,119 +1,101 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
-using ExplorerPro.UI.MainWindow;
 
 namespace ExplorerPro.Core
 {
     /// <summary>
-    /// Context object that tracks the state and progress of window initialization.
-    /// Provides a centralized way to manage initialization data, state transitions, and cleanup.
+    /// Thread-safe context for window initialization with proper state tracking
     /// </summary>
-    public class WindowInitializationContext
+    public sealed class WindowInitializationContext : IDisposable
     {
-        /// <summary>
-        /// The MainWindow instance being initialized.
-        /// </summary>
-        public MainWindow Window { get; }
+        private readonly object _lock = new object();
+        private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
+        private readonly List<string> _completedSteps = new List<string>();
+        private readonly Dictionary<string, object> _contextData = new Dictionary<string, object>();
         
-        /// <summary>
-        /// Current initialization state of the window.
-        /// </summary>
-        public InitializationState CurrentState { get; set; }
-        
-        /// <summary>
-        /// Dictionary of properties that can be used to pass data between initialization steps.
-        /// </summary>
-        public Dictionary<string, object> Properties { get; } = new();
-        
-        /// <summary>
-        /// List of completed initialization steps for tracking and rollback purposes.
-        /// </summary>
-        public List<string> CompletedSteps { get; } = new();
-        
-        /// <summary>
-        /// Cancellation token for aborting initialization if needed.
-        /// </summary>
-        public CancellationToken CancellationToken { get; set; }
-        
-        /// <summary>
-        /// Timestamp when initialization was started.
-        /// </summary>
+        public InitializationState CurrentState { get; private set; }
+        public Exception LastError { get; private set; }
+        public bool IsDisposed { get; private set; }
         public DateTime StartTime { get; }
         
-        /// <summary>
-        /// Initializes a new instance of the WindowInitializationContext.
-        /// </summary>
-        /// <param name="window">The MainWindow instance to initialize</param>
-        /// <exception cref="ArgumentNullException">Thrown when window is null</exception>
-        public WindowInitializationContext(MainWindow window)
+        public WindowInitializationContext()
         {
-            Window = window ?? throw new ArgumentNullException(nameof(window));
             CurrentState = InitializationState.Created;
             StartTime = DateTime.UtcNow;
-            CancellationToken = CancellationToken.None;
         }
         
-        /// <summary>
-        /// Initializes a new instance of the WindowInitializationContext with a cancellation token.
-        /// </summary>
-        /// <param name="window">The MainWindow instance to initialize</param>
-        /// <param name="cancellationToken">Token for cancelling initialization</param>
-        /// <exception cref="ArgumentNullException">Thrown when window is null</exception>
-        public WindowInitializationContext(MainWindow window, CancellationToken cancellationToken)
+        public bool TransitionTo(InitializationState newState)
         {
-            Window = window ?? throw new ArgumentNullException(nameof(window));
-            CurrentState = InitializationState.Created;
-            StartTime = DateTime.UtcNow;
-            CancellationToken = cancellationToken;
-        }
-        
-        /// <summary>
-        /// Adds a property to the context.
-        /// </summary>
-        /// <param name="key">Property key</param>
-        /// <param name="value">Property value</param>
-        public void SetProperty(string key, object value)
-        {
-            Properties[key] = value;
-        }
-        
-        /// <summary>
-        /// Gets a property from the context.
-        /// </summary>
-        /// <typeparam name="T">Type of the property</typeparam>
-        /// <param name="key">Property key</param>
-        /// <returns>The property value, or default(T) if not found</returns>
-        public T GetProperty<T>(string key)
-        {
-            return Properties.TryGetValue(key, out var value) && value is T typedValue ? typedValue : default(T);
-        }
-        
-        /// <summary>
-        /// Marks an initialization step as completed.
-        /// </summary>
-        /// <param name="stepName">Name of the completed step</param>
-        public void MarkStepCompleted(string stepName)
-        {
-            if (!CompletedSteps.Contains(stepName))
+            lock (_lock)
             {
-                CompletedSteps.Add(stepName);
+                if (IsDisposed) return false;
+                
+                // Validate state transition
+                if (!IsValidTransition(CurrentState, newState))
+                {
+                    LastError = new InvalidOperationException(
+                        $"Invalid state transition from {CurrentState} to {newState}");
+                    return false;
+                }
+                
+                CurrentState = newState;
+                _completedSteps.Add($"{newState} at {_stopwatch.ElapsedMilliseconds}ms");
+                return true;
             }
         }
         
-        /// <summary>
-        /// Checks if a specific step has been completed.
-        /// </summary>
-        /// <param name="stepName">Name of the step to check</param>
-        /// <returns>True if the step has been completed</returns>
-        public bool IsStepCompleted(string stepName)
+        private bool IsValidTransition(InitializationState from, InitializationState to)
         {
-            return CompletedSteps.Contains(stepName);
+            // Define valid state transitions
+            return (from, to) switch
+            {
+                (InitializationState.Created, InitializationState.InitializingComponents) => true,
+                (InitializationState.InitializingComponents, InitializationState.InitializingWindow) => true,
+                (InitializationState.InitializingWindow, InitializationState.Ready) => true,
+                (_, InitializationState.Failed) => true, // Can fail from any state
+                _ => false
+            };
+        }
+        
+        public void RecordStep(string stepName)
+        {
+            lock (_lock)
+            {
+                _completedSteps.Add($"{stepName} at {_stopwatch.ElapsedMilliseconds}ms");
+            }
+        }
+        
+        public void SetData(string key, object value)
+        {
+            lock (_lock)
+            {
+                _contextData[key] = value;
+            }
+        }
+        
+        public T GetData<T>(string key)
+        {
+            lock (_lock)
+            {
+                return _contextData.TryGetValue(key, out var value) ? (T)value : default;
+            }
         }
         
         /// <summary>
         /// Gets the elapsed time since initialization started.
         /// </summary>
-        public TimeSpan ElapsedTime => DateTime.UtcNow - StartTime;
+        public TimeSpan ElapsedTime => _stopwatch.Elapsed;
+        
+        public void Dispose()
+        {
+            lock (_lock)
+            {
+                IsDisposed = true;
+                _contextData.Clear();
+                _completedSteps.Clear();
+            }
+        }
     }
 } 

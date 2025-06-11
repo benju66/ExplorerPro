@@ -65,64 +65,106 @@ namespace ExplorerPro.UI.MainWindow
     /// </summary>
     public partial class MainWindow : Window, IDisposable
     {
-        #region Shared Logger Infrastructure - FIX 1: Logger Factory Memory Leaks
+        #region Thread-Safe Shared Logger Infrastructure
 
-        /// <summary>
-        /// IMPLEMENTATION OF FIX 1: Logger Factory Memory Leaks
-        /// 
-        /// This implementation eliminates per-window LoggerFactory creation and ensures proper resource disposal.
-        /// 
-        /// Key Features:
-        /// - Single shared static LoggerFactory for all MainWindow instances
-        /// - Instance-specific loggers with unique window ID context  
-        /// - Application-level cleanup through App.xaml.cs OnExit method
-        /// - Validation methods for testing and monitoring
-        /// - Zero breaking changes to existing code
-        /// 
-        /// Benefits:
-        /// - Prevents memory leaks from multiple LoggerFactory instances
-        /// - Reduces application memory footprint
-        /// - Ensures proper disposal of logging resources
-        /// - Maintains logging functionality and performance
-        /// - Supports dependency injection patterns
-        /// 
-        /// Usage:
-        /// - All MainWindow instances automatically use the shared logger factory
-        /// - External components can access via SharedLoggerFactory property
-        /// - Automatic cleanup when application exits via DisposeSharedLogger()
-        /// - Validation available through IsUsingSharedLogger() and GetSharedLoggerStats()
-        /// </summary>
-        
-        /// <summary>
-        /// Shared logger factory for all MainWindow instances to prevent memory leaks.
-        /// This static instance is created once and reused across all window instances.
-        /// </summary>
-        private static readonly ILoggerFactory _sharedLoggerFactory = CreateSharedLoggerFactory();
-        
-        /// <summary>
-        /// Shared static logger for class-level operations and diagnostics.
-        /// </summary>
-        private static readonly ILogger<MainWindow> _staticLogger = _sharedLoggerFactory.CreateLogger<MainWindow>();
+        private static readonly object _loggerFactoryLock = new object();
+        private static ILoggerFactory _sharedLoggerFactory;
+        private static int _loggerFactoryRefCount = 0;
+        private static bool _isDisposing = false;
+        private static ILogger<MainWindow> _staticLogger;
 
-        /// <summary>
-        /// Creates a single shared logger factory for all MainWindow instances.
-        /// Configured with console output and appropriate logging levels.
-        /// </summary>
-        /// <returns>Configured ILoggerFactory instance</returns>
-        private static ILoggerFactory CreateSharedLoggerFactory()
+        static MainWindow()
         {
-            return LoggerFactory.Create(builder =>
+            lock (_loggerFactoryLock)
             {
-                builder.AddConsole()
-                       .SetMinimumLevel(LogLevel.Information);
-            });
+                _sharedLoggerFactory = LoggerFactory.Create(builder =>
+                {
+                    builder.AddConsole()
+                           .SetMinimumLevel(LogLevel.Debug);
+                });
+                _staticLogger = _sharedLoggerFactory.CreateLogger<MainWindow>();
+            }
         }
 
         /// <summary>
-        /// Public property to access the shared logger factory for other components.
-        /// Enables dependency injection scenarios and external service access.
+        /// Thread-safe logger factory access with disposal protection
         /// </summary>
-        public static ILoggerFactory SharedLoggerFactory => _sharedLoggerFactory;
+        public static ILoggerFactory SharedLoggerFactory
+        {
+            get
+            {
+                lock (_loggerFactoryLock)
+                {
+                    if (_isDisposing || _sharedLoggerFactory == null)
+                    {
+                        throw new ObjectDisposedException(nameof(SharedLoggerFactory), 
+                            "Logger factory has been disposed or is being disposed");
+                    }
+                    return _sharedLoggerFactory;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Increment reference count when window is created
+        /// </summary>
+        private static void IncrementLoggerRef()
+        {
+            lock (_loggerFactoryLock)
+            {
+                _loggerFactoryRefCount++;
+            }
+        }
+
+        /// <summary>
+        /// Decrement reference count when window is disposed
+        /// </summary>
+        private static void DecrementLoggerRef()
+        {
+            lock (_loggerFactoryLock)
+            {
+                _loggerFactoryRefCount--;
+            }
+        }
+
+        /// <summary>
+        /// Safely dispose shared logger with reference counting
+        /// </summary>
+        public static void DisposeSharedLogger()
+        {
+            lock (_loggerFactoryLock)
+            {
+                if (_isDisposing) return;
+                _isDisposing = true;
+
+                // Wait for all windows to release their references
+                var timeout = DateTime.UtcNow.AddSeconds(5);
+                while (_loggerFactoryRefCount > 0 && DateTime.UtcNow < timeout)
+                {
+                    System.Threading.Thread.Sleep(100);
+                }
+
+                if (_loggerFactoryRefCount > 0)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"WARNING: Disposing logger factory with {_loggerFactoryRefCount} active references");
+                }
+
+                try
+                {
+                    _sharedLoggerFactory?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error disposing logger factory: {ex.Message}");
+                }
+                finally
+                {
+                    _sharedLoggerFactory = null;
+                    _staticLogger = null;
+                }
+            }
+        }
 
         /// <summary>
         /// Creates an instance-specific logger with window ID context.
@@ -132,25 +174,7 @@ namespace ExplorerPro.UI.MainWindow
         /// <returns>Logger instance configured for this window</returns>
         private ILogger<MainWindow> CreateInstanceLogger(string windowId)
         {
-            return _sharedLoggerFactory.CreateLogger<MainWindow>();
-        }
-
-        /// <summary>
-        /// Application-level cleanup method for the shared logger factory.
-        /// IMPORTANT: Call this from App.xaml.cs OnExit method to prevent resource leaks.
-        /// </summary>
-        public static void DisposeSharedLogger()
-        {
-            try
-            {
-                _sharedLoggerFactory?.Dispose();
-                _staticLogger?.LogInformation("Shared logger factory disposed successfully");
-            }
-            catch (Exception ex)
-            {
-                // Last resort logging since we're shutting down
-                System.Diagnostics.Debug.WriteLine($"Error disposing shared logger factory: {ex.Message}");
-            }
+            return SharedLoggerFactory.CreateLogger<MainWindow>();
         }
 
         /// <summary>
@@ -659,99 +683,133 @@ namespace ExplorerPro.UI.MainWindow
         /// Initializes a new instance of MainWindow with comprehensive error handling.
         /// ENHANCED FOR FIX 1: Logger Factory Memory Leaks
         /// </summary>
-        public MainWindow(
-            ILogger<MainWindow> logger, 
-            MainWindowInitializer initializer,
-            ExceptionHandler exceptionHandler,
-            ISettingsService settingsService = null)
-        {
-            // Use provided logger or fall back to shared logger
-            _logger = logger ?? _staticLogger;
-            
-            // Create instance-specific logger with window ID context
-            var windowId = Guid.NewGuid().ToString("N").Substring(0, 8);
-            _instanceLogger = CreateInstanceLogger(windowId);
-            
-            _initializer = initializer ?? throw new ArgumentNullException(nameof(initializer));
-            _exceptionHandler = exceptionHandler ?? throw new ArgumentNullException(nameof(exceptionHandler));
-            _settingsService = settingsService ?? new SettingsService(App.Settings ?? new SettingsManager(), _logger);
+        #region Safe Initialization Pipeline
 
+        private readonly TaskCompletionSource<bool> _initializationComplete = new TaskCompletionSource<bool>();
+
+        /// <summary>
+        /// Single constructor pattern - all initialization paths lead here
+        /// </summary>
+        public MainWindow() : this(CreateDefaultServices())
+        {
+        }
+
+        /// <summary>
+        /// Primary constructor with dependency injection
+        /// </summary>
+        private MainWindow((ILogger<MainWindow> logger, MainWindowInitializer initializer, ExceptionHandler handler, ISettingsService settings) services)
+        {
+            // Phase 1: Essential initialization only
+            _initContext = new WindowInitializationContext();
+            _logger = services.logger ?? throw new ArgumentNullException(nameof(services.logger));
+            _initializer = services.initializer ?? throw new ArgumentNullException(nameof(services.initializer));
+            _exceptionHandler = services.handler ?? throw new ArgumentNullException(nameof(services.handler));
+            _settingsService = services.settings ?? throw new ArgumentNullException(nameof(services.settings));
+            
+            IncrementLoggerRef();
+            
             try
             {
-                _windowState = UIWindowState.Initializing;
-                _instanceLogger.LogInformation($"Creating new MainWindow instance (ID: {windowId})");
+                // Phase 2: WPF initialization (keep context in Created state for now)
+                InitializeComponent();
                 
-                // Initialize core fields first
-                InitializeCoreFields();
+                // Create instance logger after we have a handle
+                var windowId = Guid.NewGuid().ToString("N").Substring(0, 8);
+                _instanceLogger = CreateInstanceLogger(windowId);
+                _instanceLogger.LogInformation($"MainWindow created (ID: {windowId})");
                 
-                // Perform initialization through the initializer
-                var result = _initializer.InitializeWindow(this);
+                // Phase 3: Defer all other initialization
+                Loaded += OnWindowLoadedAsync;
+            }
+            catch (Exception ex)
+            {
+                _initContext.TransitionTo(InitializationState.Failed);
+                DecrementLoggerRef();
                 
-                if (!result.Success)
+                // Log and rethrow - window creation must fail cleanly
+                _logger?.LogCritical(ex, "Failed to create MainWindow");
+                throw new WindowInitializationException("Window creation failed", _initContext.CurrentState, ex);
+            }
+        }
+
+        /// <summary>
+        /// Factory method for default services
+        /// </summary>
+        private static (ILogger<MainWindow>, MainWindowInitializer, ExceptionHandler, ISettingsService) CreateDefaultServices()
+        {
+            var logger = SharedLoggerFactory.CreateLogger<MainWindow>();
+            var initializerLogger = SharedLoggerFactory.CreateLogger<MainWindowInitializer>();
+            var initializer = new MainWindowInitializer(initializerLogger);
+            
+            var handlerLogger = SharedLoggerFactory.CreateLogger<ExceptionHandler>();
+            var telemetry = new ConsoleTelemetryService();
+            var handler = new ExceptionHandler(handlerLogger, telemetry);
+            
+            var settings = new SettingsService(App.Settings ?? new SettingsManager(), logger);
+            
+            return (logger, initializer, handler, settings);
+        }
+
+        /// <summary>
+        /// Async initialization on Loaded event
+        /// </summary>
+        private async void OnWindowLoadedAsync(object sender, RoutedEventArgs e)
+        {
+            // Unhook to prevent multiple calls
+            Loaded -= OnWindowLoadedAsync;
+            
+            try
+            {
+                _instanceLogger.LogInformation("Starting async window initialization");
+                
+                var result = await _initializer.InitializeWindowAsync(this, _initContext);
+                
+                if (!result.IsSuccess)
                 {
-                    // Initialization failed - throw to prevent invalid window creation
                     throw new WindowInitializationException(
                         result.ErrorMessage, 
                         result.State, 
                         result.Error);
                 }
                 
-                // Window is ready for use
-                _logger.LogInformation("MainWindow created successfully");
+                _windowState = UIWindowState.Ready;
+                _initializationComplete.SetResult(true);
+                
+                _instanceLogger.LogInformation("Window initialization completed");
+                
+                // Create initial tab if needed
+                if (MainTabs?.Items.Count == 0)
+                {
+                    AddNewMainWindowTabSafely();
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogCritical(ex, "Failed to create MainWindow");
+                _windowState = UIWindowState.Disposed;
+                _initializationComplete.SetException(ex);
                 
-                // Ensure window is properly disposed on construction failure
-                try { Dispose(); } catch { }
+                _instanceLogger.LogError(ex, "Window initialization failed");
                 
-                throw;
+                // Show user-friendly error
+                MessageBox.Show(
+                    $"Failed to initialize window: {ex.Message}\n\nThe application will now close.",
+                    "Initialization Error", 
+                    MessageBoxButton.OK, 
+                    MessageBoxImage.Error);
+                
+                Close();
             }
         }
 
         /// <summary>
-        /// Default constructor that creates MainWindow with shared logger infrastructure.
-        /// ENHANCED FOR FIX 1: Logger Factory Memory Leaks AND Race Condition Prevention
+        /// Wait for initialization to complete (for testing)
         /// </summary>
-        public MainWindow()
+        public Task<bool> WaitForInitializationAsync()
         {
-            _initContext = new WindowInitializationContext(this);
-            
-            try
-            {
-                SetInitializationState(InitializationState.InitializingComponents);
-                InitializeComponent();
-                SetInitializationState(InitializationState.InitializingWindow);
-                
-                // Create instance-specific logger with window ID context using shared factory
-                var windowId = Guid.NewGuid().ToString("N").Substring(0, 8);
-                _logger = _staticLogger;
-                _instanceLogger = CreateInstanceLogger(windowId);
-                
-                _windowState = UIWindowState.Initializing;
-                _instanceLogger.LogInformation($"MainWindow created with shared logger (ID: {windowId})");
-                
-                // Initialize with shared logger components
-                _initializer = CreateDefaultInitializer();
-                _exceptionHandler = CreateDefaultExceptionHandler();
-                _settingsService = new SettingsService(App.Settings ?? new SettingsManager(), _logger);
-                
-                // Initialize core fields
-                InitializeCoreFields();
-                
-                // Defer other initialization to Loaded event
-                Loaded += OnWindowLoaded;
-                
-                _instanceLogger.LogInformation("MainWindow constructor completed - deferred initialization to Loaded event");
-            }
-            catch (Exception ex)
-            {
-                SetInitializationState(InitializationState.Failed);
-                throw new WindowInitializationException(
-                    "Failed to initialize window components", _initState, ex);
-            }
+            return _initializationComplete.Task;
         }
+
+        #endregion
 
         private void SetInitializationState(InitializationState state)
         {
@@ -785,23 +843,16 @@ namespace ExplorerPro.UI.MainWindow
             {
                 _instanceLogger?.LogInformation("Starting async window initialization");
                 
-                // Use the original synchronous initializer for proven functionality
-                // but run it on a background thread to avoid blocking the UI
-                await Task.Run(() =>
+                // Use the new async initializer
+                var result = await _initializer.InitializeWindowAsync(this, _initContext);
+                
+                if (!result.IsSuccess)
                 {
-                    Dispatcher.Invoke(() =>
-                    {
-                        var result = _initializer.InitializeWindow(this);
-                        
-                        if (!result.Success)
-                        {
-                            throw new WindowInitializationException(
-                                result.ErrorMessage, 
-                                result.State, 
-                                result.Error);
-                        }
-                    });
-                });
+                    throw new WindowInitializationException(
+                        result.ErrorMessage, 
+                        result.State, 
+                        result.Error);
+                }
                 
                 _instanceLogger?.LogInformation("Async window initialization completed successfully");
             }
@@ -949,7 +1000,7 @@ namespace ExplorerPro.UI.MainWindow
         /// Setup handlers for theme changes
         /// ENHANCED FOR FIX 4: Event Handler Memory Leaks
         /// </summary>
-        private void SetupThemeHandlers()
+        internal void SetupThemeHandlers()
         {
             // Create named event handler for proper cleanup
             EventHandler<AppTheme> themeChangedHandler = OnThemeChanged;
@@ -1428,6 +1479,10 @@ namespace ExplorerPro.UI.MainWindow
                     {
                         _instanceLogger?.LogError(ex, "Error during disposal");
                     }
+                    finally
+                    {
+                        DecrementLoggerRef(); // Add this line
+                    }
                 }
                 
                 _isDisposed = true;
@@ -1553,7 +1608,7 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Restore window layout from saved settings.
         /// </summary>
-        private void RestoreWindowLayout()
+        internal void RestoreWindowLayout()
         {
             try
             {
@@ -1681,7 +1736,7 @@ namespace ExplorerPro.UI.MainWindow
         /// Initialize keyboard shortcuts for the application.
         /// ENHANCED FOR FIX 6: Command Binding Memory Overhead - Uses CommandPool for reusable commands
         /// </summary>
-        private void InitializeKeyboardShortcuts()
+        internal void InitializeKeyboardShortcuts()
         {
             try
             {
@@ -4654,6 +4709,90 @@ namespace ExplorerPro.UI.MainWindow
                 string rootPath = fileTree.GetCurrentPath(); // Changed from CurrentPath property to GetCurrentPath method
                 AddNewMainWindowTab(rootPath);
             }
+        }
+
+        #endregion
+
+        #region Initialization Helper Methods
+
+        internal void InitializeMetadataManager()
+        {
+            _metadataManager = App.MetadataManager ?? new MetadataManager();
+        }
+
+        internal void InitializeNavigationHistory()
+        {
+            _navigationHistory.Clear();
+            _currentHistoryNode = null;
+        }
+
+        internal void RegisterWithLifecycleManager()
+        {
+            WindowLifecycleManager.Instance.RegisterWindow(this);
+        }
+
+        internal void UnregisterFromLifecycleManager()
+        {
+            WindowLifecycleManager.Instance.UnregisterWindow(this);
+        }
+
+        internal void ClearNavigationHistory()
+        {
+            lock (_historyLock)
+            {
+                _navigationHistory.Clear();
+                _currentHistoryNode = null;
+            }
+        }
+
+        internal void SetupDragDrop()
+        {
+            AllowDrop = true;
+            DragOver += MainWindow_DragOver;
+            Drop += MainWindow_Drop;
+        }
+
+        internal void ClearDragDrop()
+        {
+            AllowDrop = false;
+            DragOver -= MainWindow_DragOver;
+            Drop -= MainWindow_Drop;
+        }
+
+        internal void WireUpEventHandlers()
+        {
+            if (MainTabs != null)
+            {
+                MainTabs.SelectionChanged += MainTabs_SelectionChanged;
+            }
+            Closing += MainWindow_Closing;
+        }
+
+        internal void ClearAllEventHandlers()
+        {
+            // Execute all cleanup actions
+            lock (_eventCleanupLock)
+            {
+                foreach (var cleanup in _eventCleanupActions)
+                {
+                    try { cleanup(); } catch { }
+                }
+                _eventCleanupActions.Clear();
+            }
+        }
+
+        internal void ClearKeyboardShortcuts()
+        {
+            // Clear keyboard shortcut bindings
+            InputBindings.Clear();
+        }
+
+        internal bool ValidateInitialization()
+        {
+            return MainTabs != null && 
+                   _metadataManager != null && 
+                   IsInitialized && 
+                   _windowState != UIWindowState.Disposed;
         }
 
         #endregion

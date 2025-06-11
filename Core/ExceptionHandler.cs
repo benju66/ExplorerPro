@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 
 namespace ExplorerPro.Core
@@ -15,6 +18,12 @@ namespace ExplorerPro.Core
         private readonly ILogger<ExceptionHandler> _logger;
         private readonly ITelemetryService _telemetry;
         private readonly List<IExceptionPolicy> _policies;
+        
+        // Circuit breaker fields to prevent infinite loops
+        private readonly ThreadLocal<int> _recursionDepth = new ThreadLocal<int>(() => 0);
+        private const int MaxRecursionDepth = 3;
+        private readonly ConcurrentDictionary<string, DateTime> _recentErrors = new ConcurrentDictionary<string, DateTime>();
+        private readonly TimeSpan _errorThrottleWindow = TimeSpan.FromSeconds(1);
         
         public ExceptionHandler(ILogger<ExceptionHandler> logger, ITelemetryService telemetry)
         {
@@ -37,6 +46,41 @@ namespace ExplorerPro.Core
         {
             if (exception == null)
                 throw new ArgumentNullException(nameof(exception));
+
+            // Circuit breaker pattern to prevent infinite loops
+            if (_recursionDepth.Value >= MaxRecursionDepth)
+            {
+                // Emergency fallback - write to console only
+                System.Diagnostics.Debug.WriteLine($"[CRITICAL] Exception handler recursion limit reached: {exception?.Message}");
+                return new ExceptionResult
+                {
+                    Exception = exception,
+                    Context = context,
+                    Timestamp = DateTime.UtcNow,
+                    CallerInfo = new CallerInfo(memberName, filePath, lineNumber),
+                    CanContinue = false,
+                    Severity = ExceptionSeverity.Critical
+                };
+            }
+
+            // Throttle repeated errors
+            var errorKey = $"{exception?.GetType().Name}:{exception?.Message}";
+            if (_recentErrors.TryGetValue(errorKey, out var lastError))
+            {
+                if (DateTime.UtcNow - lastError < _errorThrottleWindow)
+                {
+                    return new ExceptionResult
+                    {
+                        Exception = exception,
+                        Context = context,
+                        Timestamp = DateTime.UtcNow,
+                        CallerInfo = new CallerInfo(memberName, filePath, lineNumber),
+                        CanContinue = true,
+                        Severity = ExceptionSeverity.Low
+                    };
+                }
+            }
+            _recentErrors[errorKey] = DateTime.UtcNow;
             
             var result = new ExceptionResult
             {
@@ -45,7 +89,8 @@ namespace ExplorerPro.Core
                 Timestamp = DateTime.UtcNow,
                 CallerInfo = new CallerInfo(memberName, filePath, lineNumber)
             };
-            
+
+            _recursionDepth.Value++;
             try
             {
                 // 1. Classify the exception
@@ -84,6 +129,21 @@ namespace ExplorerPro.Core
                 result.HandlerException = handlerEx;
                 result.CanContinue = false;
                 return result;
+            }
+            finally
+            {
+                _recursionDepth.Value--;
+                
+                // Clean up old throttle entries periodically
+                if (_recentErrors.Count > 100)
+                {
+                    var cutoff = DateTime.UtcNow - _errorThrottleWindow;
+                    var keysToRemove = _recentErrors.Where(kvp => kvp.Value < cutoff).Select(kvp => kvp.Key).ToList();
+                    foreach (var key in keysToRemove)
+                    {
+                        _recentErrors.TryRemove(key, out _);
+                    }
+                }
             }
         }
         

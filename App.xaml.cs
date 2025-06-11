@@ -599,10 +599,21 @@ namespace ExplorerPro
         {
             try
             {
-                base.OnExit(e);
+                // Close all windows first
+                foreach (Window window in Windows)
+                {
+                    try
+                    {
+                        window.Close();
+                    }
+                    catch { }
+                }
 
-                // Save settings on exit
-                Console.WriteLine("Application exiting, saving settings and state...");
+                // Wait briefly for windows to finish closing
+                System.Threading.Thread.Sleep(100);
+
+                // Now safe to dispose logger
+                ExplorerPro.UI.MainWindow.MainWindow.DisposeSharedLogger();
                 
                 // Save state of each manager separately to isolate errors
                 SaveSettingsOnExit();
@@ -617,16 +628,16 @@ namespace ExplorerPro
                 // Dispose logger factory
                 DisposeLoggerFactory();
                 
-                // Dispose shared MainWindow logger factory - FIX 1: Logger Factory Memory Leaks
-                DisposeMainWindowSharedLogger();
-                
                 // Log application exit
                 LogApplicationExit();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error during application exit: {ex.Message}");
-                // Silently fail if saving fails on exit
+                System.Diagnostics.Debug.WriteLine($"Error during application exit: {ex.Message}");
+            }
+            finally
+            {
+                base.OnExit(e);
             }
         }
         
