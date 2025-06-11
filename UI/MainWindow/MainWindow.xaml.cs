@@ -24,6 +24,7 @@ using ExplorerPro.UI.Panels.PinnedPanel;
 using ExplorerPro.Utilities;
 using ExplorerPro.Themes;
 using ExplorerPro.Core;
+using ExplorerPro.Core.Disposables;
 using System.Runtime.CompilerServices;
 // Add reference to System.Windows.Forms but use an alias
 using WinForms = System.Windows.Forms;
@@ -230,7 +231,7 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                var subscription = WeakEventHelper.SubscribeWeak(source, eventName, handler);
+                var subscription = WeakEventHelper.Subscribe(source, eventName, handler);
                 _eventSubscriptions.Add(subscription);
                 
                 _instanceLogger?.LogDebug($"Subscribed to event '{eventName}' with weak reference (Total: {_eventSubscriptions.Count})");
@@ -260,7 +261,22 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                var subscription = WeakEventHelper.SubscribeRoutedWeak(element, routedEvent, handler);
+                // For routed events, we'll use a manual weak reference approach
+                var weakRef = new WeakReference(handler.Target);
+                var method = handler.Method;
+                
+                RoutedEventHandler weakHandler = (s, e) =>
+                {
+                    var target = weakRef.Target;
+                    if (target != null)
+                    {
+                        method.Invoke(target, new object[] { s, e });
+                    }
+                };
+                
+                element.AddHandler(routedEvent, weakHandler);
+                
+                var subscription = Disposable.Create(() => element.RemoveHandler(routedEvent, weakHandler));
                 _eventSubscriptions.Add(subscription);
                 
                 _instanceLogger?.LogDebug($"Subscribed to routed event '{routedEvent.Name}' with weak reference");
@@ -4311,14 +4327,16 @@ namespace ExplorerPro.UI.MainWindow
                 var tabTitle = tabToDetach.Header?.ToString() ?? "Detached";
                 
                 // Set up window lifecycle management with proper event signature
-                EventHandler<EventArgs> cleanupHandler = (s, e) =>
+                EventHandler cleanupHandler = (s, e) =>
                 {
                     _detachedWindows.TryRemove(windowId, out _);
                     _instanceLogger?.LogInformation($"Detached window {windowId} closed and removed from tracking");
                 };
                 
                 // Subscribe to cleanup using weak event management system
-                _eventSubscriptions.SubscribeWeak<EventArgs>(newWindow, nameof(Window.Closed), cleanupHandler);
+                var subscription = WeakEventHelper.Subscribe<EventArgs>(newWindow, nameof(Window.Closed), 
+                    (sender, args) => cleanupHandler(sender, args));
+                _eventSubscriptions.Add(subscription);
                 
                 // Track the window with weak reference
                 _detachedWindows[windowId] = new WeakReference<MainWindow>(newWindow);

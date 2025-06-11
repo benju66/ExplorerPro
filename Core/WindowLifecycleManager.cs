@@ -58,7 +58,7 @@ namespace ExplorerPro.Core
             // Auto-cleanup on close (weak subscription)
             try 
             {
-                var cleanup = WeakEventHelper.SubscribeWeak<EventArgs>(
+                var cleanup = WeakEventHelper.Subscribe<EventArgs>(
                     window,
                     nameof(window.Closed),
                     (s, e) => UnregisterWindowById(id));
