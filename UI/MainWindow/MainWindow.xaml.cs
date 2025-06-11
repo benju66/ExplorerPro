@@ -1720,7 +1720,7 @@ namespace ExplorerPro.UI.MainWindow
                 {
                     // Read window state
                     int stateValue = reader.ReadInt32();
-                    WindowState = (WindowState)stateValue;
+                    WindowState = (System.Windows.WindowState)stateValue;
 
                     return true;
                 }
@@ -3747,14 +3747,14 @@ namespace ExplorerPro.UI.MainWindow
             {
                 // Exit fullscreen
                 WindowStyle = WindowStyle.SingleBorderWindow;
-                WindowState = WindowState.Normal;
+                WindowState = System.Windows.WindowState.Normal;
                 ResizeMode = ResizeMode.CanResize;
             }
             else
             {
                 // Enter fullscreen
                 WindowStyle = WindowStyle.None;
-                WindowState = WindowState.Maximized;
+                WindowState = System.Windows.WindowState.Maximized;
                 ResizeMode = ResizeMode.NoResize;
             }
         }
