@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Input;
+using ExplorerPro.Core;
+using ExplorerPro.Core.Disposables;
 using ExplorerPro.UI.FileTree;
 using ExplorerPro.UI.MainWindow;
 
@@ -13,11 +16,18 @@ namespace ExplorerPro.UI.PaneManagement
     /// <summary>
     /// Interaction logic for PaneManager.xaml
     /// Manages panes containing ImprovedFileTreeListView instances
+    /// PHASE 4: Enhanced with proper event management and disposal patterns
     /// </summary>
     public partial class PaneManager : UserControl, IDisposable
     {
         #region Fields
 
+        // PHASE 4: Enhanced event management with weak patterns
+        private readonly CompositeDisposable _disposables = new CompositeDisposable();
+        private readonly Dictionary<TabItem, IDisposable> _tabSubscriptions = new Dictionary<TabItem, IDisposable>();
+        private readonly object _subscriptionLock = new object();
+        private bool _disposed;
+        
         // Event raised when the active tab changes to notify parent container
         public event EventHandler<string>? CurrentPathChanged;
         
@@ -26,6 +36,9 @@ namespace ExplorerPro.UI.PaneManagement
         
         // Event raised when this pane manager becomes active
         public event EventHandler<string>? ActiveManagerChanged;
+        
+        // PHASE 4: Enhanced event for layout changes
+        public event EventHandler<EventArgs>? LayoutChanged;
         
         // Track original manager when a tab is detached
         private PaneManager? _originalPaneManager;
@@ -46,7 +59,7 @@ namespace ExplorerPro.UI.PaneManagement
 
         // Memory monitoring
         private Dictionary<TabItem, long> _paneMemoryUsage = new Dictionary<TabItem, long>();
-        private System.Windows.Threading.DispatcherTimer _memoryMonitorTimer;
+        private System.Windows.Threading.DispatcherTimer? _memoryMonitorTimer;
 
         #endregion
 
@@ -59,6 +72,15 @@ namespace ExplorerPro.UI.PaneManagement
         {
             get { return _originalPaneManager; }
             set { _originalPaneManager = value; UpdateReattachVisibility(); }
+        }
+
+        /// <summary>
+        /// PHASE 4: Gets all registered tabs for management
+        /// </summary>
+        public IEnumerable<TabItem> GetAllTabs()
+        {
+            UIThreadHelper.VerifyUIThread();
+            return TabControl?.Items.Cast<TabItem>() ?? Enumerable.Empty<TabItem>();
         }
 
         #endregion
@@ -77,19 +99,8 @@ namespace ExplorerPro.UI.PaneManagement
                 // Initialize pane history manager
                 _historyManager = new PaneHistoryManager();
                 
-                // Setup event handling - safe navigation for XAML elements
-                if (TabControl != null)
-                {
-                    TabControl.MouseDoubleClick += TabControl_MouseDoubleClick;
-                    TabControl.SelectionChanged += TabControl_SelectionChanged;
-                    
-                    // Setup drag-drop
-                    TabControl.AllowDrop = true;
-                    TabControl.PreviewMouseLeftButtonDown += TabControl_PreviewMouseLeftButtonDown;
-                    TabControl.PreviewMouseMove += TabControl_PreviewMouseMove;
-                    TabControl.DragEnter += TabControl_DragEnter;
-                    TabControl.Drop += TabControl_Drop;
-                }
+                // PHASE 4: Setup event handling with weak patterns
+                SetupEventHandlers();
                 
                 // Initialize memory monitoring
                 InitializeMemoryMonitoring();
@@ -109,6 +120,37 @@ namespace ExplorerPro.UI.PaneManagement
         }
 
         /// <summary>
+        /// PHASE 4: Setup event handlers using weak event patterns
+        /// </summary>
+        private void SetupEventHandlers()
+        {
+            if (TabControl != null)
+            {
+                // Use weak event subscriptions for better memory management
+                _disposables.Add(Disposable.Create(() => TabControl.MouseDoubleClick -= TabControl_MouseDoubleClick));
+                TabControl.MouseDoubleClick += TabControl_MouseDoubleClick;
+                
+                _disposables.Add(Disposable.Create(() => TabControl.SelectionChanged -= TabControl_SelectionChanged));
+                TabControl.SelectionChanged += TabControl_SelectionChanged;
+                
+                // Setup drag-drop with weak patterns
+                TabControl.AllowDrop = true;
+                
+                _disposables.Add(Disposable.Create(() => TabControl.PreviewMouseLeftButtonDown -= TabControl_PreviewMouseLeftButtonDown));
+                TabControl.PreviewMouseLeftButtonDown += TabControl_PreviewMouseLeftButtonDown;
+                
+                _disposables.Add(Disposable.Create(() => TabControl.PreviewMouseMove -= TabControl_PreviewMouseMove));
+                TabControl.PreviewMouseMove += TabControl_PreviewMouseMove;
+                
+                _disposables.Add(Disposable.Create(() => TabControl.DragEnter -= TabControl_DragEnter));
+                TabControl.DragEnter += TabControl_DragEnter;
+                
+                _disposables.Add(Disposable.Create(() => TabControl.Drop -= TabControl_Drop));
+                TabControl.Drop += TabControl_Drop;
+            }
+        }
+
+        /// <summary>
         /// Initialize memory monitoring timer
         /// </summary>
         private void InitializeMemoryMonitoring()
@@ -117,6 +159,135 @@ namespace ExplorerPro.UI.PaneManagement
             _memoryMonitorTimer.Interval = TimeSpan.FromSeconds(30); // Monitor every 30 seconds
             _memoryMonitorTimer.Tick += (s, e) => MonitorPaneMemory();
             _memoryMonitorTimer.Start();
+            
+            // Add timer to disposables
+            _disposables.Add(Disposable.Create(() =>
+            {
+                _memoryMonitorTimer?.Stop();
+                _memoryMonitorTimer = null;
+            }));
+        }
+
+        #endregion
+
+        #region PHASE 4: Tab Registration and Management
+
+        /// <summary>
+        /// PHASE 4: Register a tab with proper event management
+        /// </summary>
+        public void RegisterTab(TabItem tab)
+        {
+            if (tab == null) throw new ArgumentNullException(nameof(tab));
+            if (_disposed) throw new ObjectDisposedException(nameof(PaneManager));
+            
+            UIThreadHelper.VerifyUIThread();
+            
+            lock (_subscriptionLock)
+            {
+                if (!_tabSubscriptions.ContainsKey(tab))
+                {
+                    var subscriptions = new CompositeDisposable();
+                    
+                    // Subscribe to tab-specific events if the content supports them
+                    if (tab.Content is Grid grid && grid.Children.Count > 0 && 
+                        grid.Children[0] is ImprovedFileTreeListView fileTree)
+                    {
+                        // Subscribe to file tree events using weak patterns
+                        subscriptions.Add(WeakEventHelper.SubscribePropertyChanged(
+                            fileTree, OnFileTreePropertyChanged));
+                    }
+                    
+                    _tabSubscriptions[tab] = subscriptions;
+                    
+                    // Notify layout changed
+                    OnLayoutChanged();
+                }
+            }
+        }
+        
+        /// <summary>
+        /// PHASE 4: Unregister a tab and clean up its subscriptions
+        /// </summary>
+        private void UnregisterTab(TabItem tab)
+        {
+            if (tab == null) return;
+            
+            lock (_subscriptionLock)
+            {
+                if (_tabSubscriptions.TryGetValue(tab, out var subscription))
+                {
+                    subscription.Dispose();
+                    _tabSubscriptions.Remove(tab);
+                }
+                
+                // Remove from memory tracking
+                _paneMemoryUsage.Remove(tab);
+                
+                // Notify layout changed
+                OnLayoutChanged();
+            }
+        }
+
+        /// <summary>
+        /// PHASE 4: Event handler for file tree property changes
+        /// </summary>
+        private void OnFileTreePropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            UIThreadHelper.ExecuteOnUIThread(() =>
+            {
+                if (e.PropertyName == "CurrentPath")
+                {
+                    UpdateCurrentPath();
+                }
+            });
+        }
+
+        /// <summary>
+        /// PHASE 4: Notify layout changed event
+        /// </summary>
+        private void OnLayoutChanged()
+        {
+            UIThreadHelper.ExecuteOnUIThread(() =>
+            {
+                LayoutChanged?.Invoke(this, EventArgs.Empty);
+            });
+        }
+
+        /// <summary>
+        /// PHASE 4: Close all tabs with proper cleanup
+        /// </summary>
+        public void CloseAllTabs()
+        {
+            UIThreadHelper.VerifyUIThread();
+            
+            var tabsToClose = GetAllTabs().ToList();
+            foreach (var tab in tabsToClose)
+            {
+                CloseTab(tab);
+            }
+        }
+
+        /// <summary>
+        /// PHASE 4: Close a specific tab with proper cleanup
+        /// </summary>
+        public void CloseTab(TabItem tab)
+        {
+            if (tab == null) return;
+            
+            UIThreadHelper.ExecuteOnUIThread(() =>
+            {
+                // Unregister first to clean up subscriptions
+                UnregisterTab(tab);
+                
+                // Dispose the content if it's disposable
+                if (tab.Content is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+                
+                // Remove from TabControl
+                TabControl?.Items.Remove(tab);
+            });
         }
 
         #endregion
@@ -155,6 +326,9 @@ namespace ExplorerPro.UI.PaneManagement
                 
                 TabControl.Items.Add(newTab);
                 TabControl.SelectedItem = newTab;
+                
+                // PHASE 4: Register the tab for proper event management
+                RegisterTab(newTab);
                 
                 // Set root directory AFTER the tree is in the visual tree
                 fileTree.SetRootDirectory(rootPath);
@@ -443,13 +617,8 @@ namespace ExplorerPro.UI.PaneManagement
                 var selectedTab = TabControl.SelectedItem as TabItem;
                 if (selectedTab != null && TabControl.Items.Count > 1)
                 {
-                    TabControl.Items.Remove(selectedTab);
-                    
-                    // Dispose the file tree if it's disposable
-                    if (selectedTab.Content is IDisposable disposable)
-                    {
-                        disposable.Dispose();
-                    }
+                    // PHASE 4: Use the new CloseTab method for proper cleanup
+                    CloseTab(selectedTab);
                 }
             }
             catch (Exception ex)
@@ -524,8 +693,57 @@ namespace ExplorerPro.UI.PaneManagement
 
         public void Dispose()
         {
-            _memoryMonitorTimer?.Stop();
-            _memoryMonitorTimer = null;
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed) return;
+            
+            if (disposing)
+            {
+                // Clean up all tab subscriptions
+                lock (_subscriptionLock)
+                {
+                    foreach (var subscription in _tabSubscriptions.Values)
+                    {
+                        subscription.Dispose();
+                    }
+                    _tabSubscriptions.Clear();
+                }
+                
+                // Close all tabs
+                CloseAllTabs();
+                
+                // Dispose other resources
+                _disposables.Dispose();
+                
+                // Clean up detached windows
+                foreach (var window in _detachedWindows.ToList())
+                {
+                    try
+                    {
+                        window.Close();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error closing detached window: {ex.Message}");
+                    }
+                }
+                _detachedWindows.Clear();
+                
+                // Clear memory tracking
+                _paneMemoryUsage.Clear();
+                
+                // Dispose history manager if it's disposable
+                if (_historyManager is IDisposable disposableHistory)
+                {
+                    disposableHistory.Dispose();
+                }
+            }
+            
+            _disposed = true;
         }
 
         #endregion
