@@ -288,6 +288,76 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
+        /// <summary>
+        /// Special weak event subscription for SelectionChanged events
+        /// </summary>
+        private void SubscribeToSelectionChangedWeak(
+            System.Windows.Controls.Primitives.Selector selector,
+            SelectionChangedEventHandler handler)
+        {
+            try
+            {
+                var weakRef = new WeakReference(handler.Target);
+                var method = handler.Method;
+                
+                SelectionChangedEventHandler weakHandler = (s, e) =>
+                {
+                    var target = weakRef.Target;
+                    if (target != null)
+                    {
+                        method.Invoke(target, new object[] { s, e });
+                    }
+                };
+                
+                selector.SelectionChanged += weakHandler;
+                
+                var subscription = Disposable.Create(() => selector.SelectionChanged -= weakHandler);
+                _eventSubscriptions.Add(subscription);
+                
+                _instanceLogger?.LogDebug("Subscribed to SelectionChanged event with weak reference");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error subscribing to weak SelectionChanged event");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Special weak event subscription for Window Closing events
+        /// </summary>
+        private void SubscribeToClosingWeak(
+            Window window,
+            CancelEventHandler handler)
+        {
+            try
+            {
+                var weakRef = new WeakReference(handler.Target);
+                var method = handler.Method;
+                
+                CancelEventHandler weakHandler = (s, e) =>
+                {
+                    var target = weakRef.Target;
+                    if (target != null)
+                    {
+                        method.Invoke(target, new object[] { s, e });
+                    }
+                };
+                
+                window.Closing += weakHandler;
+                
+                var subscription = Disposable.Create(() => window.Closing -= weakHandler);
+                _eventSubscriptions.Add(subscription);
+                
+                _instanceLogger?.LogDebug("Subscribed to Closing event with weak reference");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error subscribing to weak Closing event");
+                throw;
+            }
+        }
+
         #endregion
 
         #region Core Dependencies and Managers
@@ -4562,24 +4632,42 @@ namespace ExplorerPro.UI.MainWindow
         internal void SetupDragDrop()
         {
             AllowDrop = true;
+            
+            // Subscribe to DragOver event with weak pattern
+            var dragOverSubscription = Disposable.Create(() => DragOver -= MainWindow_DragOver);
             DragOver += MainWindow_DragOver;
+            _eventSubscriptions.Add(dragOverSubscription);
+            
+            // Subscribe to Drop event with weak pattern
+            var dropSubscription = Disposable.Create(() => Drop -= MainWindow_Drop);
             Drop += MainWindow_Drop;
+            _eventSubscriptions.Add(dropSubscription);
         }
 
         internal void ClearDragDrop()
         {
             AllowDrop = false;
-            DragOver -= MainWindow_DragOver;
-            Drop -= MainWindow_Drop;
+            // Weak events will be cleaned up automatically by CompositeDisposable
         }
 
         internal void WireUpEventHandlers()
         {
             if (MainTabs != null)
             {
+                // Subscribe to SelectionChanged using weak pattern
+                var subscription1 = Disposable.Create(() =>
+                {
+                    if (MainTabs != null)
+                        MainTabs.SelectionChanged -= MainTabs_SelectionChanged;
+                });
                 MainTabs.SelectionChanged += MainTabs_SelectionChanged;
+                _eventSubscriptions.Add(subscription1);
             }
+            
+            // Subscribe to Closing using weak pattern
+            var subscription2 = Disposable.Create(() => Closing -= MainWindow_Closing);
             Closing += MainWindow_Closing;
+            _eventSubscriptions.Add(subscription2);
         }
 
         internal void ClearAllEventHandlers()
