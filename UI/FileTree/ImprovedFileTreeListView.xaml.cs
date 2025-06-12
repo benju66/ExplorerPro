@@ -26,6 +26,8 @@ using ExplorerPro.UI.FileTree.Coordinators;
 using ExplorerPro.UI.FileTree.Managers;
 using ExplorerPro.UI.FileTree.Helpers;
 using ExplorerPro.Themes;
+using ExplorerPro.Core;
+using ExplorerPro.Core.Threading;
 // Add alias to avoid ambiguity
 using Path = System.IO.Path;
 
@@ -35,6 +37,7 @@ namespace ExplorerPro.UI.FileTree
     /// Improved FileTreeListView following Single Responsibility Principle.
     /// This refactored version delegates responsibilities to specialized manager classes
     /// while preserving all existing functionality and UI behavior.
+    /// PHASE 6: Thread Safety Standardization - All UI operations are thread-safe
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
@@ -503,8 +506,17 @@ namespace ExplorerPro.UI.FileTree
 
         public async void SetRootDirectory(string directory) 
         {
+            ThreadSafetyValidator.LogThreadContext("SetRootDirectory");
+            
             if (_coordinator != null)
-                await _coordinator.SetRootDirectoryAsync(directory).ConfigureAwait(false);
+            {
+                // Background work can be done on any thread
+                await Task.Run(async () =>
+                {
+                    ThreadSafetyValidator.AssertBackgroundThread();
+                    await _coordinator.SetRootDirectoryAsync(directory).ConfigureAwait(false);
+                });
+            }
         }
 
         /// <summary>

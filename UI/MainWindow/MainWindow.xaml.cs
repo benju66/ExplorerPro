@@ -25,6 +25,7 @@ using ExplorerPro.Utilities;
 using ExplorerPro.Themes;
 using ExplorerPro.Core;
 using ExplorerPro.Core.Disposables;
+using ExplorerPro.Core.Threading;
 using System.Runtime.CompilerServices;
 // Add reference to System.Windows.Forms but use an alias
 using WinForms = System.Windows.Forms;
@@ -2851,12 +2852,15 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Update status bar text.
         /// ENHANCED FOR FIX 2: Thread-Safety Issues in UI Updates
+        /// ENHANCED FOR PHASE 6: Thread Safety Standardization
         /// </summary>
         /// <param name="text">Status text</param>
         public void UpdateStatus(string text)
         {
-            ExecuteOnUIThread(() =>
+            ThreadSafetyValidator.LogThreadContext("UpdateStatus");
+            UIThreadHelper.ExecuteOnUIThread(() =>
             {
+                ThreadSafetyValidator.AssertUIThread();
                 if (StatusText != null && !IsDisposed)
                 {
                     StatusText.Text = text ?? string.Empty;
@@ -2868,12 +2872,15 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Update item count display.
         /// ENHANCED FOR FIX 2: Thread-Safety Issues in UI Updates
+        /// ENHANCED FOR PHASE 6: Thread Safety Standardization
         /// </summary>
         /// <param name="count">Number of items</param>
         public void UpdateItemCount(int count)
         {
-            ExecuteOnUIThread(() =>
+            ThreadSafetyValidator.LogThreadContext("UpdateItemCount");
+            UIThreadHelper.ExecuteOnUIThread(() =>
             {
+                ThreadSafetyValidator.AssertUIThread();
                 if (ItemCountText != null && !IsDisposed)
                 {
                     ItemCountText.Text = count == 1 ? "1 item" : $"{count} items";
@@ -2885,13 +2892,16 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Update selection info.
         /// ENHANCED FOR FIX 2: Thread-Safety Issues in UI Updates
+        /// ENHANCED FOR PHASE 6: Thread Safety Standardization
         /// </summary>
         /// <param name="count">Number of selected items</param>
         /// <param name="size">Total size of selection</param>
         public void UpdateSelectionInfo(int count, long size = 0)
         {
-            ExecuteOnUIThread(() =>
+            ThreadSafetyValidator.LogThreadContext("UpdateSelectionInfo");
+            UIThreadHelper.ExecuteOnUIThread(() =>
             {
+                ThreadSafetyValidator.AssertUIThread();
                 if (SelectionText != null && !IsDisposed)
                 {
                     if (count == 0)

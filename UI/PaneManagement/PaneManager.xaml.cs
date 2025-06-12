@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Input;
 using ExplorerPro.Core;
 using ExplorerPro.Core.Disposables;
+using ExplorerPro.Core.Threading;
 using ExplorerPro.UI.FileTree;
 using ExplorerPro.UI.MainWindow;
 
@@ -17,6 +18,7 @@ namespace ExplorerPro.UI.PaneManagement
     /// Interaction logic for PaneManager.xaml
     /// Manages panes containing ImprovedFileTreeListView instances
     /// PHASE 4: Enhanced with proper event management and disposal patterns
+    /// PHASE 6: Thread Safety Standardization - All UI operations are thread-safe
     /// </summary>
     public partial class PaneManager : UserControl, IDisposable
     {
@@ -76,11 +78,15 @@ namespace ExplorerPro.UI.PaneManagement
 
         /// <summary>
         /// PHASE 4: Gets all registered tabs for management
+        /// PHASE 6: Thread-safe tab enumeration
         /// </summary>
         public IEnumerable<TabItem> GetAllTabs()
         {
-            UIThreadHelper.VerifyUIThread();
-            return TabControl?.Items.Cast<TabItem>() ?? Enumerable.Empty<TabItem>();
+            ThreadSafetyValidator.AssertUIThread();
+            return UIThreadHelper.ExecuteOnUIThread(() =>
+            {
+                return TabControl?.Items.Cast<TabItem>() ?? Enumerable.Empty<TabItem>();
+            });
         }
 
         #endregion
@@ -174,35 +180,40 @@ namespace ExplorerPro.UI.PaneManagement
 
         /// <summary>
         /// PHASE 4: Register a tab with proper event management
+        /// PHASE 6: Thread-safe tab registration
         /// </summary>
         public void RegisterTab(TabItem tab)
         {
             if (tab == null) throw new ArgumentNullException(nameof(tab));
             if (_disposed) throw new ObjectDisposedException(nameof(PaneManager));
             
-            UIThreadHelper.VerifyUIThread();
+            ThreadSafetyValidator.AssertUIThread();
+            ThreadSafetyValidator.LogThreadContext("RegisterTab");
             
-            lock (_subscriptionLock)
+            UIThreadHelper.ExecuteOnUIThread(() =>
             {
-                if (!_tabSubscriptions.ContainsKey(tab))
+                lock (_subscriptionLock)
                 {
-                    var subscriptions = new CompositeDisposable();
-                    
-                    // Subscribe to tab-specific events if the content supports them
-                    if (tab.Content is Grid grid && grid.Children.Count > 0 && 
-                        grid.Children[0] is ImprovedFileTreeListView fileTree)
+                    if (!_tabSubscriptions.ContainsKey(tab))
                     {
-                        // Subscribe to file tree events using weak patterns
-                        subscriptions.Add(WeakEventHelper.SubscribePropertyChanged(
-                            fileTree, OnFileTreePropertyChanged));
+                        var subscriptions = new CompositeDisposable();
+                        
+                        // Subscribe to tab-specific events if the content supports them
+                        if (tab.Content is Grid grid && grid.Children.Count > 0 && 
+                            grid.Children[0] is ImprovedFileTreeListView fileTree)
+                        {
+                            // Subscribe to file tree events using weak patterns
+                            subscriptions.Add(WeakEventHelper.SubscribePropertyChanged(
+                                fileTree, OnFileTreePropertyChanged));
+                        }
+                        
+                        _tabSubscriptions[tab] = subscriptions;
                     }
-                    
-                    _tabSubscriptions[tab] = subscriptions;
                     
                     // Notify layout changed
                     OnLayoutChanged();
                 }
-            }
+            });
         }
         
         /// <summary>

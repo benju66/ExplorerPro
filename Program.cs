@@ -20,6 +20,15 @@ namespace ExplorerPro
                 Console.ReadKey();
                 return;
             }
+            
+            if (args.Length > 0 && args[0] == "--test-phase6")
+            {
+                Console.WriteLine("Running Phase 6 validation tests...");
+                await ExplorerPro.Tests.Phase6ValidationTests.RunAllTests();
+                Console.WriteLine("Press any key to exit...");
+                Console.ReadKey();
+                return;
+            }
 
             // Regular application startup
             var app = new Application();
