@@ -2,19 +2,67 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using ExplorerPro.Core.Collections;
+using ExplorerPro.Core;
 
 namespace ExplorerPro.UI.PaneManagement
 {
     /// <summary>
     /// Manages navigation history for panes in the PaneManager.
-    /// Tracks back/forward history for each pane and provides navigation methods.
+    /// Phase 5: Resource Bounds - Uses bounded collections to limit memory growth
     /// </summary>
-    public class PaneHistoryManager
+    public class PaneHistoryManager : IDisposable
     {
+        #region Constants
+
+        private const int DefaultMaxHistorySize = 50;
+        private const int DefaultMaxForwardSize = 30;
+
+        #endregion
+
         #region Fields
 
         // Dictionary mapping tab index to its history
         private Dictionary<int, TabHistory> _tabHistories = new Dictionary<int, TabHistory>();
+        private readonly int _maxHistorySize;
+        private readonly int _maxForwardSize;
+        private readonly object _lock = new object();
+        private bool _disposed;
+
+        #endregion
+
+        #region Constructor and Disposal
+
+        public PaneHistoryManager(int maxHistorySize = DefaultMaxHistorySize, int maxForwardSize = DefaultMaxForwardSize)
+        {
+            _maxHistorySize = maxHistorySize;
+            _maxForwardSize = maxForwardSize;
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed) return;
+
+            if (disposing)
+            {
+                lock (_lock)
+                {
+                    foreach (var history in _tabHistories.Values)
+                    {
+                        history.Dispose();
+                    }
+                    _tabHistories.Clear();
+                }
+            }
+
+            _disposed = true;
+        }
 
         #endregion
 
@@ -27,12 +75,17 @@ namespace ExplorerPro.UI.PaneManagement
         /// <param name="initialPath">The initial path for the tab</param>
         public void InitTabHistory(int tabIndex, string initialPath)
         {
-            if (!_tabHistories.ContainsKey(tabIndex))
+            if (_disposed) throw new ObjectDisposedException(nameof(PaneHistoryManager));
+
+            lock (_lock)
             {
-                _tabHistories[tabIndex] = new TabHistory();
+                if (!_tabHistories.ContainsKey(tabIndex))
+                {
+                    _tabHistories[tabIndex] = new TabHistory(_maxHistorySize, _maxForwardSize);
+                }
+                
+                _tabHistories[tabIndex].AddPath(initialPath);
             }
-            
-            _tabHistories[tabIndex].AddPath(initialPath);
         }
 
         /// <summary>
@@ -42,14 +95,19 @@ namespace ExplorerPro.UI.PaneManagement
         /// <param name="path">The path to add</param>
         public void PushPath(int tabIndex, string path)
         {
-            if (_tabHistories.TryGetValue(tabIndex, out TabHistory history))
+            if (_disposed) throw new ObjectDisposedException(nameof(PaneHistoryManager));
+
+            lock (_lock)
             {
-                history.AddPath(path);
-            }
-            else
-            {
-                // If history doesn't exist for this tab, create it
-                InitTabHistory(tabIndex, path);
+                if (_tabHistories.TryGetValue(tabIndex, out TabHistory history))
+                {
+                    history.AddPath(path);
+                }
+                else
+                {
+                    // If history doesn't exist for this tab, create it
+                    InitTabHistory(tabIndex, path);
+                }
             }
         }
 
@@ -62,17 +120,22 @@ namespace ExplorerPro.UI.PaneManagement
         /// <param name="selectedItems">Selected items</param>
         public void PushPathWithState(int tabIndex, string path, double scrollPosition, List<string> selectedItems)
         {
-            if (_tabHistories.TryGetValue(tabIndex, out TabHistory history))
+            if (_disposed) throw new ObjectDisposedException(nameof(PaneHistoryManager));
+
+            lock (_lock)
             {
-                history.AddPathWithState(path, scrollPosition, selectedItems);
-            }
-            else
-            {
-                // If history doesn't exist for this tab, create it
-                InitTabHistory(tabIndex, path);
-                if (_tabHistories.TryGetValue(tabIndex, out TabHistory newHistory))
+                if (_tabHistories.TryGetValue(tabIndex, out TabHistory history))
                 {
-                    newHistory.UpdateState(scrollPosition, selectedItems);
+                    history.AddPathWithState(path, scrollPosition, selectedItems);
+                }
+                else
+                {
+                    // If history doesn't exist for this tab, create it
+                    InitTabHistory(tabIndex, path);
+                    if (_tabHistories.TryGetValue(tabIndex, out TabHistory newHistory))
+                    {
+                        newHistory.UpdateState(scrollPosition, selectedItems);
+                    }
                 }
             }
         }
@@ -84,11 +147,16 @@ namespace ExplorerPro.UI.PaneManagement
         /// <returns>History entry with state information</returns>
         public HistoryEntry? GetCurrentEntry(int tabIndex)
         {
-            if (_tabHistories.TryGetValue(tabIndex, out TabHistory history))
+            if (_disposed) return null;
+
+            lock (_lock)
             {
-                return history.GetCurrentEntry();
+                if (_tabHistories.TryGetValue(tabIndex, out TabHistory history))
+                {
+                    return history.GetCurrentEntry();
+                }
+                return null;
             }
-            return null;
         }
 
         /// <summary>
@@ -98,12 +166,17 @@ namespace ExplorerPro.UI.PaneManagement
         /// <returns>The previous path, or null if at the beginning of history</returns>
         public string GoBack(int tabIndex)
         {
-            if (_tabHistories.TryGetValue(tabIndex, out TabHistory history))
+            if (_disposed) return null;
+
+            lock (_lock)
             {
-                return history.GoBack();
+                if (_tabHistories.TryGetValue(tabIndex, out TabHistory history))
+                {
+                    return history.GoBack();
+                }
+                
+                return null;
             }
-            
-            return null;
         }
 
         /// <summary>
@@ -113,12 +186,17 @@ namespace ExplorerPro.UI.PaneManagement
         /// <returns>The next path, or null if at the end of history</returns>
         public string GoForward(int tabIndex)
         {
-            if (_tabHistories.TryGetValue(tabIndex, out TabHistory history))
+            if (_disposed) return null;
+
+            lock (_lock)
             {
-                return history.GoForward();
+                if (_tabHistories.TryGetValue(tabIndex, out TabHistory history))
+                {
+                    return history.GoForward();
+                }
+                
+                return null;
             }
-            
-            return null;
         }
 
         /// <summary>
@@ -128,27 +206,32 @@ namespace ExplorerPro.UI.PaneManagement
         /// <returns>The parent directory path, or null if at the root</returns>
         public string GoUp(int tabIndex)
         {
-            if (!_tabHistories.TryGetValue(tabIndex, out TabHistory history))
+            if (_disposed) return null;
+
+            lock (_lock)
             {
+                if (!_tabHistories.TryGetValue(tabIndex, out TabHistory history))
+                {
+                    return null;
+                }
+                
+                string currentPath = history.GetCurrentPath();
+                if (string.IsNullOrEmpty(currentPath))
+                {
+                    return null;
+                }
+                
+                // Get parent directory
+                DirectoryInfo parent = Directory.GetParent(currentPath);
+                if (parent != null)
+                {
+                    string parentPath = parent.FullName;
+                    history.AddPath(parentPath);
+                    return parentPath;
+                }
+                
                 return null;
             }
-            
-            string currentPath = history.GetCurrentPath();
-            if (string.IsNullOrEmpty(currentPath))
-            {
-                return null;
-            }
-            
-            // Get parent directory
-            DirectoryInfo parent = Directory.GetParent(currentPath);
-            if (parent != null)
-            {
-                string parentPath = parent.FullName;
-                history.AddPath(parentPath);
-                return parentPath;
-            }
-            
-            return null;
         }
 
         /// <summary>
@@ -157,29 +240,35 @@ namespace ExplorerPro.UI.PaneManagement
         /// <param name="tabIndex">The tab index</param>
         public void RemoveTabHistory(int tabIndex)
         {
-            if (_tabHistories.ContainsKey(tabIndex))
+            if (_disposed) return;
+
+            lock (_lock)
             {
-                _tabHistories.Remove(tabIndex);
-            }
-            
-            // Update indices for tabs after the removed one
-            Dictionary<int, TabHistory> newHistories = new Dictionary<int, TabHistory>();
-            foreach (var kvp in _tabHistories)
-            {
-                int index = kvp.Key;
-                if (index > tabIndex)
+                if (_tabHistories.ContainsKey(tabIndex))
                 {
-                    // Shift indices down
-                    newHistories[index - 1] = kvp.Value;
+                    _tabHistories[tabIndex].Dispose();
+                    _tabHistories.Remove(tabIndex);
                 }
-                else
+                
+                // Update indices for tabs after the removed one
+                Dictionary<int, TabHistory> newHistories = new Dictionary<int, TabHistory>();
+                foreach (var kvp in _tabHistories)
                 {
-                    // Keep as-is
-                    newHistories[index] = kvp.Value;
+                    int index = kvp.Key;
+                    if (index > tabIndex)
+                    {
+                        // Shift indices down
+                        newHistories[index - 1] = kvp.Value;
+                    }
+                    else
+                    {
+                        // Keep as-is
+                        newHistories[index] = kvp.Value;
+                    }
                 }
+                
+                _tabHistories = newHistories;
             }
-            
-            _tabHistories = newHistories;
         }
 
         /// <summary>
@@ -189,84 +278,117 @@ namespace ExplorerPro.UI.PaneManagement
         /// <param name="targetIndex">Target tab index</param>
         public void MoveTabHistory(int sourceIndex, int targetIndex)
         {
-            if (!_tabHistories.ContainsKey(sourceIndex))
+            if (_disposed) return;
+
+            lock (_lock)
             {
-                return;
+                if (!_tabHistories.ContainsKey(sourceIndex))
+                {
+                    return;
+                }
+                
+                TabHistory history = _tabHistories[sourceIndex];
+                
+                // Create a new dictionary for the updated indices
+                Dictionary<int, TabHistory> newHistories = new Dictionary<int, TabHistory>();
+                
+                // Handle the case when moving a tab forward (right)
+                if (sourceIndex < targetIndex)
+                {
+                    // Copy entries before source
+                    for (int i = 0; i < sourceIndex; i++)
+                    {
+                        if (_tabHistories.ContainsKey(i))
+                        {
+                            newHistories[i] = _tabHistories[i];
+                        }
+                    }
+                    
+                    // Shift entries between source and target down by 1
+                    for (int i = sourceIndex + 1; i <= targetIndex; i++)
+                    {
+                        if (_tabHistories.ContainsKey(i))
+                        {
+                            newHistories[i - 1] = _tabHistories[i];
+                        }
+                    }
+                    
+                    // Place source at target
+                    newHistories[targetIndex] = history;
+                    
+                    // Copy entries after target
+                    for (int i = targetIndex + 1; i < _tabHistories.Keys.Max() + 1; i++)
+                    {
+                        if (_tabHistories.ContainsKey(i))
+                        {
+                            newHistories[i] = _tabHistories[i];
+                        }
+                    }
+                }
+                // Handle the case when moving a tab backward (left)
+                else if (sourceIndex > targetIndex)
+                {
+                    // Copy entries before target
+                    for (int i = 0; i < targetIndex; i++)
+                    {
+                        if (_tabHistories.ContainsKey(i))
+                        {
+                            newHistories[i] = _tabHistories[i];
+                        }
+                    }
+                    
+                    // Place source at target
+                    newHistories[targetIndex] = history;
+                    
+                    // Shift entries between target and source up by 1
+                    for (int i = targetIndex; i < sourceIndex; i++)
+                    {
+                        if (_tabHistories.ContainsKey(i))
+                        {
+                            newHistories[i + 1] = _tabHistories[i];
+                        }
+                    }
+                    
+                    // Copy entries after source
+                    for (int i = sourceIndex + 1; i < _tabHistories.Keys.Max() + 1; i++)
+                    {
+                        if (_tabHistories.ContainsKey(i))
+                        {
+                            newHistories[i] = _tabHistories[i];
+                        }
+                    }
+                }
+                
+                _tabHistories = newHistories;
             }
-            
-            TabHistory history = _tabHistories[sourceIndex];
-            
-            // Create a new dictionary for the updated indices
-            Dictionary<int, TabHistory> newHistories = new Dictionary<int, TabHistory>();
-            
-            // Handle the case when moving a tab forward (right)
-            if (sourceIndex < targetIndex)
+        }
+
+        /// <summary>
+        /// Get history statistics for monitoring purposes
+        /// </summary>
+        /// <returns>History statistics</returns>
+        public HistoryStatistics GetStatistics()
+        {
+            if (_disposed) return new HistoryStatistics();
+
+            lock (_lock)
             {
-                // Copy entries before source
-                for (int i = 0; i < sourceIndex; i++)
+                var stats = new HistoryStatistics
                 {
-                    if (_tabHistories.ContainsKey(i))
-                    {
-                        newHistories[i] = _tabHistories[i];
-                    }
-                }
-                
-                // Shift entries between source and target down by 1
-                for (int i = sourceIndex + 1; i <= targetIndex; i++)
+                    TotalTabs = _tabHistories.Count,
+                    MaxHistorySize = _maxHistorySize,
+                    MaxForwardSize = _maxForwardSize
+                };
+
+                foreach (var history in _tabHistories.Values)
                 {
-                    if (_tabHistories.ContainsKey(i))
-                    {
-                        newHistories[i - 1] = _tabHistories[i];
-                    }
+                    var tabStats = history.GetStatistics();
+                    stats.TotalHistoryEntries += tabStats.HistoryCount;
+                    stats.TotalForwardEntries += tabStats.ForwardCount;
                 }
-                
-                // Place source at target
-                newHistories[targetIndex] = history;
-                
-                // Copy entries after target
-                for (int i = targetIndex + 1; i < _tabHistories.Keys.Max() + 1; i++)
-                {
-                    if (_tabHistories.ContainsKey(i))
-                    {
-                        newHistories[i] = _tabHistories[i];
-                    }
-                }
+
+                return stats;
             }
-            // Handle the case when moving a tab backward (left)
-            else if (sourceIndex > targetIndex)
-            {
-                // Copy entries before target
-                for (int i = 0; i < targetIndex; i++)
-                {
-                    if (_tabHistories.ContainsKey(i))
-                    {
-                        newHistories[i] = _tabHistories[i];
-                    }
-                }
-                
-                // Place source at target
-                newHistories[targetIndex] = history;
-                
-                // Shift entries between target and source up by 1
-                for (int i = targetIndex; i < sourceIndex; i++)
-                {
-                    if (_tabHistories.ContainsKey(i))
-                    {
-                        newHistories[i + 1] = _tabHistories[i];
-                    }
-                }
-                
-                // Copy entries after source
-                for (int i = sourceIndex + 1; i < _tabHistories.Keys.Max() + 1; i++)
-                {
-                    if (_tabHistories.ContainsKey(i))
-                    {
-                        newHistories[i] = _tabHistories[i];
-                    }
-                }
-            }
-            
-            _tabHistories = newHistories;
         }
 
         #endregion
@@ -276,12 +398,30 @@ namespace ExplorerPro.UI.PaneManagement
         /// <summary>
         /// Represents a history entry with state information
         /// </summary>
-        public class HistoryEntry
+        public class HistoryEntry : IDisposable
         {
             public string Path { get; set; } = string.Empty;
             public double ScrollPosition { get; set; }
             public List<string> SelectedItems { get; set; } = new List<string>();
             public DateTime Timestamp { get; set; } = DateTime.Now;
+            private bool _disposed;
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                
+                SelectedItems?.Clear();
+                _disposed = true;
+            }
+        }
+
+        public class HistoryStatistics
+        {
+            public int TotalTabs { get; set; }
+            public int TotalHistoryEntries { get; set; }
+            public int TotalForwardEntries { get; set; }
+            public int MaxHistorySize { get; set; }
+            public int MaxForwardSize { get; set; }
         }
 
         #endregion
@@ -289,12 +429,22 @@ namespace ExplorerPro.UI.PaneManagement
         #region TabHistory Class
 
         /// <summary>
-        /// Inner class that manages history for a single tab
+        /// Inner class that manages bounded history for a single tab
+        /// Phase 5: Uses BoundedCollection to limit memory usage
         /// </summary>
-        private class TabHistory
+        private class TabHistory : IDisposable
         {
-            private List<HistoryEntry> _history = new List<HistoryEntry>();
-            private int _currentIndex = -1;
+            private BoundedCollection<HistoryEntry> _history;
+            private BoundedCollection<HistoryEntry> _forwardHistory;
+            private HistoryEntry _currentEntry;
+            private readonly object _historyLock = new object();
+            private bool _disposed;
+
+            public TabHistory(int maxHistorySize, int maxForwardSize)
+            {
+                _history = new BoundedCollection<HistoryEntry>(maxHistorySize);
+                _forwardHistory = new BoundedCollection<HistoryEntry>(maxForwardSize);
+            }
 
             /// <summary>
             /// Add a new path to the history
@@ -313,33 +463,38 @@ namespace ExplorerPro.UI.PaneManagement
             /// <param name="selectedItems">Selected items</param>
             public void AddPathWithState(string path, double scrollPosition, List<string> selectedItems)
             {
-                // If we're in the middle of the history and navigating elsewhere,
-                // truncate the forward history
-                if (_currentIndex >= 0 && _currentIndex < _history.Count - 1)
+                if (_disposed) return;
+
+                lock (_historyLock)
                 {
-                    _history.RemoveRange(_currentIndex + 1, _history.Count - _currentIndex - 1);
+                    // Clear forward history on new navigation
+                    _forwardHistory.Clear();
+                    
+                    // Don't add duplicate consecutive entries
+                    if (_currentEntry != null && _currentEntry.Path == path)
+                    {
+                        // Update the state of the existing entry
+                        _currentEntry.ScrollPosition = scrollPosition;
+                        _currentEntry.SelectedItems = new List<string>(selectedItems);
+                        _currentEntry.Timestamp = DateTime.Now;
+                        return;
+                    }
+                    
+                    // Move current entry to history if it exists
+                    if (_currentEntry != null)
+                    {
+                        _history.Add(_currentEntry);
+                    }
+                    
+                    // Create new current entry
+                    _currentEntry = new HistoryEntry
+                    {
+                        Path = path,
+                        ScrollPosition = scrollPosition,
+                        SelectedItems = new List<string>(selectedItems),
+                        Timestamp = DateTime.Now
+                    };
                 }
-                
-                // Don't add duplicate consecutive entries
-                if (_history.Count > 0 && _history[_history.Count - 1].Path == path)
-                {
-                    // Update the state of the existing entry
-                    _history[_history.Count - 1].ScrollPosition = scrollPosition;
-                    _history[_history.Count - 1].SelectedItems = new List<string>(selectedItems);
-                    _history[_history.Count - 1].Timestamp = DateTime.Now;
-                    return;
-                }
-                
-                var entry = new HistoryEntry
-                {
-                    Path = path,
-                    ScrollPosition = scrollPosition,
-                    SelectedItems = new List<string>(selectedItems),
-                    Timestamp = DateTime.Now
-                };
-                
-                _history.Add(entry);
-                _currentIndex = _history.Count - 1;
             }
 
             /// <summary>
@@ -349,11 +504,16 @@ namespace ExplorerPro.UI.PaneManagement
             /// <param name="selectedItems">Selected items</param>
             public void UpdateState(double scrollPosition, List<string> selectedItems)
             {
-                if (_currentIndex >= 0 && _currentIndex < _history.Count)
+                if (_disposed) return;
+
+                lock (_historyLock)
                 {
-                    _history[_currentIndex].ScrollPosition = scrollPosition;
-                    _history[_currentIndex].SelectedItems = new List<string>(selectedItems);
-                    _history[_currentIndex].Timestamp = DateTime.Now;
+                    if (_currentEntry != null)
+                    {
+                        _currentEntry.ScrollPosition = scrollPosition;
+                        _currentEntry.SelectedItems = new List<string>(selectedItems);
+                        _currentEntry.Timestamp = DateTime.Now;
+                    }
                 }
             }
 
@@ -363,12 +523,12 @@ namespace ExplorerPro.UI.PaneManagement
             /// <returns>Current entry or null</returns>
             public HistoryEntry? GetCurrentEntry()
             {
-                if (_currentIndex >= 0 && _currentIndex < _history.Count)
+                if (_disposed) return null;
+
+                lock (_historyLock)
                 {
-                    return _history[_currentIndex];
+                    return _currentEntry;
                 }
-                
-                return null;
             }
 
             /// <summary>
@@ -377,13 +537,22 @@ namespace ExplorerPro.UI.PaneManagement
             /// <returns>Previous path or null</returns>
             public string GoBack()
             {
-                if (_currentIndex > 0)
+                if (_disposed) return null;
+
+                lock (_historyLock)
                 {
-                    _currentIndex--;
-                    return _history[_currentIndex].Path;
+                    if (_history.IsEmpty) return null;
+                    
+                    // Move current to forward if it exists
+                    if (_currentEntry != null)
+                    {
+                        _forwardHistory.AddFirst(_currentEntry);
+                    }
+                    
+                    // Get last history entry
+                    _currentEntry = _history.RemoveLast();
+                    return _currentEntry?.Path;
                 }
-                
-                return null;
             }
 
             /// <summary>
@@ -392,13 +561,22 @@ namespace ExplorerPro.UI.PaneManagement
             /// <returns>Next path or null</returns>
             public string GoForward()
             {
-                if (_currentIndex < _history.Count - 1)
+                if (_disposed) return null;
+
+                lock (_historyLock)
                 {
-                    _currentIndex++;
-                    return _history[_currentIndex].Path;
+                    if (_forwardHistory.IsEmpty) return null;
+                    
+                    // Move current to history if it exists
+                    if (_currentEntry != null)
+                    {
+                        _history.Add(_currentEntry);
+                    }
+                    
+                    // Get first forward entry
+                    _currentEntry = _forwardHistory.RemoveFirst();
+                    return _currentEntry?.Path;
                 }
-                
-                return null;
             }
 
             /// <summary>
@@ -407,12 +585,40 @@ namespace ExplorerPro.UI.PaneManagement
             /// <returns>Current path or null</returns>
             public string GetCurrentPath()
             {
-                if (_currentIndex >= 0 && _currentIndex < _history.Count)
+                if (_disposed) return null;
+
+                lock (_historyLock)
                 {
-                    return _history[_currentIndex].Path;
+                    return _currentEntry?.Path;
                 }
-                
-                return null;
+            }
+
+            /// <summary>
+            /// Get statistics for this tab history
+            /// </summary>
+            /// <returns>Tab history statistics</returns>
+            public (int HistoryCount, int ForwardCount) GetStatistics()
+            {
+                if (_disposed) return (0, 0);
+
+                lock (_historyLock)
+                {
+                    return (_history.Count, _forwardHistory.Count);
+                }
+            }
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+
+                lock (_historyLock)
+                {
+                    _currentEntry?.Dispose();
+                    _history?.Dispose();
+                    _forwardHistory?.Dispose();
+                }
+
+                _disposed = true;
             }
         }
 
