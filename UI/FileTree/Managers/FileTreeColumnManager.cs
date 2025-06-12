@@ -35,7 +35,7 @@ namespace ExplorerPro.UI.FileTree.Managers
 
         #region Events
 
-        public event EventHandler<double> NameColumnWidthChanged;
+        public event EventHandler<double>? NameColumnWidthChanged;
 
         #endregion
 

@@ -41,20 +41,25 @@ namespace ExplorerPro.UI.FileTree
     /// </summary>
     public partial class ImprovedFileTreeListView : UserControl, IFileTree, IDisposable, INotifyPropertyChanged
     {
+        // Explicit interface implementations to handle nullability
+        SelectionService IFileTree.SelectionService => _coordinator?.SelectionService ?? throw new InvalidOperationException("SelectionService not initialized");
+        string IFileTree.GetSelectedFolderPath() => GetSelectedFolderPath() ?? string.Empty;
+        FileTreeItem IFileTree.FindItemByPath(string path) => FindItemByPath(path) ?? throw new InvalidOperationException($"Item not found: {path}");
+
         #region Private Fields - Simplified with Managers
 
-        private readonly ObservableCollection<FileTreeItem> _rootItems;
-        private readonly SettingsManager _settingsManager;
+        private readonly ObservableCollection<FileTreeItem> _rootItems = new();
+        private readonly SettingsManager _settingsManager = null!;
         
         // Specialized manager classes following SRP
-        private FileTreeCoordinator _coordinator;
-        private FileTreePerformanceManager _performanceManager;
-        private FileTreeUIEventManager _uiEventManager;
-        private FileTreeColumnManager _columnManager;
-        private FileTreeOperationHelper _operationHelper;
+        private FileTreeCoordinator? _coordinator;
+        private FileTreePerformanceManager? _performanceManager;
+        private FileTreeUIEventManager? _uiEventManager;
+        private FileTreeColumnManager? _columnManager;
+        private FileTreeOperationHelper? _operationHelper;
         
         // Debounced selection update
-        private DispatcherTimer _selectionUpdateTimer;
+        private DispatcherTimer? _selectionUpdateTimer;
         private bool _pendingSelectionUpdate = false;
         
         // State tracking
@@ -76,7 +81,7 @@ namespace ExplorerPro.UI.FileTree
         public event EventHandler<string> LocationChanged = delegate { };
         public event EventHandler<Tuple<string, string>> ContextMenuActionTriggered = delegate { };
         public event EventHandler FileTreeClicked = delegate { };
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         #endregion
 
@@ -90,7 +95,7 @@ namespace ExplorerPro.UI.FileTree
             get => _coordinator?.ShowHiddenFiles ?? false;
             set { if (_coordinator != null) _coordinator.ShowHiddenFiles = value; }
         }
-        public SelectionService SelectionService => _coordinator?.SelectionService;
+        public SelectionService? SelectionService => _coordinator?.SelectionService;
         public bool IsMultiSelectMode => _coordinator?.IsMultiSelectMode ?? false;
         public bool HasSelection => _coordinator?.HasSelection ?? false;
         public int SelectionCount => _coordinator?.SelectionCount ?? 0;
@@ -105,7 +110,6 @@ namespace ExplorerPro.UI.FileTree
             {
                 InitializeComponent();
 
-                _rootItems = new ObservableCollection<FileTreeItem>();
                 _settingsManager = App.Settings ?? new SettingsManager();
 
                 // Initialize all specialized managers in constructor to fix readonly assignment
@@ -138,6 +142,16 @@ namespace ExplorerPro.UI.FileTree
             // Initialize all dependencies for coordinator
             var dependencies = CreateServiceDependencies();
             
+            if (dependencies.FileTreeService == null || 
+                dependencies.FileTreeCache == null || 
+                dependencies.SelectionService == null || 
+                dependencies.ThemeService == null || 
+                dependencies.FileOperationHandler == null || 
+                dependencies.DragDropService == null)
+            {
+                throw new InvalidOperationException("Failed to initialize required dependencies");
+            }
+
             // Create coordinator with all dependencies
             _coordinator = new FileTreeCoordinator(
                 fileTreeView,
@@ -163,7 +177,7 @@ namespace ExplorerPro.UI.FileTree
             _columnManager = new FileTreeColumnManager(
                 _settingsManager, 
                 NameColumn, 
-                nameColumnSplitter
+                nameColumnSplitter ?? throw new InvalidOperationException("NameColumnSplitter not found in XAML")
             );
 
             // Initialize operation helper
@@ -211,28 +225,40 @@ namespace ExplorerPro.UI.FileTree
         private void WireUpManagerEvents()
         {
             // Wire up UI events to business logic
-            _uiEventManager.ItemDoubleClicked += OnItemDoubleClicked;
-            _uiEventManager.ItemClicked += OnItemClicked;
-            _uiEventManager.EmptySpaceClicked += OnEmptySpaceClicked;
-            _uiEventManager.SelectionRectangleCompleted += OnSelectionRectangleCompleted;
+            if (_uiEventManager != null)
+            {
+                _uiEventManager.ItemDoubleClicked += OnItemDoubleClicked;
+                _uiEventManager.ItemClicked += OnItemClicked;
+                _uiEventManager.EmptySpaceClicked += OnEmptySpaceClicked;
+                _uiEventManager.SelectionRectangleCompleted += OnSelectionRectangleCompleted;
+            }
             
             // Wire up selection changes to update debouncing
-            _coordinator.SelectionService.SelectionChanged += OnSelectionChanged;
-            _coordinator.SelectionService.PropertyChanged += OnSelectionService_PropertyChanged;
-            _coordinator.SelectionService.MultiSelectModeChanged += OnMultiSelectModeChanged;
+            if (_coordinator?.SelectionService != null)
+            {
+                _coordinator.SelectionService.SelectionChanged += OnSelectionChanged;
+                _coordinator.SelectionService.PropertyChanged += OnSelectionService_PropertyChanged;
+                _coordinator.SelectionService.MultiSelectModeChanged += OnMultiSelectModeChanged;
+            }
             
             // Wire up coordinator property changes
-            _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
-            
-            // Wire up coordinator events to main events
-            _coordinator.LocationChanged += (s, path) => LocationChanged?.Invoke(this, path);
-            _coordinator.FileTreeClicked += (s, e) => FileTreeClicked?.Invoke(this, e);
-            
-            // FIXED: Wire up context menu event from coordinator
-            _coordinator.ContextMenuRequested += OnContextMenuRequested;
+            if (_coordinator != null)
+            {
+                _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
+                
+                // Wire up coordinator events to main events
+                _coordinator.LocationChanged += (s, path) => LocationChanged?.Invoke(this, path);
+                _coordinator.FileTreeClicked += (s, e) => FileTreeClicked?.Invoke(this, e);
+                
+                // Wire up context menu event from coordinator
+                _coordinator.ContextMenuRequested += OnContextMenuRequested;
+            }
             
             // Wire up performance manager events
-            _performanceManager.VisibleItemsCacheUpdated += OnVisibleItemsCacheUpdated;
+            if (_performanceManager != null)
+            {
+                _performanceManager.VisibleItemsCacheUpdated += OnVisibleItemsCacheUpdated;
+            }
         }
 
         private void SetupUI()
@@ -248,7 +274,7 @@ namespace ExplorerPro.UI.FileTree
 
         #region Event Handlers
 
-        private void OnLoaded(object sender, RoutedEventArgs e)
+        private void OnLoaded(object? sender, RoutedEventArgs e)
         {
             if (!_isInitialized)
             {
@@ -258,25 +284,31 @@ namespace ExplorerPro.UI.FileTree
                 ShowHiddenFiles = showHidden;
                 
                 TreeViewItemExtensions.InitializeTreeViewItemLevels(fileTreeView);
-                _coordinator.RefreshThemeElements();
+                if (_coordinator != null)
+                {
+                    _coordinator.RefreshThemeElements();
+                }
                 
-                _performanceManager.UpdateVisibleItemsCache();
+                if (_performanceManager != null)
+                {
+                    _performanceManager.UpdateVisibleItemsCache();
+                }
             }
         }
 
-        private void OnUnloaded(object sender, RoutedEventArgs e)
+        private void OnUnloaded(object? sender, RoutedEventArgs e)
         {
             _columnManager?.SaveColumnWidths();
         }
 
-        private void OnItemDoubleClicked(object sender, string filePath)
+        private void OnItemDoubleClicked(object? sender, string filePath)
         {
             HandleDoubleClick(filePath);
         }
 
-        private void OnItemClicked(object sender, FileTreeItem item)
+        private void OnItemClicked(object? sender, FileTreeItem item)
         {
-            if (item != null)
+            if (item != null && _coordinator != null)
             {
                 OnPropertyChanged(nameof(CurrentPath));
                 LocationChanged?.Invoke(this, item.Path);
@@ -284,26 +316,29 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
-        private void OnEmptySpaceClicked(object sender, Point point)
+        private void OnEmptySpaceClicked(object? sender, Point point)
         {
             ScheduleSelectionUpdate();
         }
 
-        private void OnSelectionRectangleCompleted(object sender, EventArgs e)
+        private void OnSelectionRectangleCompleted(object? sender, EventArgs e)
         {
             ScheduleSelectionUpdate();
         }
 
-        private void OnSelectionChanged(object sender, FileTreeSelectionChangedEventArgs e)
+        private void OnSelectionChanged(object? sender, FileTreeSelectionChangedEventArgs e)
         {
-            OnPropertyChanged(nameof(HasSelectedItems));
-            OnPropertyChanged(nameof(HasSelection));
-            OnPropertyChanged(nameof(SelectionCount));
-            
-            ScheduleSelectionUpdate();
+            if (_coordinator != null)
+            {
+                OnPropertyChanged(nameof(HasSelectedItems));
+                OnPropertyChanged(nameof(HasSelection));
+                OnPropertyChanged(nameof(SelectionCount));
+                
+                ScheduleSelectionUpdate();
+            }
         }
 
-        private void OnSelectionService_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        private void OnSelectionService_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(SelectionService.IsMultiSelectMode))
             {
@@ -320,12 +355,15 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
-        private void OnMultiSelectModeChanged(object sender, EventArgs e)
+        private void OnMultiSelectModeChanged(object? sender, EventArgs e)
         {
             if (_disposed) return;
             
             // Update the TreeView tag to trigger checkbox visibility binding
-            fileTreeView.Tag = _coordinator.SelectionService.IsMultiSelectMode ? "MultiSelect" : "SingleSelect";
+            if (_coordinator?.SelectionService != null)
+            {
+                fileTreeView.Tag = _coordinator.SelectionService.IsMultiSelectMode ? "MultiSelect" : "SingleSelect";
+            }
             
             // Force visual update for all visible items
             Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
@@ -338,20 +376,23 @@ namespace ExplorerPro.UI.FileTree
             }));
         }
 
-        private void OnCoordinatorPropertyChanged(object sender, PropertyChangedEventArgs e)
+        private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             OnPropertyChanged(e.PropertyName);
         }
 
-        private void OnVisibleItemsCacheUpdated(object sender, EventArgs e)
+        private void OnVisibleItemsCacheUpdated(object? sender, EventArgs e)
         {
-            ScheduleSelectionUpdate();
+            if (_coordinator != null)
+            {
+                ScheduleSelectionUpdate();
+            }
         }
 
         // FIXED: Handle context menu request from coordinator
-        private void OnContextMenuRequested(object sender, FileTreeContextMenuEventArgs e)
+        private void OnContextMenuRequested(object? sender, FileTreeContextMenuEventArgs e)
         {
-            if (_disposed) return;
+            if (_disposed || _coordinator == null) return;
             
             var contextMenuProvider = new ContextMenuProvider(
                 App.MetadataManager ?? MetadataManager.Instance, 
@@ -360,7 +401,7 @@ namespace ExplorerPro.UI.FileTree
                 this
             );
 
-            ContextMenu contextMenu = null;
+            ContextMenu? contextMenu = null;
             
             // If we have a clicked item, build a context menu for it
             if (e.ClickedItem != null)
@@ -397,7 +438,7 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
-        private void OnSelectionUpdateTimer_Tick(object sender, EventArgs e)
+        private void OnSelectionUpdateTimer_Tick(object? sender, EventArgs e)
         {
             _selectionUpdateTimer?.Stop();
             
@@ -427,7 +468,7 @@ namespace ExplorerPro.UI.FileTree
         // Keep for XAML compatibility
         private void SelectionCheckBox_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is CheckBox checkBox && checkBox.Tag is FileTreeItem item)
+            if (sender is CheckBox checkBox && checkBox.Tag is FileTreeItem item && _coordinator?.SelectionService != null)
             {
                 _coordinator.SelectionService.ToggleSelection(item);
                 ScheduleSelectionUpdate();
@@ -446,18 +487,22 @@ namespace ExplorerPro.UI.FileTree
         #region IFileTree Implementation - Delegated to Coordinator and Managers
 
         public string GetCurrentPath() => _coordinator?.CurrentPath ?? string.Empty;
-        public string GetSelectedPath() => _coordinator?.SelectionService?.FirstSelectedPath;
+        public string? GetSelectedPath() => _coordinator?.SelectionService?.FirstSelectedPath;
         public IReadOnlyList<string> GetSelectedPaths() => _coordinator?.SelectionService?.SelectedPaths ?? new List<string>();
 
-        public string GetSelectedFolderPath()
+        public string? GetSelectedFolderPath()
         {
             var selectedPath = GetSelectedPath();
+            if (selectedPath == null) return null;
             return Directory.Exists(selectedPath) ? selectedPath : Path.GetDirectoryName(selectedPath);
         }
 
         public void RefreshView() 
         { 
-            _coordinator?.RefreshView();
+            if (_coordinator != null)
+            {
+                _coordinator.RefreshView();
+            }
             
             // Optimize performance after view refresh
             OptimizePerformanceForTreeSize();
@@ -465,7 +510,7 @@ namespace ExplorerPro.UI.FileTree
         public void RefreshDirectory(string directoryPath) => _ = _coordinator?.RefreshDirectoryAsync(directoryPath);
         public void SelectItem(string path) => _coordinator?.SelectItemByPath(path);
 
-        public void SelectItems(IEnumerable<string> paths)
+        public void SelectItems(IEnumerable<string>? paths)
         {
             if (paths == null) return;
             foreach (var path in paths)
@@ -598,12 +643,15 @@ namespace ExplorerPro.UI.FileTree
                 Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                 {
                     var item = FindItemByPath(path);
-                    if (item != null)
+                    if (item != null && _coordinator?.SelectionService != null)
                     {
                         _coordinator.SelectionService.SelectSingle(item);
                         
-                        var treeViewItem = _performanceManager.GetTreeViewItemCached(item);
-                        treeViewItem?.BringIntoView();
+                        if (_performanceManager != null)
+                        {
+                            var treeViewItem = _performanceManager.GetTreeViewItemCached(item);
+                            treeViewItem?.BringIntoView();
+                        }
                     }
                 }), DispatcherPriority.Background);
             }
@@ -613,7 +661,7 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
-        public void ExpandToPath(string path) 
+        public void ExpandToPath(string? path) 
         { 
             if (string.IsNullOrEmpty(path)) return;
             
@@ -658,8 +706,9 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
-        public FileTreeItem FindItemByPath(string path) 
+        public FileTreeItem? FindItemByPath(string? path) 
         {
+            if (string.IsNullOrEmpty(path)) return null;
             return FindItemInCollection(_rootItems, path);
         }
 
@@ -945,7 +994,7 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Cancels the rename operation
         /// </summary>
-        private void CancelRename(FileTreeItem item)
+        private void CancelRename(FileTreeItem? item)
         {
             if (item != null)
             {
@@ -984,13 +1033,13 @@ namespace ExplorerPro.UI.FileTree
             return new FileOperationHandler(fileOperations, undoManager, metadataManager);
         }
 
-        private FileTreeItem FindItemInCollection(IEnumerable<FileTreeItem> items, string path)
+        private FileTreeItem? FindItemInCollection(IEnumerable<FileTreeItem>? items, string? path)
         {
+            if (items == null || path == null) return null;
             foreach (var item in items)
             {
                 if (string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase))
                     return item;
-                
                 var found = FindItemInCollection(item.Children, path);
                 if (found != null) return found;
             }
@@ -1027,16 +1076,13 @@ namespace ExplorerPro.UI.FileTree
 
         private void UpdateTreeViewSelection()
         {
-            if (_coordinator?.SelectionService == null) return;
-            
+            if (_coordinator?.SelectionService == null || _performanceManager == null) return;
             var selectedPaths = new HashSet<string>(_coordinator.SelectionService.SelectedPaths, StringComparer.OrdinalIgnoreCase);
-            
             foreach (var treeViewItem in _performanceManager.GetAllVisibleTreeViewItems())
             {
                 if (treeViewItem.DataContext is FileTreeItem dataItem)
                 {
                     var shouldBeSelected = selectedPaths.Contains(dataItem.Path);
-                    
                     if (treeViewItem.IsSelected != shouldBeSelected)
                     {
                         treeViewItem.IsSelected = shouldBeSelected;
@@ -1045,9 +1091,12 @@ namespace ExplorerPro.UI.FileTree
             }
         }
 
-        protected void OnPropertyChanged(string propertyName)
+        protected void OnPropertyChanged(string? propertyName)
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            if (propertyName != null)
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            }
         }
 
         #endregion
@@ -1066,30 +1115,33 @@ namespace ExplorerPro.UI.FileTree
                 this.Loaded -= OnLoaded;
                 this.Unloaded -= OnUnloaded;
                 
-                // FIXED: Unsubscribe from coordinator context menu event
                 if (_coordinator != null)
                 {
                     _coordinator.ContextMenuRequested -= OnContextMenuRequested;
+                    if (_coordinator.SelectionService != null)
+                    {
+                        _coordinator.SelectionService.MultiSelectModeChanged -= OnMultiSelectModeChanged;
+                    }
                 }
 
-                // Unsubscribe from selection service events
-                if (_coordinator?.SelectionService != null)
-                {
-                    _coordinator.SelectionService.MultiSelectModeChanged -= OnMultiSelectModeChanged;
-                }
-
-                // Dispose all managers
                 _performanceManager?.Dispose();
                 _uiEventManager?.Dispose();
                 _columnManager?.Dispose();
                 _operationHelper?.Dispose();
                 _coordinator?.Dispose();
 
-                LocationChanged = null;
-                ContextMenuActionTriggered = null;
-                FileTreeClicked = null;
-                PropertyChanged = null;
+                // Clear all event handlers
+                LocationChanged = delegate { };
+                ContextMenuActionTriggered = delegate { };
+                FileTreeClicked = delegate { };
+                PropertyChanged = delegate { };
                 DataContext = null;
+
+                _coordinator = null;
+                _performanceManager = null;
+                _uiEventManager = null;
+                _columnManager = null;
+                _operationHelper = null;
 
                 System.Diagnostics.Debug.WriteLine("[DISPOSE] Refactored FileTreeListView disposed");
             }
@@ -1101,12 +1153,12 @@ namespace ExplorerPro.UI.FileTree
 
         private class ServiceDependencies
         {
-            public IFileTreeService FileTreeService { get; set; }
-            public IFileTreeCache FileTreeCache { get; set; }
-            public SelectionService SelectionService { get; set; }
-            public FileTreeThemeService ThemeService { get; set; }
-            public FileOperationHandler FileOperationHandler { get; set; }
-            public FileTreeDragDropService DragDropService { get; set; }
+            public IFileTreeService? FileTreeService { get; set; }
+            public IFileTreeCache? FileTreeCache { get; set; }
+            public SelectionService? SelectionService { get; set; }
+            public FileTreeThemeService? ThemeService { get; set; }
+            public FileOperationHandler? FileOperationHandler { get; set; }
+            public FileTreeDragDropService? DragDropService { get; set; }
         }
 
         #endregion

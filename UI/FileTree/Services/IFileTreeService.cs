@@ -19,7 +19,7 @@ namespace ExplorerPro.UI.FileTree.Services
         /// <param name="showHiddenFiles">Whether to include hidden files</param>
         /// <param name="level">Hierarchical level for new items</param>
         /// <returns>Collection of file tree items</returns>
-        Task<IEnumerable<FileTreeItem>> LoadDirectoryAsync(string directoryPath, bool showHiddenFiles = false, int level = 0);
+        Task<IEnumerable<FileTreeItem>> LoadDirectoryAsync(string? directoryPath, bool showHiddenFiles = false, int level = 0);
 
         /// <summary>
         /// Creates a file tree item from a path
@@ -27,7 +27,7 @@ namespace ExplorerPro.UI.FileTree.Services
         /// <param name="path">File or directory path</param>
         /// <param name="level">Hierarchical level</param>
         /// <returns>Created file tree item</returns>
-        FileTreeItem CreateFileTreeItem(string path, int level = 0);
+        FileTreeItem CreateFileTreeItem(string? path, int level = 0);
 
         /// <summary>
         /// Creates a file tree item from a path asynchronously (with async HasChildren check)
@@ -37,7 +37,7 @@ namespace ExplorerPro.UI.FileTree.Services
         /// <param name="showHiddenFiles">Whether to consider hidden files</param>
         /// <param name="cancellationToken">Cancellation token</param>
         /// <returns>Created file tree item</returns>
-        Task<FileTreeItem> CreateFileTreeItemAsync(string path, int level = 0, bool showHiddenFiles = false, CancellationToken cancellationToken = default);
+        Task<FileTreeItem> CreateFileTreeItemAsync(string? path, int level = 0, bool showHiddenFiles = false, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Checks if a directory has accessible children (synchronous - deprecated)

@@ -20,12 +20,12 @@ namespace ExplorerPro.UI.FileTree.Managers
         private bool _isHandlingDoubleClick = false;
         private bool _disposed = false;
 
-        public event EventHandler<string> ItemDoubleClicked;
-        public event EventHandler<string> ItemClicked;
-        public event EventHandler<FileTreeItem> ItemExpanded;
-        public event EventHandler<FileTreeContextMenuEventArgs> ContextMenuRequested;
-        public event EventHandler<MouseEventArgs> MouseEvent;
-        public event EventHandler<KeyEventArgs> KeyboardEvent;
+        public event EventHandler<string>? ItemDoubleClicked;
+        public event EventHandler<string>? ItemClicked;
+        public event EventHandler<FileTreeItem>? ItemExpanded;
+        public event EventHandler<FileTreeContextMenuEventArgs>? ContextMenuRequested;
+        public event EventHandler<MouseEventArgs>? MouseEvent;
+        public event EventHandler<KeyEventArgs>? KeyboardEvent;
 
         public FileTreeEventManager(TreeView treeView, IFileTreeService fileTreeService, SelectionService selectionService)
         {
@@ -169,8 +169,8 @@ namespace ExplorerPro.UI.FileTree.Managers
     public class FileTreeContextMenuEventArgs : EventArgs
     {
         public ContextMenuEventArgs OriginalArgs { get; }
-        public FileTreeItem ClickedItem { get; set; }
-        public TreeViewItem ClickedTreeViewItem { get; set; }
+        public FileTreeItem? ClickedItem { get; set; }
+        public TreeViewItem? ClickedTreeViewItem { get; set; }
         public IReadOnlyList<string> SelectedPaths { get; set; }
         public bool Handled { get; set; }
         

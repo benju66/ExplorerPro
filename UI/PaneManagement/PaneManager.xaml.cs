@@ -111,6 +111,9 @@ namespace ExplorerPro.UI.PaneManagement
                 // Initialize memory monitoring
                 InitializeMemoryMonitoring();
                 
+                // Initialize browser-like functionality for unified template
+                InitializeBrowserLikeFunctionality();
+                
                 Console.WriteLine("PaneManager initialized successfully");
             }
             catch (Exception ex)
@@ -172,6 +175,84 @@ namespace ExplorerPro.UI.PaneManagement
                 _memoryMonitorTimer?.Stop();
                 _memoryMonitorTimer = null;
             }));
+        }
+
+        /// <summary>
+        /// Initialize browser-like functionality for unified template
+        /// </summary>
+        private void InitializeBrowserLikeFunctionality()
+        {
+            // Add event handlers for unified template
+            // These will be called by the template buttons
+        }
+
+        /// <summary>
+        /// Event handler for Add Tab button clicks
+        /// </summary>
+        /// <param name="sender">The sender object</param>
+        /// <param name="e">Event arguments</param>
+        public void AddTabButton_Click(object sender, RoutedEventArgs e)
+        {
+            AddNewFileTreeTab();
+        }
+
+        /// <summary>
+        /// Event handler for Tab Close button clicks
+        /// </summary>
+        /// <param name="sender">The sender object</param>
+        /// <param name="e">Event arguments</param>
+        public void TabCloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            var button = sender as Button;
+            var tab = FindParent<TabItem>(button);
+
+            if (tab != null && TabControl.Items.Count > 1)
+            {
+                RemoveFileTreeTab(tab);
+            }
+        }
+
+        /// <summary>
+        /// Add a new file tree tab with default path
+        /// </summary>
+        public void AddNewFileTreeTab(string path = null)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                path = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            }
+
+            string tabName = System.IO.Path.GetFileName(path) ?? "New Tab";
+            AddNewFileTreeTab(tabName, path);
+        }
+
+        /// <summary>
+        /// Remove a file tree tab
+        /// </summary>
+        /// <param name="tab">Tab to remove</param>
+        private void RemoveFileTreeTab(TabItem tab)
+        {
+            if (TabControl.Items.Count <= 1) return;
+
+            var fileTree = tab.Content as ImprovedFileTreeListView;
+            fileTree?.Dispose();
+
+            TabControl.Items.Remove(tab);
+        }
+
+        /// <summary>
+        /// Find parent element of specified type
+        /// </summary>
+        /// <typeparam name="T">Type to find</typeparam>
+        /// <param name="child">Child element</param>
+        /// <returns>Parent element or null</returns>
+        private static T FindParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            DependencyObject parentObject = VisualTreeHelper.GetParent(child);
+            if (parentObject == null) return null;
+
+            T parent = parentObject as T;
+            return parent != null ? parent : FindParent<T>(parentObject);
         }
 
         #endregion

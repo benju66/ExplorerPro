@@ -69,12 +69,13 @@
     
     <Grid>
         <TabControl x:Name="TabControl"
-                   TabStripPlacement="Top"
+                   Grid.Row="1"
+                   Template="{StaticResource ModernTabControlTemplate}"
+                   ItemContainerStyle="{StaticResource FileTreeTabItemStyle}"
                    SelectionChanged="TabControl_SelectionChanged"
                    AllowDrop="True"
                    Background="White"
                    BorderThickness="0"
-                   Style="{x:Null}"
                    Padding="0"
                    Margin="0"
                    ContextMenu="{StaticResource PaneContextMenu}">

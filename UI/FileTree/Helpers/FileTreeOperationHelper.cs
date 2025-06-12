@@ -328,7 +328,7 @@ namespace ExplorerPro.UI.FileTree.Helpers
             public bool CanCreateFile { get; set; }
             public bool CanRename { get; set; }
             public int SelectedCount { get; set; }
-            public string TargetPath { get; set; }
+            public string? TargetPath { get; set; }
         }
 
         #endregion

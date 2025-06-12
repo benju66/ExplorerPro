@@ -14,28 +14,28 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         /// <param name="key">Cache key (typically file path)</param>
         /// <returns>Cached item or null if not found</returns>
-        FileTreeItem GetItem(string key);
+        FileTreeItem? GetItem(string? key);
 
         /// <summary>
         /// Adds or updates an item in the cache
         /// </summary>
         /// <param name="key">Cache key (typically file path)</param>
         /// <param name="item">Item to cache</param>
-        void SetItem(string key, FileTreeItem item);
+        void SetItem(string? key, FileTreeItem? item);
 
         /// <summary>
         /// Removes an item from the cache
         /// </summary>
         /// <param name="key">Cache key to remove</param>
         /// <returns>True if item was removed, false if not found</returns>
-        bool RemoveItem(string key);
+        bool RemoveItem(string? key);
 
         /// <summary>
         /// Checks if an item exists in the cache
         /// </summary>
         /// <param name="key">Cache key to check</param>
         /// <returns>True if item exists in cache</returns>
-        bool ContainsKey(string key);
+        bool ContainsKey(string? key);
 
         /// <summary>
         /// Clears all items from the cache

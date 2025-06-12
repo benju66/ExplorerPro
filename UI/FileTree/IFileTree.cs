@@ -41,7 +41,7 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Gets the selection service that manages all selection state.
         /// </summary>
-        SelectionService SelectionService { get; }
+        SelectionService? SelectionService { get; }
 
         /// <summary>
         /// Sets the root directory for the file tree.

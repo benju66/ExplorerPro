@@ -9,6 +9,7 @@
             <!-- The ThemeManager will dynamically manage these dictionaries at runtime -->
             <ResourceDictionary.MergedDictionaries>
                 <!-- Intentionally empty - ThemeManager will populate dynamically -->
+                <ResourceDictionary Source="Themes/UnifiedTabStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             
             <!-- Global resource references for theme-aware controls -->

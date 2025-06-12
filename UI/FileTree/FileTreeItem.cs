@@ -354,7 +354,7 @@ namespace ExplorerPro.UI.FileTree
         /// <summary>
         /// Event raised when children need to be loaded
         /// </summary>
-        public event EventHandler LoadChildren
+        public event EventHandler? LoadChildren
         {
             add 
             { 

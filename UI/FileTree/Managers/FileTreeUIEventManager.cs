@@ -41,10 +41,10 @@ namespace ExplorerPro.UI.FileTree.Managers
 
         #region Events
 
-        public event EventHandler<string> ItemDoubleClicked;
-        public event EventHandler<FileTreeItem> ItemClicked;
-        public event EventHandler<Point> EmptySpaceClicked;
-        public event EventHandler SelectionRectangleCompleted;
+        public event EventHandler<string>? ItemDoubleClicked;
+        public event EventHandler<FileTreeItem>? ItemClicked;
+        public event EventHandler<Point>? EmptySpaceClicked;
+        public event EventHandler? SelectionRectangleCompleted;
 
         #endregion
 

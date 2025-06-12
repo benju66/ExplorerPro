@@ -40,10 +40,10 @@ namespace ExplorerPro.UI.FileTree.Services
             _enhancedService.OutlookExtractionCompleted += _outlookCompletedHandler;
         }
         
-        public event EventHandler<FilesDroppedEventArgs> FilesDropped;
-        public event EventHandler<FilesMoved> FilesMoved;
-        public event EventHandler<string> ErrorOccurred;
-        public event EventHandler<OutlookExtractionCompletedEventArgs> OutlookExtractionCompleted;
+        public event EventHandler<FilesDroppedEventArgs>? FilesDropped;
+        public event EventHandler<FilesMoved>? FilesMoved;
+        public event EventHandler<string>? ErrorOccurred;
+        public event EventHandler<OutlookExtractionCompletedEventArgs>? OutlookExtractionCompleted;
         
         public void HandleDragEnter(DragEventArgs e)
         {
@@ -63,7 +63,7 @@ namespace ExplorerPro.UI.FileTree.Services
             _enhancedService.HandleDragLeave(e);
         }
         
-        public bool HandleDrop(DragEventArgs e, Func<Point, FileTreeItem> getItemFromPoint, string currentTreePath = null)
+        public bool HandleDrop(DragEventArgs e, Func<Point, FileTreeItem> getItemFromPoint, string? currentTreePath = null)
         {
             ThrowIfDisposed();
             return _enhancedService.HandleDrop(e, getItemFromPoint, currentTreePath);
@@ -77,13 +77,13 @@ namespace ExplorerPro.UI.FileTree.Services
             _enhancedService.StartDrag(source, selectedPaths);
         }
         
-        public bool HandleExternalFileDrop(string[] droppedFiles, string targetPath)
+        public bool HandleExternalFileDrop(string[]? droppedFiles, string? targetPath)
         {
             ThrowIfDisposed();
             return _enhancedService.HandleExternalFileDrop(droppedFiles, targetPath);
         }
         
-        public bool HandleInternalFileMove(string[] droppedFiles, string targetPath, string currentTreePath)
+        public bool HandleInternalFileMove(string[]? droppedFiles, string? targetPath, string? currentTreePath)
         {
             ThrowIfDisposed();
             return _enhancedService.HandleInternalFileMove(droppedFiles, targetPath, currentTreePath);

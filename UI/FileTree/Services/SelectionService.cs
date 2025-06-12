@@ -57,17 +57,17 @@ namespace ExplorerPro.UI.FileTree.Services
         /// <summary>
         /// Raised when the selection changes (debounced)
         /// </summary>
-        public event EventHandler<FileTreeSelectionChangedEventArgs> SelectionChanged;
+        public event EventHandler<FileTreeSelectionChangedEventArgs>? SelectionChanged;
         
         /// <summary>
         /// Property changed event for data binding
         /// </summary>
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
         
         /// <summary>
         /// Raised when multi-select mode changes
         /// </summary>
-        public event EventHandler MultiSelectModeChanged;
+        public event EventHandler? MultiSelectModeChanged;
         
         #endregion
         
@@ -964,14 +964,14 @@ namespace ExplorerPro.UI.FileTree.Services
     {
         public IReadOnlyList<FileTreeItem> SelectedItems { get; }
         public IReadOnlyList<string> SelectedPaths { get; }
-        public IReadOnlyList<FileTreeItem> AddedItems { get; }
-        public IReadOnlyList<FileTreeItem> RemovedItems { get; }
+        public IReadOnlyList<FileTreeItem>? AddedItems { get; }
+        public IReadOnlyList<FileTreeItem>? RemovedItems { get; }
         
         public FileTreeSelectionChangedEventArgs(
             IReadOnlyList<FileTreeItem> selectedItems, 
             IReadOnlyList<string> selectedPaths,
-            IReadOnlyList<FileTreeItem> addedItems = null,
-            IReadOnlyList<FileTreeItem> removedItems = null)
+            IReadOnlyList<FileTreeItem>? addedItems = null,
+            IReadOnlyList<FileTreeItem>? removedItems = null)
         {
             SelectedItems = selectedItems;
             SelectedPaths = selectedPaths;

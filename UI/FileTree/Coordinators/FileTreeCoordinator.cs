@@ -65,7 +65,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
         private bool _disposed = false;
 
         // Simple debounced selection update mechanism
-        private CancellationTokenSource _selectionUpdateCts;
+        private CancellationTokenSource _selectionUpdateCts = new();
         private readonly SemaphoreSlim _selectionUpdateSemaphore = new SemaphoreSlim(1, 1);
 
         // Performance metrics for selection updates
@@ -80,10 +80,10 @@ namespace ExplorerPro.UI.FileTree.Coordinators
 
         #region Events
 
-        public event PropertyChangedEventHandler PropertyChanged;
-        public event EventHandler<string> LocationChanged;
-        public event EventHandler<FileTreeContextMenuEventArgs> ContextMenuRequested;
-        public event EventHandler FileTreeClicked;
+        public event PropertyChangedEventHandler? PropertyChanged;
+        public event EventHandler<string>? LocationChanged;
+        public event EventHandler<FileTreeContextMenuEventArgs>? ContextMenuRequested;
+        public event EventHandler? FileTreeClicked;
 
         #endregion
 
@@ -345,7 +345,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             if (_disposed) return;
             
             // Cancel any pending update
-            _selectionUpdateCts?.Cancel();
+            _selectionUpdateCts.Cancel();
             _selectionUpdateCts = new CancellationTokenSource();
             var token = _selectionUpdateCts.Token;
             
@@ -467,7 +467,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
 
         #region Event Handlers
 
-        private void OnItemDoubleClicked(object sender, string path)
+        private void OnItemDoubleClicked(object? sender, string path)
         {
             if (File.Exists(path))
             {
@@ -487,7 +487,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             }
         }
 
-        private void OnItemClicked(object sender, string path)
+        private void OnItemClicked(object? sender, string path)
         {
             if (_disposed || string.IsNullOrEmpty(path))
                 return;
@@ -503,7 +503,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             FileTreeClicked?.Invoke(this, EventArgs.Empty);
         }
 
-        private async void OnItemExpanded(object sender, FileTreeItem item)
+        private async void OnItemExpanded(object? sender, FileTreeItem item)
         {
             try
             {
@@ -532,20 +532,20 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             }
         }
 
-        private void OnContextMenuRequested(object sender, FileTreeContextMenuEventArgs e)
+        private void OnContextMenuRequested(object? sender, FileTreeContextMenuEventArgs e)
         {
             // Forward the event to the view
             ContextMenuRequested?.Invoke(this, e);
         }
 
-        private void OnMouseEvent(object sender, MouseEventArgs e)
+        private void OnMouseEvent(object? sender, MouseEventArgs e)
         {
             // Handle mouse events for selection rectangle, etc.
             // Delegate to selection service if needed
             HandleMouseEventForSelection(e);
         }
 
-        private void OnKeyboardEvent(object sender, KeyEventArgs e)
+        private void OnKeyboardEvent(object? sender, KeyEventArgs e)
         {
             // Delegate keyboard shortcuts to selection service
             if (_selectionService.HandleKeyboardShortcut(e.Key, Keyboard.Modifiers, _rootItems))
@@ -555,22 +555,22 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             }
         }
 
-        private void OnSelectionUpdateRequested(object sender, EventArgs e)
+        private void OnSelectionUpdateRequested(object? sender, EventArgs e)
         {
             ScheduleSelectionUpdate();
         }
 
-        private void OnDirectoryLoaded(object sender, DirectoryLoadedEventArgs e)
+        private void OnDirectoryLoaded(object? sender, DirectoryLoadedEventArgs e)
         {
             // OPTIMIZED: Removed aggressive cache clearing - let cache manage itself
         }
 
-        private void OnDirectoryLoadError(object sender, DirectoryLoadErrorEventArgs e)
+        private void OnDirectoryLoadError(object? sender, DirectoryLoadErrorEventArgs e)
         {
             System.Diagnostics.Debug.WriteLine($"[ERROR] Directory load failed: {e.Exception.Message}");
         }
 
-        private void OnSelectionChanged(object sender, FileTreeSelectionChangedEventArgs e)
+        private void OnSelectionChanged(object? sender, FileTreeSelectionChangedEventArgs e)
         {
             if (_disposed) return;
             
@@ -584,7 +584,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             }
         }
 
-        private void OnSelectionServicePropertyChanged(object sender, PropertyChangedEventArgs e)
+        private void OnSelectionServicePropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (_disposed) return;
             
@@ -606,13 +606,16 @@ namespace ExplorerPro.UI.FileTree.Coordinators
         // Note: These event handlers reference types that need to be defined elsewhere
         // For the refactoring demo, we'll include placeholder implementations
 
-        private void OnDirectoryRefreshRequested(object sender, DirectoryRefreshEventArgs e)
+        private void OnDirectoryRefreshRequested(object? sender, DirectoryRefreshEventArgs e)
         {
             if (_disposed) return;
-            Application.Current.Dispatcher.InvokeAsync(() => _ = RefreshDirectoryAsync(e.DirectoryPath));
+            if (e.DirectoryPath != null)
+            {
+                Application.Current.Dispatcher.InvokeAsync(() => _ = RefreshDirectoryAsync(e.DirectoryPath));
+            }
         }
 
-        private void OnMultipleDirectoriesRefreshRequested(object sender, MultipleDirectoriesRefreshEventArgs e)
+        private void OnMultipleDirectoriesRefreshRequested(object? sender, MultipleDirectoriesRefreshEventArgs e)
         {
             if (_disposed) return;
             foreach (var directory in e.DirectoryPaths)
@@ -621,24 +624,30 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             }
         }
 
-        private void OnFileOperationError(object sender, FileOperationErrorEventArgs e)
+        private void OnFileOperationError(object? sender, FileOperationErrorEventArgs e)
         {
             System.Diagnostics.Debug.WriteLine($"[ERROR] File operation error: {e.Operation} - {e.Exception.Message}");
         }
 
-        private void OnPasteCompleted(object sender, PasteCompletedEventArgs e)
+        private void OnPasteCompleted(object? sender, PasteCompletedEventArgs e)
         {
             if (_disposed) return;
-            Application.Current.Dispatcher.InvokeAsync(() => _ = RefreshDirectoryAsync(e.TargetPath));
+            if (e.TargetPath != null)
+            {
+                Application.Current.Dispatcher.InvokeAsync(() => _ = RefreshDirectoryAsync(e.TargetPath));
+            }
         }
 
-        private async void OnFilesDropped(object sender, FilesDroppedEventArgs e)
+        private async void OnFilesDropped(object? sender, FilesDroppedEventArgs e)
         {
             if (_disposed) return;
             
             try
             {
-                await RefreshDirectoryAsync(e.TargetPath).ConfigureAwait(false);
+                if (e.TargetPath != null)
+                {
+                    await RefreshDirectoryAsync(e.TargetPath).ConfigureAwait(false);
+                }
                 
                 if (e.IsInternalMove)
                 {
@@ -649,7 +658,10 @@ namespace ExplorerPro.UI.FileTree.Coordinators
                         
                     foreach (var sourceDir in sourceDirectories)
                     {
-                        await RefreshDirectoryAsync(sourceDir).ConfigureAwait(false);
+                        if (sourceDir != null)
+                        {
+                            await RefreshDirectoryAsync(sourceDir).ConfigureAwait(false);
+                        }
                     }
                 }
             }
@@ -659,7 +671,7 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             }
         }
 
-        private async void OnFilesMoved(object sender, FilesMoved e)
+        private async void OnFilesMoved(object? sender, FilesMoved e)
         {
             if (_disposed) return;
             
@@ -678,14 +690,14 @@ namespace ExplorerPro.UI.FileTree.Coordinators
             }
         }
 
-        private void OnDragDropError(object sender, string error)
+        private void OnDragDropError(object? sender, string error)
         {
             if (_disposed) return;
             Application.Current.Dispatcher.InvokeAsync(() => 
                 MessageBox.Show(error, "Drag/Drop Error", MessageBoxButton.OK, MessageBoxImage.Warning));
         }
 
-        private void OnOutlookExtractionCompleted(object sender, OutlookExtractionCompletedEventArgs e)
+        private void OnOutlookExtractionCompleted(object? sender, OutlookExtractionCompletedEventArgs e)
         {
             if (_disposed) return;
             
@@ -778,8 +790,8 @@ namespace ExplorerPro.UI.FileTree.Coordinators
                 _disposed = true;
 
                 // Cancel any pending selection updates
-                _selectionUpdateCts?.Cancel();
-                _selectionUpdateCts?.Dispose();
+                _selectionUpdateCts.Cancel();
+                _selectionUpdateCts.Dispose();
                 _selectionUpdateSemaphore?.Dispose();
 
                 // FIXED: Properly unsubscribe ALL event handlers to prevent memory leaks

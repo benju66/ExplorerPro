@@ -52,8 +52,8 @@ namespace ExplorerPro.UI.FileTree.Managers
 
         #region Events
 
-        public event EventHandler VisibleItemsCacheUpdated;
-        public event EventHandler SelectionUpdateRequested;
+        public event EventHandler? VisibleItemsCacheUpdated;
+        public event EventHandler? SelectionUpdateRequested;
 
         #endregion
 

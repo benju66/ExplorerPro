@@ -88,15 +88,15 @@ namespace ExplorerPro.UI.FileTree.Services
         
         #region Events
         
-        public event EventHandler<FilesDroppedEventArgs> FilesDropped;
-        public event EventHandler<FilesMoved> FilesMoved;
-        public event EventHandler<string> ErrorOccurred;
-        public event EventHandler<OutlookExtractionCompletedEventArgs> OutlookExtractionCompleted;
+        public event EventHandler<FilesDroppedEventArgs>? FilesDropped;
+        public event EventHandler<FilesMoved>? FilesMoved;
+        public event EventHandler<string>? ErrorOccurred;
+        public event EventHandler<OutlookExtractionCompletedEventArgs>? OutlookExtractionCompleted;
         
         // Enhanced events for modern features
-        public event EventHandler<DragBetweenTabsEventArgs> DragBetweenTabs;
-        public event EventHandler<VisualDropIndicatorEventArgs> ShowDropIndicator;
-        public event EventHandler HideDropIndicator;
+        public event EventHandler<DragBetweenTabsEventArgs>? DragBetweenTabs;
+        public event EventHandler<VisualDropIndicatorEventArgs>? ShowDropIndicator;
+        public event EventHandler? HideDropIndicator;
         
         #endregion
         
@@ -246,7 +246,7 @@ namespace ExplorerPro.UI.FileTree.Services
             OnDragLeave(this, e);
         }
         
-        public bool HandleDrop(DragEventArgs e, Func<Point, FileTreeItem> getItemFromPoint, string currentTreePath = null)
+        public bool HandleDrop(DragEventArgs e, Func<Point, FileTreeItem> getItemFromPoint, string? currentTreePath = null)
         {
             // Store the function if provided
             if (getItemFromPoint != null)
@@ -265,12 +265,12 @@ namespace ExplorerPro.UI.FileTree.Services
             }
         }
         
-        public bool HandleExternalFileDrop(string[] droppedFiles, string targetPath)
+        public bool HandleExternalFileDrop(string[]? droppedFiles, string? targetPath)
         {
             return HandleFileDropInternal(droppedFiles, targetPath, DragDropEffects.Copy, false);
         }
         
-        public bool HandleInternalFileMove(string[] droppedFiles, string targetPath, string currentTreePath)
+        public bool HandleInternalFileMove(string[]? droppedFiles, string? targetPath, string? currentTreePath)
         {
             return HandleFileDropInternal(droppedFiles, targetPath, DragDropEffects.Move, true);
         }
@@ -1078,7 +1078,7 @@ namespace ExplorerPro.UI.FileTree.Services
             ErrorOccurred?.Invoke(this, message);
         }
         
-                private void OnOutlookExtractionCompleted(OutlookExtractionCompletedEventArgs e)
+        private void OnOutlookExtractionCompleted(OutlookExtractionCompletedEventArgs e)
         {
             OutlookExtractionCompleted?.Invoke(this, e);
         }

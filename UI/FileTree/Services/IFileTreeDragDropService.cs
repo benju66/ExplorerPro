@@ -58,7 +58,7 @@ namespace ExplorerPro.UI.FileTree.Services
         /// <param name="getItemFromPoint">Function to get FileTreeItem from point</param>
         /// <param name="currentTreePath">Current tree root path to detect internal vs external drops</param>
         /// <returns>True if drop was handled successfully</returns>
-        bool HandleDrop(DragEventArgs e, Func<Point, FileTreeItem> getItemFromPoint, string currentTreePath = null);
+        bool HandleDrop(DragEventArgs e, Func<Point, FileTreeItem> getItemFromPoint, string? currentTreePath = null);
 
         /// <summary>
         /// Handles drag leave events
@@ -79,7 +79,7 @@ namespace ExplorerPro.UI.FileTree.Services
         /// <param name="droppedFiles">Array of dropped file paths</param>
         /// <param name="targetPath">Target directory path</param>
         /// <returns>True if files were handled successfully</returns>
-        bool HandleExternalFileDrop(string[] droppedFiles, string targetPath);
+        bool HandleExternalFileDrop(string[]? droppedFiles, string? targetPath);
 
         /// <summary>
         /// Handles files moved internally within the tree
@@ -88,7 +88,7 @@ namespace ExplorerPro.UI.FileTree.Services
         /// <param name="targetPath">Target directory path</param>
         /// <param name="currentTreePath">Current tree root path</param>
         /// <returns>True if files were moved successfully</returns>
-        bool HandleInternalFileMove(string[] droppedFiles, string targetPath, string currentTreePath);
+        bool HandleInternalFileMove(string[]? droppedFiles, string? targetPath, string? currentTreePath);
 
         /// <summary>
         /// Handles Outlook item drops (emails, attachments) synchronously

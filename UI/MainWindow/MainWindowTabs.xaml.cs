@@ -167,6 +167,9 @@ namespace ExplorerPro.UI.MainWindow
             // Initialize hibernation timer
             InitializeHibernationTimer();
 
+            // Initialize keyboard shortcuts and browser-like functionality
+            InitializeTabShortcuts();
+
             // Delay tab creation until control is fully loaded
             this.Loaded += (s, e) =>
             {
@@ -175,6 +178,103 @@ namespace ExplorerPro.UI.MainWindow
                     AddNewMainWindowTab();
                 }
             };
+        }
+
+        #endregion
+
+        #region Browser-Like Functionality
+
+        /// <summary>
+        /// Initialize keyboard shortcuts and browser-like functionality
+        /// </summary>
+        private void InitializeTabShortcuts()
+        {
+            // Keyboard shortcuts
+            TabControl.PreviewKeyDown += (s, e) =>
+            {
+                if (e.Key == Key.T && Keyboard.Modifiers == ModifierKeys.Control)
+                {
+                    AddNewMainWindowTab();
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.W && Keyboard.Modifiers == ModifierKeys.Control)
+                {
+                    if (TabControl.SelectedIndex >= 0 && TabControl.Items.Count > 1)
+                    {
+                        CloseTab(TabControl.SelectedIndex);
+                        e.Handled = true;
+                    }
+                }
+            };
+
+            // Middle-click to close tabs
+            TabControl.PreviewMouseDown += (s, e) =>
+            {
+                if (e.ChangedButton == MouseButton.Middle)
+                {
+                    var tab = FindParent<TabItem>(e.OriginalSource as DependencyObject);
+                    if (tab != null && TabControl.Items.Count > 1)
+                    {
+                        int index = TabControl.Items.IndexOf(tab);
+                        CloseTab(index);
+                        e.Handled = true;
+                    }
+                }
+            };
+        }
+
+        /// <summary>
+        /// Event handler for TabControl Loaded event to wire up template events
+        /// </summary>
+        private void TabControl_Loaded(object sender, RoutedEventArgs e)
+        {
+            // Find the AddTabButton in the template and wire up its event
+            if (TabControl.Template != null)
+            {
+                var addButton = TabControl.Template.FindName("AddTabButton", TabControl) as Button;
+                if (addButton != null)
+                {
+                    addButton.Click += AddTabButton_Click;
+                }
+            }
+
+            // Wire up events for existing tabs
+            WireUpTabEvents();
+
+            // We'll wire up events for new tabs when they're added through our methods
+        }
+
+        /// <summary>
+        /// Wire up events for all tab items
+        /// </summary>
+        private void WireUpTabEvents()
+        {
+            foreach (TabItem tab in TabControl.Items)
+            {
+                WireUpTabItemEvents(tab);
+            }
+        }
+
+        /// <summary>
+        /// Wire up events for a specific tab item
+        /// </summary>
+        private void WireUpTabItemEvents(TabItem tab)
+        {
+            if (tab.Template != null)
+            {
+                var closeButton = tab.Template.FindName("CloseButton", tab) as Button;
+                if (closeButton != null)
+                {
+                    // Remove existing handler to avoid duplicates
+                    closeButton.Click -= TabCloseButton_Click;
+                    closeButton.Click += TabCloseButton_Click;
+                }
+            }
+            else
+            {
+                // If template isn't applied yet, wait for it
+                tab.Loaded += (s, e) => WireUpTabItemEvents(tab);
+            }
         }
 
         #endregion
@@ -469,6 +569,9 @@ namespace ExplorerPro.UI.MainWindow
                 // Add to TabControl
                 TabControl.Items.Add(newTab);
                 TabControl.SelectedItem = newTab;
+
+                // Wire up events for the new tab
+                WireUpTabItemEvents(newTab);
 
                 // Apply fade-in animation
                 ApplyTabFadeInAnimation(newTab);

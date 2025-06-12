@@ -54,7 +54,7 @@ namespace ExplorerPro.UI.FileTree.Services
         /// </summary>
         /// <param name="treeView">The TreeView control to manage themes for</param>
         /// <param name="mainGrid">The main grid container (optional)</param>
-        public FileTreeThemeService(TreeView treeView, Grid mainGrid = null)
+        public FileTreeThemeService(TreeView treeView, Grid? mainGrid = null)
         {
             _treeView = treeView ?? throw new ArgumentNullException(nameof(treeView));
             _mainGrid = mainGrid;

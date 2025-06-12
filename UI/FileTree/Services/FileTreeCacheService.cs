@@ -66,7 +66,7 @@ namespace ExplorerPro.UI.FileTree.Services
             _pendingBatch = new List<KeyValuePair<string, FileTreeItem>>(100);
         }
 
-        public FileTreeItem GetItem(string key)
+        public FileTreeItem? GetItem(string? key)
         {
             ThrowIfDisposed();
             
@@ -98,7 +98,7 @@ namespace ExplorerPro.UI.FileTree.Services
             }
         }
 
-        public void SetItem(string key, FileTreeItem item)
+        public void SetItem(string? key, FileTreeItem? item)
         {
             ThrowIfDisposed();
             
@@ -108,7 +108,35 @@ namespace ExplorerPro.UI.FileTree.Services
             _lock.EnterWriteLock();
             try
             {
-                SetItemInternal(key, item);
+                // Check if item already exists
+                if (_cache.TryGetValue(key, out CacheNode existingNode))
+                {
+                    // Update existing item
+                    existingNode.Item = item;
+                    existingNode.LastAccessed = DateTime.Now;
+                    existingNode.EstimatedSize = EstimateItemSize(item);
+                    UpdateAccessOrder(key, existingNode);
+                    OnItemEvicted(key, existingNode.Item, EvictionReason.Replaced);
+                }
+                else
+                {
+                    // Add new item
+                    var newNode = new CacheNode
+                    {
+                        Key = key,
+                        Item = item,
+                        LastAccessed = DateTime.Now,
+                        EstimatedSize = EstimateItemSize(item)
+                    };
+
+                    // Check capacity and evict if necessary
+                    EnsureCapacity();
+
+                    _cache[key] = newNode;
+                    var node = _accessList.AddFirst(newNode);
+                    _accessOrder[key] = node;
+                    _approximateMemoryUsage += newNode.EstimatedSize;
+                }
             }
             finally
             {
@@ -232,7 +260,7 @@ namespace ExplorerPro.UI.FileTree.Services
             }
         }
 
-        public bool RemoveItem(string key)
+        public bool RemoveItem(string? key)
         {
             ThrowIfDisposed();
             
@@ -242,7 +270,16 @@ namespace ExplorerPro.UI.FileTree.Services
             _lock.EnterWriteLock();
             try
             {
-                return RemoveItemInternal(key, EvictionReason.Removed);
+                if (_cache.TryGetValue(key, out CacheNode node))
+                {
+                    _cache.Remove(key);
+                    _accessOrder.Remove(key);
+                    _accessList.Remove(node);
+                    _approximateMemoryUsage -= node.EstimatedSize;
+                    OnItemEvicted(key, node.Item, EvictionReason.Removed);
+                    return true;
+                }
+                return false;
             }
             finally
             {
@@ -250,7 +287,7 @@ namespace ExplorerPro.UI.FileTree.Services
             }
         }
 
-        public bool ContainsKey(string key)
+        public bool ContainsKey(string? key)
         {
             ThrowIfDisposed();
             
@@ -470,6 +507,25 @@ namespace ExplorerPro.UI.FileTree.Services
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(FileTreeCacheService));
+        }
+
+        private void EnsureCapacity()
+        {
+            while (_cache.Count >= _maxCapacity || _approximateMemoryUsage > _maxMemoryUsage)
+            {
+                var oldestNode = _accessList.Last;
+                if (oldestNode == null) break;
+
+                var key = oldestNode.Value.Key;
+                var item = oldestNode.Value.Item;
+                
+                _cache.Remove(key);
+                _accessOrder.Remove(key);
+                _accessList.RemoveLast();
+                _approximateMemoryUsage -= oldestNode.Value.EstimatedSize;
+                
+                OnItemEvicted(key, item, EvictionReason.CapacityExceeded);
+            }
         }
 
         #endregion

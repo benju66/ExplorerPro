@@ -24,7 +24,7 @@ namespace ExplorerPro.UI.FileTree.Services
         private readonly FileIconProvider _iconProvider;
         private bool _disposed;
 
-        public event EventHandler<string> ErrorOccurred;
+        public event EventHandler<string>? ErrorOccurred;
 
         public FileTreeService(MetadataManager metadataManager, FileIconProvider iconProvider)
         {
@@ -32,7 +32,7 @@ namespace ExplorerPro.UI.FileTree.Services
             _iconProvider = iconProvider ?? throw new ArgumentNullException(nameof(iconProvider));
         }
 
-        public async Task<IEnumerable<FileTreeItem>> LoadDirectoryAsync(string directoryPath, bool showHiddenFiles = false, int level = 0)
+        public async Task<IEnumerable<FileTreeItem>> LoadDirectoryAsync(string? directoryPath, bool showHiddenFiles = false, int level = 0)
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(FileTreeService));
@@ -163,10 +163,16 @@ namespace ExplorerPro.UI.FileTree.Services
             }
         }
 
-        public FileTreeItem CreateFileTreeItem(string path, int level = 0)
+        public FileTreeItem CreateFileTreeItem(string? path, int level = 0)
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(FileTreeService));
+
+            if (string.IsNullOrEmpty(path))
+            {
+                OnErrorOccurred("Invalid path: path is null or empty");
+                return null;
+            }
 
             try
             {
@@ -208,10 +214,16 @@ namespace ExplorerPro.UI.FileTree.Services
             }
         }
 
-        public async Task<FileTreeItem> CreateFileTreeItemAsync(string path, int level = 0, bool showHiddenFiles = false, CancellationToken cancellationToken = default)
+        public async Task<FileTreeItem> CreateFileTreeItemAsync(string? path, int level = 0, bool showHiddenFiles = false, CancellationToken cancellationToken = default)
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(FileTreeService));
+
+            if (string.IsNullOrEmpty(path))
+            {
+                OnErrorOccurred("Invalid path: path is null or empty");
+                return null;
+            }
 
             var item = await CreateFileTreeItemInternalAsync(path, level, showHiddenFiles, cancellationToken).ConfigureAwait(false);
             
