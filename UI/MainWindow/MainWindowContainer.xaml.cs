@@ -2650,5 +2650,22 @@ namespace ExplorerPro.UI.MainWindow
             public string Message { get; set; } = string.Empty;
             public bool CanExpand { get; set; }
         }
+
+        /// <summary>
+        /// Checks if a specific panel is currently visible.
+        /// </summary>
+        /// <param name="panelName">Name of the panel to check</param>
+        /// <returns>True if panel is visible</returns>
+        public bool IsPanelVisible(string panelName)
+        {
+            return panelName switch
+            {
+                "PinnedPanel" => PinnedPanelContainer?.Visibility == Visibility.Visible,
+                "BookmarksPanel" => BookmarksPanelContainer?.Visibility == Visibility.Visible,
+                "TodoPanel" => ToDoPanelContainer?.Visibility == Visibility.Visible,
+                "ProcorePanel" => ProcorePanelContainer?.Visibility == Visibility.Visible,
+                _ => false
+            };
+        }
     }
 }

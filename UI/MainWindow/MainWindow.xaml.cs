@@ -2417,6 +2417,9 @@ namespace ExplorerPro.UI.MainWindow
         private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateAddressBarOnTabChange();
+            
+            // Update activity bar button states for the new tab
+            UpdateActivityBarButtonStates();
         }
 
         /// <summary>
@@ -2758,6 +2761,7 @@ namespace ExplorerPro.UI.MainWindow
         private void TogglePinnedPanel()
         {
             TogglePanelInCurrentContainer("TogglePinnedPanel");
+            UpdateActivityBarButtonStates();
         }
 
         /// <summary>
@@ -2774,6 +2778,7 @@ namespace ExplorerPro.UI.MainWindow
         private void ToggleBookmarksPanel()
         {
             TogglePanelInCurrentContainer("ToggleBookmarksPanel");
+            UpdateActivityBarButtonStates();
         }
 
         /// <summary>
@@ -2790,6 +2795,7 @@ namespace ExplorerPro.UI.MainWindow
         private void ToggleTodoPanel()
         {
             TogglePanelInCurrentContainer("ToggleTodoPanel");
+            UpdateActivityBarButtonStates();
         }
 
         /// <summary>
@@ -2806,6 +2812,7 @@ namespace ExplorerPro.UI.MainWindow
         private void ToggleProcorePanel()
         {
             TogglePanelInCurrentContainer("ToggleProcorePanel");
+            UpdateActivityBarButtonStates();
         }
 
         /// <summary>
@@ -2914,6 +2921,70 @@ namespace ExplorerPro.UI.MainWindow
             {
                 _instanceLogger?.LogError(ex, "Error applying saved settings");
                 Console.WriteLine($"Error applying saved settings: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Update activity bar button states to reflect current panel visibility.
+        /// </summary>
+        private void UpdateActivityBarButtonStates()
+        {
+            ExecuteOnUIThread(() =>
+            {
+                try
+                {
+                    var container = GetCurrentContainer();
+                    if (container == null) return;
+
+                    // Update button states based on panel visibility
+                    if (ActivityBarPinnedButton != null)
+                    {
+                        bool isPinnedVisible = IsPanelVisible(container, "PinnedPanel");
+                        ActivityBarPinnedButton.Tag = isPinnedVisible ? "Active" : null;
+                    }
+
+                    if (ActivityBarBookmarksButton != null)
+                    {
+                        bool isBookmarksVisible = IsPanelVisible(container, "BookmarksPanel");
+                        ActivityBarBookmarksButton.Tag = isBookmarksVisible ? "Active" : null;
+                    }
+
+                    if (ActivityBarProcoreButton != null)
+                    {
+                        bool isProcoreVisible = IsPanelVisible(container, "ProcorePanel");
+                        ActivityBarProcoreButton.Tag = isProcoreVisible ? "Active" : null;
+                    }
+
+                    if (ActivityBarTodoButton != null)
+                    {
+                        bool isTodoVisible = IsPanelVisible(container, "TodoPanel");
+                        ActivityBarTodoButton.Tag = isTodoVisible ? "Active" : null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _instanceLogger?.LogError(ex, "Error updating activity bar button states");
+                }
+            });
+        }
+
+        /// <summary>
+        /// Check if a specific panel is visible in the container.
+        /// </summary>
+        /// <param name="container">The container to check</param>
+        /// <param name="panelName">Name of the panel to check</param>
+        /// <returns>True if panel is visible</returns>
+        private bool IsPanelVisible(MainWindowContainer container, string panelName)
+        {
+            try
+            {
+                // Use the container's IsPanelVisible method as specified in Phase 4
+                return container.IsPanelVisible(panelName);
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogWarning(ex, $"Could not determine visibility for panel: {panelName}");
+                return false;
             }
         }
 
