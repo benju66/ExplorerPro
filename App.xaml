@@ -8,8 +8,11 @@
         <ResourceDictionary>
             <!-- The ThemeManager will dynamically manage these dictionaries at runtime -->
             <ResourceDictionary.MergedDictionaries>
-                <!-- Intentionally empty - ThemeManager will populate dynamically -->
+                <!-- Icon Resources -->
+                <ResourceDictionary Source="UI/Resources/IconResources.xaml"/>
+                <!-- Theme Resources -->
                 <ResourceDictionary Source="Themes/UnifiedTabStyles.xaml"/>
+                <!-- Intentionally empty - ThemeManager will populate dynamically -->
             </ResourceDictionary.MergedDictionaries>
             
             <!-- Global resource references for theme-aware controls -->

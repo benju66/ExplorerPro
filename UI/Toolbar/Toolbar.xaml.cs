@@ -161,6 +161,58 @@ namespace ExplorerPro.UI.Toolbar
             }
         }
         
+        private void ToggleLeftSidebarButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_parentWindow == null)
+            {
+                _logger?.LogWarning("Toggle left sidebar button clicked but parent window reference is null");
+                return;
+            }
+            
+            try
+            {
+                if (_parentWindow is ExplorerPro.UI.MainWindow.MainWindow mainWindow)
+                {
+                    mainWindow.ToggleLeftSidebar();
+                    _logger?.LogInformation("Toggle left sidebar command executed");
+                }
+                else
+                {
+                    _logger?.LogWarning("Parent window is not MainWindow, cannot execute toggle left sidebar command");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error executing toggle left sidebar command");
+            }
+        }
+        
+        private void ToggleRightSidebarButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_parentWindow == null)
+            {
+                _logger?.LogWarning("Toggle right sidebar button clicked but parent window reference is null");
+                return;
+            }
+            
+            try
+            {
+                if (_parentWindow is ExplorerPro.UI.MainWindow.MainWindow mainWindow)
+                {
+                    mainWindow.ToggleRightSidebar();
+                    _logger?.LogInformation("Toggle right sidebar command executed");
+                }
+                else
+                {
+                    _logger?.LogWarning("Parent window is not MainWindow, cannot execute toggle right sidebar command");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error executing toggle right sidebar command");
+            }
+        }
+        
         private void SettingsButton_Click(object sender, RoutedEventArgs e)
         {
             if (_parentWindow == null)

@@ -46,7 +46,7 @@
                         Margin="2,0,2,0" 
                         Click="AddProjectButton_Click" 
                         ToolTip="Add Project">
-                    <Image Source="/Assets/Icons/diff.svg" Width="16" Height="16"/>
+                    <Image Source="{StaticResource LayoutSidebarIcon}" Width="16" Height="16"/>
                 </Button>
                 
                 <Button x:Name="AddLinkButton" 
@@ -54,7 +54,7 @@
                         Margin="2,0,2,0" 
                         Click="AddLinkButton_Click" 
                         ToolTip="Add Link">
-                    <Image Source="/Assets/Icons/plus.svg" Width="16" Height="16"/>
+                    <Image Source="{StaticResource LinkIcon}" Width="16" Height="16"/>
                 </Button>
                 
                 <Button x:Name="RemoveButton" 
@@ -62,7 +62,7 @@
                         Margin="2,0,2,0" 
                         Click="RemoveButton_Click" 
                         ToolTip="Remove Selected">
-                    <Image Source="/Assets/Icons/trash-2.svg" Width="16" Height="16"/>
+                    <Image Source="{StaticResource StarIcon}" Width="16" Height="16"/>
                 </Button>
             </StackPanel>
         </DockPanel>

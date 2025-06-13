@@ -20,7 +20,7 @@
                     ToolTip="Add New Task" 
                     Click="AddTaskButton_Click">
                 <StackPanel Orientation="Horizontal">
-                    <Image Source="/Assets/Icons/plus-circle.png" Width="16" Height="16" Margin="0,0,5,0"/>
+                    <Image Source="{StaticResource PinIcon}" Width="16" Height="16" Margin="0,0,5,0"/>
                     <TextBlock Text="Add Task"/>
                 </StackPanel>
             </Button>
@@ -28,7 +28,7 @@
                     ToolTip="Manage Recurring Tasks" 
                     Click="ManageRecurringButton_Click">
                 <StackPanel Orientation="Horizontal">
-                    <Image Source="/Assets/Icons/repeat.png" Width="16" Height="16" Margin="0,0,5,0"/>
+                    <Image Source="{StaticResource RefreshIcon}" Width="16" Height="16" Margin="0,0,5,0"/>
                     <TextBlock Text="Recurring"/>
                 </StackPanel>
             </Button>

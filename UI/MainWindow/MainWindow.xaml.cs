@@ -2700,7 +2700,7 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Toggle the entire left sidebar visibility.
         /// </summary>
-        private void ToggleLeftSidebar()
+        public void ToggleLeftSidebar()
         {
             var container = GetCurrentContainer();
             if (container == null) return;
@@ -2720,7 +2720,7 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Toggle the entire right sidebar visibility.
         /// </summary>
-        private void ToggleRightSidebar()
+        public void ToggleRightSidebar()
         {
             var container = GetCurrentContainer();
             if (container == null) return;

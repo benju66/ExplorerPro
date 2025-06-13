@@ -103,25 +103,7 @@
             </Style.Triggers>
         </Style>
         
-        <!-- Icons -->
-        <BitmapImage x:Key="PinIcon" UriSource="/Assets/Icons/pin.svg" />
-        <BitmapImage x:Key="StarIcon" UriSource="/Assets/Icons/star.svg" />
-        <BitmapImage x:Key="LinkIcon" UriSource="/Assets/Icons/link.svg" />
-        <BitmapImage x:Key="TodoIcon" UriSource="/Assets/Icons/list-todo.svg" />
-        
-        <!-- Sidebar Panel Icons -->
-        <BitmapImage x:Key="SidebarLeftIcon" UriSource="/Assets/Icons/sidebar-left.svg" />
-        <BitmapImage x:Key="SidebarRightIcon" UriSource="/Assets/Icons/sidebar-right.svg" />
-        <BitmapImage x:Key="PanelLeftIcon" UriSource="/Assets/Icons/panel-left.svg" />
-        <BitmapImage x:Key="PanelRightIcon" UriSource="/Assets/Icons/panel-right.svg" />
-        <BitmapImage x:Key="LayoutSidebarIcon" UriSource="/Assets/Icons/layout-sidebar.svg" />
-        
-        <!-- Toolbar Icons -->
-        <BitmapImage x:Key="ArrowUpIcon" UriSource="/Assets/Icons/arrow-up.svg" />
-        <BitmapImage x:Key="RefreshIcon" UriSource="/Assets/Icons/refresh-cw.svg" />
-        <BitmapImage x:Key="UndoIcon" UriSource="/Assets/Icons/rotate-ccw.svg" />
-        <BitmapImage x:Key="RedoIcon" UriSource="/Assets/Icons/rotate-cw.svg" />
-        <BitmapImage x:Key="SettingsIcon" UriSource="/Assets/Icons/settings.svg" />
+        <!-- Icons now defined in UI/Resources/IconResources.xaml -->
     </Window.Resources>
 
     <Window.CommandBindings>
@@ -525,140 +507,7 @@
                                             </Button.Template>
                                         </Button>
 
-                                        <!-- Separator -->
-                                        <Rectangle Width="1" Height="20" Fill="#E1E4E8" Margin="8,0"/>
 
-                                        <!-- Ultra-modern Toggle Left Sidebar Button -->
-                                        <Button x:Name="ToggleLeftSidebarButton" 
-                                               ToolTip="Toggle Left Sidebar (Alt+Shift+B)"
-                                               Click="ToggleLeftSidebar_Click"
-                                               Width="32" 
-                                               Height="32" 
-                                               Margin="0,0,4,0"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Center"
-                                               Style="{x:Null}">
-                                            <Button.Template>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border x:Name="ButtonBorder"
-                                                          Background="#FFFFFF"
-                                                          BorderBrush="#D0D7DE"
-                                                          BorderThickness="1.5"
-                                                          CornerRadius="8"
-                                                          Padding="0">
-                                                        <Border.Effect>
-                                                            <DropShadowEffect x:Name="ButtonShadow" 
-                                                                            Color="#FF000000" 
-                                                                            Direction="270" 
-                                                                            ShadowDepth="2" 
-                                                                            BlurRadius="4" 
-                                                                            Opacity="0.1"/>
-                                                        </Border.Effect>
-                                                        <Image Source="{StaticResource PanelLeftIcon}" 
-                                                               Width="18" Height="18"
-                                                               HorizontalAlignment="Center" 
-                                                               VerticalAlignment="Center"/>
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Trigger.EnterActions>
-                                                                <BeginStoryboard>
-                                                                    <Storyboard>
-                                                                        <ColorAnimation Storyboard.TargetName="ButtonBorder"
-                                                                                      Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                                                      To="#F6F8FA" Duration="0:0:0.15"/>
-                                                                        <ColorAnimation Storyboard.TargetName="ButtonBorder"
-                                                                                      Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                                                                                      To="#0969DA" Duration="0:0:0.15"/>
-                                                                    </Storyboard>
-                                                                </BeginStoryboard>
-                                                            </Trigger.EnterActions>
-                                                            <Trigger.ExitActions>
-                                                                <BeginStoryboard>
-                                                                    <Storyboard>
-                                                                        <ColorAnimation Storyboard.TargetName="ButtonBorder"
-                                                                                      Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                                                      To="#FFFFFF" Duration="0:0:0.15"/>
-                                                                        <ColorAnimation Storyboard.TargetName="ButtonBorder"
-                                                                                      Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                                                                                      To="#D0D7DE" Duration="0:0:0.15"/>
-                                                                    </Storyboard>
-                                                                </BeginStoryboard>
-                                                            </Trigger.ExitActions>
-                                                        </Trigger>
-                                                        <Trigger Property="IsPressed" Value="True">
-                                                            <Setter TargetName="ButtonBorder" Property="Background" Value="#F0F7FF"/>
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Button.Template>
-                                        </Button>
-
-                                        <!-- Ultra-modern Toggle Right Sidebar Button -->
-                                        <Button x:Name="ToggleRightSidebarButton" 
-                                               ToolTip="Toggle Right Sidebar (Alt+Shift+R)"
-                                               Click="ToggleRightSidebar_Click"
-                                               Width="32" 
-                                               Height="32" 
-                                               Margin="0,0,4,0"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Center"
-                                               Style="{x:Null}">
-                                            <Button.Template>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border x:Name="ButtonBorder"
-                                                          Background="#FFFFFF"
-                                                          BorderBrush="#D0D7DE"
-                                                          BorderThickness="1.5"
-                                                          CornerRadius="8"
-                                                          Padding="0">
-                                                        <Border.Effect>
-                                                            <DropShadowEffect x:Name="ButtonShadow" 
-                                                                            Color="#FF000000" 
-                                                                            Direction="270" 
-                                                                            ShadowDepth="2" 
-                                                                            BlurRadius="4" 
-                                                                            Opacity="0.1"/>
-                                                        </Border.Effect>
-                                                        <Image Source="{StaticResource PanelRightIcon}" 
-                                                               Width="18" Height="18"
-                                                               HorizontalAlignment="Center" 
-                                                               VerticalAlignment="Center"/>
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Trigger.EnterActions>
-                                                                <BeginStoryboard>
-                                                                    <Storyboard>
-                                                                        <ColorAnimation Storyboard.TargetName="ButtonBorder"
-                                                                                      Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                                                      To="#F6F8FA" Duration="0:0:0.15"/>
-                                                                        <ColorAnimation Storyboard.TargetName="ButtonBorder"
-                                                                                      Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                                                                                      To="#0969DA" Duration="0:0:0.15"/>
-                                                                    </Storyboard>
-                                                                </BeginStoryboard>
-                                                            </Trigger.EnterActions>
-                                                            <Trigger.ExitActions>
-                                                                <BeginStoryboard>
-                                                                    <Storyboard>
-                                                                        <ColorAnimation Storyboard.TargetName="ButtonBorder"
-                                                                                      Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                                                      To="#FFFFFF" Duration="0:0:0.15"/>
-                                                                        <ColorAnimation Storyboard.TargetName="ButtonBorder"
-                                                                                      Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                                                                                      To="#D0D7DE" Duration="0:0:0.15"/>
-                                                                    </Storyboard>
-                                                                </BeginStoryboard>
-                                                            </Trigger.ExitActions>
-                                                        </Trigger>
-                                                        <Trigger Property="IsPressed" Value="True">
-                                                            <Setter TargetName="ButtonBorder" Property="Background" Value="#F0F7FF"/>
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Button.Template>
-                                        </Button>
 
                                         <!-- Separator for individual panels -->
                                         <Rectangle Width="1" Height="20" Fill="#E1E4E8" Margin="8,0"/>
@@ -755,7 +604,7 @@
                                                                             BlurRadius="4" 
                                                                             Opacity="0.1"/>
                                                         </Border.Effect>
-                                                        <Image Source="{StaticResource StarIcon}" 
+                                                        <Image Source="{StaticResource BookmarkIcon}" 
                                                                Width="18" Height="18"
                                                                HorizontalAlignment="Center" 
                                                                VerticalAlignment="Center"/>

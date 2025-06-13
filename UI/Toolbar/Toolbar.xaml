@@ -190,7 +190,10 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="80"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="80"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             
@@ -202,14 +205,14 @@
                         ToolTip="Go up one folder level in the active tab" 
                         Click="UpButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
-                    <Image Source="/Assets/Icons/arrow-up.svg" Width="20" Height="20" />
+                    <Image Source="{StaticResource ArrowUpIcon}" Width="20" Height="20" />
                 </Button>
                 
                 <Button x:Name="refreshButton" 
                         ToolTip="Refresh file tree" 
                         Click="RefreshButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
-                    <Image Source="/Assets/Icons/refresh-cw.svg" Width="20" Height="20" />
+                    <Image Source="{StaticResource RefreshIcon}" Width="20" Height="20" />
                 </Button>
             </StackPanel>
             
@@ -225,21 +228,22 @@
                         ToolTip="Undo last action" 
                         Click="UndoButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
-                    <Image Source="/Assets/Icons/rotate-ccw.svg" Width="20" Height="20" />
+                    <Image Source="{StaticResource UndoIcon}" Width="20" Height="20" />
                 </Button>
                 
                 <Button x:Name="redoButton" 
                         ToolTip="Redo last action" 
                         Click="RedoButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
-                    <Image Source="/Assets/Icons/rotate-cw.svg" Width="20" Height="20" />
+                    <Image Source="{StaticResource RedoIcon}" Width="20" Height="20" />
                 </Button>
             </StackPanel>
             
             <!-- Ultra-Modern Search/Address Bar -->
             <TextBox x:Name="searchBar" 
-                     Grid.Column="2"
-                     Width="400" 
+                     Grid.Column="3"
+                     MaxWidth="600"
+                     HorizontalAlignment="Stretch" 
                      Margin="16,0" 
                      VerticalAlignment="Center"
                      Style="{StaticResource ModernSearchBarStyle}"
@@ -259,8 +263,30 @@
                 </TextBox.ContextMenu>
             </TextBox>
             
+            <!-- Sidebar Toggle Section -->
+            <StackPanel Grid.Column="5" 
+                       Orientation="Horizontal" 
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Right"
+                       Margin="0,0,8,0">
+                
+                <Button x:Name="toggleLeftSidebarButton" 
+                        ToolTip="Toggle Left Sidebar (Alt+Shift+B)" 
+                        Click="ToggleLeftSidebarButton_Click"
+                        Style="{StaticResource ToolbarButtonStyle}">
+                    <Image Source="{StaticResource PanelLeftIcon}" Width="20" Height="20" />
+                </Button>
+                
+                <Button x:Name="toggleRightSidebarButton" 
+                        ToolTip="Toggle Right Sidebar (Alt+Shift+R)" 
+                        Click="ToggleRightSidebarButton_Click"
+                        Style="{StaticResource ToolbarButtonStyle}">
+                    <Image Source="{StaticResource PanelRightIcon}" Width="20" Height="20" />
+                </Button>
+            </StackPanel>
+            
             <!-- Settings Section -->
-            <StackPanel Grid.Column="3" 
+            <StackPanel Grid.Column="6" 
                        Orientation="Horizontal" 
                        VerticalAlignment="Center">
                 <!-- Modern separator -->
@@ -270,7 +296,7 @@
                         ToolTip="Settings" 
                         Click="SettingsButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
-                    <Image Source="/Assets/Icons/settings.svg" Width="20" Height="20" />
+                    <Image Source="{StaticResource SettingsIcon}" Width="20" Height="20" />
                 </Button>
             </StackPanel>
         </Grid>
