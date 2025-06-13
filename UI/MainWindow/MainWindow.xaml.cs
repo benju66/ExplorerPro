@@ -10,6 +10,7 @@ using System.Windows.Data;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using Newtonsoft.Json;
@@ -946,6 +947,120 @@ namespace ExplorerPro.UI.MainWindow
 
 
         /// <summary>
+        /// Preloads critical icons to improve UI responsiveness
+        /// </summary>
+        private void PreloadIcons()
+        {
+            try
+            {
+                _instanceLogger?.LogDebug("Preloading critical icons");
+                
+                // Force load critical toolbar icons at startup
+                var criticalIcons = new[]
+                {
+                    "ArrowUpIcon", "RefreshIcon", "UndoIcon", "RedoIcon", "SettingsIcon",
+                    "PanelLeftIcon", "PanelRightIcon", "PinIcon", "BookmarkIcon", "TodoIcon"
+                };
+
+                foreach (var iconKey in criticalIcons)
+                {
+                    try
+                    {
+                        var icon = FindResource(iconKey) as BitmapImage;
+                        if (icon != null)
+                        {
+                            // Access the pixel data to force loading
+                            _ = icon.PixelWidth;
+                            _ = icon.PixelHeight;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _instanceLogger?.LogWarning(ex, $"Failed to preload icon: {iconKey}");
+                    }
+                }
+                
+                _instanceLogger?.LogDebug("Icon preloading completed");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error during icon preloading");
+            }
+        }
+
+        /// <summary>
+        /// Validates that all required icons are available at startup
+        /// </summary>
+        private void ValidateIcons()
+        {
+            try
+            {
+                _instanceLogger?.LogDebug("Validating icon resources");
+                
+                var requiredIcons = new[]
+                {
+                    // Critical toolbar icons
+                    "ArrowUpIcon", "RefreshIcon", "UndoIcon", "RedoIcon", "SettingsIcon",
+                    "PanelLeftIcon", "PanelRightIcon",
+                    // Content icons
+                    "PinIcon", "BookmarkIcon", "TodoIcon", "WindowIcon"
+                };
+
+                var missingIcons = new List<string>();
+                var corruptedIcons = new List<string>();
+
+                foreach (var iconKey in requiredIcons)
+                {
+                    try
+                    {
+                        var icon = FindResource(iconKey);
+                        if (icon == null)
+                        {
+                            missingIcons.Add(iconKey);
+                        }
+                        else if (icon is BitmapImage bitmapImage)
+                        {
+                            // Try to access properties to validate the image
+                            _ = bitmapImage.UriSource;
+                            if (bitmapImage.PixelWidth == 0 || bitmapImage.PixelHeight == 0)
+                            {
+                                corruptedIcons.Add(iconKey);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _instanceLogger?.LogWarning(ex, $"Error validating icon: {iconKey}");
+                        corruptedIcons.Add(iconKey);
+                    }
+                }
+
+                if (missingIcons.Count > 0)
+                {
+                    _instanceLogger?.LogWarning($"Missing icon resources: {string.Join(", ", missingIcons)}");
+                }
+
+                if (corruptedIcons.Count > 0)
+                {
+                    _instanceLogger?.LogWarning($"Corrupted icon resources: {string.Join(", ", corruptedIcons)}");
+                }
+
+                if (missingIcons.Count == 0 && corruptedIcons.Count == 0)
+                {
+                    _instanceLogger?.LogDebug("All icon resources validated successfully");
+                }
+                else
+                {
+                    _instanceLogger?.LogWarning($"Icon validation completed with issues: {missingIcons.Count} missing, {corruptedIcons.Count} corrupted");
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error during icon validation");
+            }
+        }
+
+        /// <summary>
         /// Handle initialization errors with a user-friendly message.
         /// </summary>
         private void HandleInitializationError(Exception ex)
@@ -1090,6 +1205,10 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
+                // Validate and preload icons for better performance
+                ValidateIcons();
+                PreloadIcons();
+
                 // Create initial tab if needed
                 if (MainTabs.Items.Count == 0)
                 {

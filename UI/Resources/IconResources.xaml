@@ -2,54 +2,81 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     
     <!-- ========================================= -->
-    <!-- TOOLBAR ICONS (.ico files for consistency) -->
+    <!-- ICON RESOURCES (.ico files for crisp rendering) -->
+    <!-- All icons are 16x16, 20x20, 24x24 multi-resolution .ico files -->
+    <!-- Enhanced with caching for better performance and memory usage -->
     <!-- ========================================= -->
     
     <!-- Navigation Icons -->
-    <BitmapImage x:Key="Icon_Navigation_ArrowUp" UriSource="/Assets/Icons/arrow-up.ico" />
-    <BitmapImage x:Key="Icon_Navigation_Refresh" UriSource="/Assets/Icons/refresh-cw.ico" />
-    <BitmapImage x:Key="Icon_Navigation_Undo" UriSource="/Assets/Icons/rotate-ccw.ico" />
-    <BitmapImage x:Key="Icon_Navigation_Redo" UriSource="/Assets/Icons/rotate-cw.ico" />
-    <BitmapImage x:Key="Icon_Navigation_Settings" UriSource="/Assets/Icons/settings.ico" />
+    <BitmapImage x:Key="Icon_Navigation_ArrowUp" UriSource="/Assets/Icons/arrow-up.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="Icon_Navigation_Refresh" UriSource="/Assets/Icons/refresh-cw.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="Icon_Navigation_Undo" UriSource="/Assets/Icons/rotate-ccw.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="Icon_Navigation_Redo" UriSource="/Assets/Icons/rotate-cw.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="Icon_Navigation_Settings" UriSource="/Assets/Icons/settings.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
     
     <!-- Panel Icons -->
-    <BitmapImage x:Key="Icon_Panel_Left" UriSource="/Assets/Icons/panel-left.ico" />
-    <BitmapImage x:Key="Icon_Panel_Right" UriSource="/Assets/Icons/panel-right.ico" />
+    <BitmapImage x:Key="Icon_Panel_Left" UriSource="/Assets/Icons/panel-left.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="Icon_Panel_Right" UriSource="/Assets/Icons/panel-right.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
     
     <!-- Content Icons -->
-    <BitmapImage x:Key="Icon_Content_Pin" UriSource="/Assets/Icons/pin.ico" />
-    <BitmapImage x:Key="Icon_Content_Star" UriSource="/Assets/Icons/star.ico" />
-    <BitmapImage x:Key="Icon_Content_Bookmark" UriSource="/Assets/Icons/bookmark.ico" />
-    <BitmapImage x:Key="Icon_Content_Link" UriSource="/Assets/Icons/link.ico" />
-    <BitmapImage x:Key="Icon_Content_Todo" UriSource="/Assets/Icons/list.ico" />
+    <BitmapImage x:Key="Icon_Content_Pin" UriSource="/Assets/Icons/pin.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="Icon_Content_Star" UriSource="/Assets/Icons/star.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="Icon_Content_Bookmark" UriSource="/Assets/Icons/bookmark.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="Icon_Content_Link" UriSource="/Assets/Icons/link.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="Icon_Content_Todo" UriSource="/Assets/Icons/list.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
     
     <!-- Window Icons -->
-    <BitmapImage x:Key="Icon_Window_Main" UriSource="/Assets/Icons/app.ico" />
+    <BitmapImage x:Key="Icon_Window_Main" UriSource="/Assets/Icons/app.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
     
     <!-- ========================================= -->
     <!-- LEGACY ALIASES (for backward compatibility) -->
+    <!-- Enhanced with caching for better performance -->
     <!-- ========================================= -->
     
     <!-- Navigation Icons -->
-    <BitmapImage x:Key="ArrowUpIcon" UriSource="/Assets/Icons/arrow-up.ico" />
-    <BitmapImage x:Key="RefreshIcon" UriSource="/Assets/Icons/refresh-cw.ico" />
-    <BitmapImage x:Key="UndoIcon" UriSource="/Assets/Icons/rotate-ccw.ico" />
-    <BitmapImage x:Key="RedoIcon" UriSource="/Assets/Icons/rotate-cw.ico" />
-    <BitmapImage x:Key="SettingsIcon" UriSource="/Assets/Icons/settings.ico" />
+    <BitmapImage x:Key="ArrowUpIcon" UriSource="/Assets/Icons/arrow-up.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="RefreshIcon" UriSource="/Assets/Icons/refresh-cw.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="UndoIcon" UriSource="/Assets/Icons/rotate-ccw.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="RedoIcon" UriSource="/Assets/Icons/rotate-cw.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="SettingsIcon" UriSource="/Assets/Icons/settings.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
     
     <!-- Panel Icons -->
-    <BitmapImage x:Key="PanelLeftIcon" UriSource="/Assets/Icons/panel-left.ico" />
-    <BitmapImage x:Key="PanelRightIcon" UriSource="/Assets/Icons/panel-right.ico" />
-    <BitmapImage x:Key="SidebarLeftIcon" UriSource="/Assets/Icons/sidebar-left.ico" />
-    <BitmapImage x:Key="SidebarRightIcon" UriSource="/Assets/Icons/sidebar-right.ico" />
-    <BitmapImage x:Key="LayoutSidebarIcon" UriSource="/Assets/Icons/layout-sidebar.ico" />
+    <BitmapImage x:Key="PanelLeftIcon" UriSource="/Assets/Icons/panel-left.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="PanelRightIcon" UriSource="/Assets/Icons/panel-right.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <!-- Note: sidebar-left.ico, sidebar-right.ico, layout-sidebar.ico removed - use panel icons instead -->
     
     <!-- Content Icons -->
-    <BitmapImage x:Key="PinIcon" UriSource="/Assets/Icons/pin.ico" />
-    <BitmapImage x:Key="StarIcon" UriSource="/Assets/Icons/star.ico" />
-    <BitmapImage x:Key="BookmarkIcon" UriSource="/Assets/Icons/bookmark.ico" />
-    <BitmapImage x:Key="LinkIcon" UriSource="/Assets/Icons/link.ico" />
-    <BitmapImage x:Key="TodoIcon" UriSource="/Assets/Icons/list.ico" />
-    <BitmapImage x:Key="WindowIcon" UriSource="/Assets/Icons/app.ico" />
+    <BitmapImage x:Key="PinIcon" UriSource="/Assets/Icons/pin.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="StarIcon" UriSource="/Assets/Icons/star.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="BookmarkIcon" UriSource="/Assets/Icons/bookmark.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="LinkIcon" UriSource="/Assets/Icons/link.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="TodoIcon" UriSource="/Assets/Icons/list.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
+    <BitmapImage x:Key="WindowIcon" UriSource="/Assets/Icons/app.ico" 
+                 CacheOption="OnLoad" CreateOptions="IgnoreImageCache" />
     
 </ResourceDictionary> 

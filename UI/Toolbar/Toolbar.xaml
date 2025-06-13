@@ -202,14 +202,14 @@
                        Orientation="Horizontal" 
                        VerticalAlignment="Center">
                 <Button x:Name="upButton" 
-                        ToolTip="Go up one folder level in the active tab" 
+                        ToolTip="Go Up (Alt+Up)" 
                         Click="UpButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
                     <Image Source="{StaticResource ArrowUpIcon}" Width="20" Height="20" />
                 </Button>
                 
                 <Button x:Name="refreshButton" 
-                        ToolTip="Refresh file tree" 
+                        ToolTip="Refresh (F5)" 
                         Click="RefreshButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
                     <Image Source="{StaticResource RefreshIcon}" Width="20" Height="20" />
@@ -225,14 +225,14 @@
                 <Rectangle Width="1" Height="24" Fill="#E1E4E8" Margin="0,0,12,0"/>
                 
                 <Button x:Name="undoButton" 
-                        ToolTip="Undo last action" 
+                        ToolTip="Undo (Ctrl+Z)" 
                         Click="UndoButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
                     <Image Source="{StaticResource UndoIcon}" Width="20" Height="20" />
                 </Button>
                 
                 <Button x:Name="redoButton" 
-                        ToolTip="Redo last action" 
+                        ToolTip="Redo (Ctrl+Y)" 
                         Click="RedoButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
                     <Image Source="{StaticResource RedoIcon}" Width="20" Height="20" />
@@ -271,14 +271,14 @@
                        Margin="0,0,8,0">
                 
                 <Button x:Name="toggleLeftSidebarButton" 
-                        ToolTip="Toggle Left Sidebar (Alt+Shift+B)" 
+                        ToolTip="Toggle Left Panel (F9)" 
                         Click="ToggleLeftSidebarButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
                     <Image Source="{StaticResource PanelLeftIcon}" Width="20" Height="20" />
                 </Button>
                 
                 <Button x:Name="toggleRightSidebarButton" 
-                        ToolTip="Toggle Right Sidebar (Alt+Shift+R)" 
+                        ToolTip="Toggle Right Panel (F10)" 
                         Click="ToggleRightSidebarButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
                     <Image Source="{StaticResource PanelRightIcon}" Width="20" Height="20" />
@@ -293,7 +293,7 @@
                 <Rectangle Width="1" Height="24" Fill="#E1E4E8" Margin="0,0,12,0"/>
                 
                 <Button x:Name="settingsButton" 
-                        ToolTip="Settings" 
+                        ToolTip="Settings (Ctrl+,)" 
                         Click="SettingsButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}">
                     <Image Source="{StaticResource SettingsIcon}" Width="20" Height="20" />
