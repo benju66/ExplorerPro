@@ -32,6 +32,8 @@ using System.Runtime.CompilerServices;
 using WinForms = System.Windows.Forms;
 using WPF = System.Windows;
 using System.Collections.Concurrent;
+using ExplorerPro.ViewModels;
+using ExplorerPro.UI.Controls;
 
 namespace ExplorerPro.UI.MainWindow
 {
@@ -464,10 +466,16 @@ namespace ExplorerPro.UI.MainWindow
         private readonly WindowStateManager _stateManager = new WindowStateManager();
 
         /// <summary>
-        /// Reference to the main TabControl hosting MainWindowContainer instances.
+        /// Reference to the main ChromeStyleTabControl hosting MainWindowContainer instances.
         /// Cached for safe access during initialization and disposal.
         /// </summary>
-        private TabControl _mainTabsControl;
+        private ChromeStyleTabControl _mainTabsControl;
+
+        /// <summary>
+        /// Main window view model for Chrome-style tab system
+        /// </summary>
+        // Note: ViewModel removed - using direct TabItem manipulation instead of MVVM
+        // private MainWindowViewModel _viewModel;
 
         #endregion
 
@@ -738,12 +746,18 @@ namespace ExplorerPro.UI.MainWindow
                 // Phase 2: WPF initialization (keep context in Created state for now)
                 InitializeComponent();
                 
+                // Note: No longer using MVVM since we removed ItemsSource binding
+                // DataContext = _viewModel;
+                
                 // Create instance logger after we have a handle
                 var windowId = Guid.NewGuid().ToString("N").Substring(0, 8);
                 _instanceLogger = CreateInstanceLogger(windowId);
                 _instanceLogger.LogInformation($"MainWindow created (ID: {windowId})");
                 
-                // Phase 3: Defer all other initialization
+                // Phase 4: Setup Chrome-style tab events
+                SetupChromeStyleTabEvents();
+                
+                // Phase 5: Defer all other initialization
                 Loaded += OnWindowLoadedAsync;
             }
             catch (Exception ex)
@@ -1209,15 +1223,8 @@ namespace ExplorerPro.UI.MainWindow
                 ValidateIcons();
                 PreloadIcons();
 
-                // Create initial tab if needed
-                if (MainTabs.Items.Count == 0)
-                {
-                    var container = AddNewMainWindowTab();
-                    if (container == null)
-                    {
-                        SafeAddNewTab();
-                    }
-                }
+                // Note: Tab creation is now handled by async initialization (OnWindowLoadedAsync)
+                // to avoid race conditions and duplicate tab creation
 
                 // Connect all pinned panels
                 ConnectAllPinnedPanels();
@@ -1232,11 +1239,13 @@ namespace ExplorerPro.UI.MainWindow
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"DEBUG: Exception in OnMainWindowLoaded: {ex.Message}");
                 _instanceLogger?.LogError(ex, "Error in window loaded event handler");
                 
                 // Make sure we have at least one tab
                 if (MainTabs.Items.Count == 0)
                 {
+                    Console.WriteLine("DEBUG: Creating emergency fallback tab");
                     SafeAddNewTab();
                 }
             }
@@ -1262,10 +1271,12 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Sets the MainTabs control reference after validation.
         /// </summary>
-        internal void SetMainTabsControl(TabControl tabControl)
+        internal void SetMainTabsControl(ChromeStyleTabControl tabControl)
         {
-            System.Diagnostics.Debug.Assert(tabControl != null, "TabControl cannot be null");
+            System.Diagnostics.Debug.Assert(tabControl != null, "ChromeStyleTabControl cannot be null");
             _mainTabsControl = tabControl;
+            // Setup event handlers for the chrome-style tab control
+            SetupChromeStyleTabEvents();
         }
 
         /// <summary>
@@ -1430,9 +1441,15 @@ namespace ExplorerPro.UI.MainWindow
             {
                 AddNewMainWindowTab();
             }
-            else if (_stateManager.CurrentState == Core.WindowState.Ready)
+            else
             {
-                _instanceLogger?.LogDebug("Deferring tab creation until window is ready");
+                _instanceLogger?.LogDebug($"Deferring tab creation until window is ready. Current state: {_stateManager.CurrentState}");
+                // For now, let's create the tab anyway if we have MainTabs available
+                if (MainTabs != null)
+                {
+                    _instanceLogger?.LogDebug("MainTabs available, creating tab despite state");
+                    AddNewMainWindowTab();
+                }
             }
         }
 
@@ -2069,38 +2086,45 @@ namespace ExplorerPro.UI.MainWindow
 
                 // Validate the path more carefully
                 string validPath = ValidatePath(rootPath);
+                _instanceLogger?.LogDebug($"Validated path for new tab: {validPath}");
                 
                 // Initialize container
                 try
                 {
+                    _instanceLogger?.LogDebug($"Initializing file tree with path: {validPath}");
                     container.InitializeWithFileTree(validPath);
+                    _instanceLogger?.LogDebug($"Successfully initialized file tree with path: {validPath}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error initializing file tree: {ex.Message}");
+                    _instanceLogger?.LogError(ex, $"Failed to initialize file tree with path '{validPath}'");
+                    
                     // Try one more time with User folder as a last resort
                     try
                     {
-                        container.InitializeWithFileTree(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+                        string fallbackPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                        _instanceLogger?.LogDebug($"Trying fallback path: {fallbackPath}");
+                        container.InitializeWithFileTree(fallbackPath);
+                        _instanceLogger?.LogDebug($"Successfully initialized file tree with fallback path: {fallbackPath}");
                     }
                     catch (Exception innerEx)
                     {
-                        Console.WriteLine($"Critical error initializing with fallback path: {innerEx.Message}");
+                        _instanceLogger?.LogError(innerEx, "Critical error: Failed to initialize with fallback path");
                         MessageBox.Show("Unable to initialize file browser with any valid path.",
                             "Critical Error", MessageBoxButton.OK, MessageBoxImage.Error);
                         return null;
                     }
                 }
 
-                // Create tab item with proper null checks
+                // Create tab through direct manipulation
                 string tabTitle = $"Window {MainTabs.Items.Count + 1}";
-                TabItem newTab = new TabItem
+                var newTab = new TabItem
                 {
                     Header = tabTitle,
                     Content = container
                 };
-
-                // Add to tabs
+                
+                // Add the tab to the control
                 MainTabs.Items.Add(newTab);
                 MainTabs.SelectedItem = newTab;
 
@@ -2113,7 +2137,7 @@ namespace ExplorerPro.UI.MainWindow
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Error connecting pinned panel: {ex.Message}");
+                        _instanceLogger?.LogError(ex, "Error connecting pinned panel");
                     }
                 }
 
@@ -2124,15 +2148,15 @@ namespace ExplorerPro.UI.MainWindow
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error in OnNewTabAdded: {ex.Message}");
+                    _instanceLogger?.LogError(ex, "Error in OnNewTabAdded");
                 }
 
-                Console.WriteLine($"Added new main window tab with root path: {validPath}");
+                _instanceLogger?.LogInformation($"Added new main window tab with root path: {validPath}");
                 return container;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Unhandled error in AddNewMainWindowTab: {ex.Message}");
+                _instanceLogger?.LogError(ex, "Unhandled error in AddNewMainWindowTab");
                 MessageBox.Show($"Error creating new tab: {ex.Message}", 
                     "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return null;
@@ -2149,106 +2173,67 @@ namespace ExplorerPro.UI.MainWindow
                 // Check if MainTabs is available
                 if (MainTabs == null)
                 {
-                    Console.WriteLine("ERROR: Cannot add tab because MainTabs is null");
+                    _instanceLogger?.LogError("Cannot add tab because MainTabs is null");
                     MessageBox.Show("Cannot create a new tab - critical UI component not available.", 
                         "Tab Creation Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
-                // Create an empty tab as a fallback
-                TabItem emptyTab = new TabItem
+                // Create a proper TabItem with loading content first
+                string tabHeader = $"Tab {MainTabs.Items.Count + 1}";
+                var newTabItem = new TabItem
                 {
-                    Header = $"Tab {MainTabs.Items.Count + 1}"
+                    Header = tabHeader
                 };
                 
-                // Add it to the tab control
-                MainTabs.Items.Add(emptyTab);
-                MainTabs.SelectedItem = emptyTab;
+                // Create loading content
+                Grid loadingGrid = new Grid();
+                TextBlock loadingText = new TextBlock
+                {
+                    Text = "Loading folder view...",
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(20),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                loadingGrid.Children.Add(loadingText);
+                newTabItem.Content = loadingGrid;
                 
-                // Then try to initialize it with content
+                // Add the tab to the control
+                MainTabs.Items.Add(newTabItem);
+                MainTabs.SelectedItem = newTabItem;
+                
+                // Try to create container with proper content
                 try
                 {
-                    // Create a grid panel as minimal content
-                    Grid contentGrid = new Grid();
+                    // Try to create container
+                    var container = new MainWindowContainer(this);
                     
-                    // Add an informational text block
-                    TextBlock infoText = new TextBlock
+                    // Try to initialize with a safe path
+                    string safePath = ValidatePath(null);
+                    container.InitializeWithFileTree(safePath);
+                    
+                    // Update the tab content with the container
+                    newTabItem.Content = container;
+                    
+                    // Connect signals if needed
+                    if (container.PinnedPanel != null)
                     {
-                        Text = "Loading folder view...",
-                        TextWrapping = TextWrapping.Wrap,
-                        Margin = new Thickness(20),
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center
-                    };
+                        ConnectPinnedPanel(container);
+                    }
                     
-                    contentGrid.Children.Add(infoText);
-                    emptyTab.Content = contentGrid;
+                    // Update title with path name
+                    string folderName = Path.GetFileName(safePath);
+                    newTabItem.Header = !string.IsNullOrEmpty(folderName) ? folderName : "Home";
                     
-                    // Try to create container in background
-                    System.Threading.Tasks.Task.Run(() =>
-                    {
-                        try
-                        {
-                            // Use Dispatcher to update UI from background thread
-                            Dispatcher.Invoke(() =>
-                            {
-                                // Try to create container
-                                var container = new MainWindowContainer(this);
-                                
-                                // Try to initialize with a safe path
-                                string safePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                                container.InitializeWithFileTree(safePath);
-                                
-                                // Set the container as tab content
-                                emptyTab.Content = container;
-                                
-                                // Connect signals if needed
-                                if (container.PinnedPanel != null)
-                                {
-                                    ConnectPinnedPanel(container);
-                                }
-                                
-                                // Update title with path name
-                                string folderName = Path.GetFileName(safePath);
-                                emptyTab.Header = !string.IsNullOrEmpty(folderName) ? folderName : "Home";
-                                
-                                Console.WriteLine("Successfully created tab with fallback approach");
-                            });
-                        }
-                        catch (Exception ex)
-                        {
-                            // Use Dispatcher to update UI from background thread
-                            Dispatcher.Invoke(() =>
-                            {
-                                Console.WriteLine($"Error initializing tab content: {ex.Message}");
-                                
-                                // Update the content to show the error
-                                if (emptyTab.Content is Grid grid)
-                                {
-                                    grid.Children.Clear();
-                                    
-                                    TextBlock errorText = new TextBlock
-                                    {
-                                        Text = "Error loading folder view.\nPlease try again or restart the application.",
-                                        TextWrapping = TextWrapping.Wrap,
-                                        Margin = new Thickness(20),
-                                        HorizontalAlignment = HorizontalAlignment.Center,
-                                        VerticalAlignment = VerticalAlignment.Center,
-                                        Foreground = Brushes.Red
-                                    };
-                                    
-                                    grid.Children.Add(errorText);
-                                }
-                            });
-                        }
-                    });
+                    _instanceLogger?.LogInformation("Successfully created tab with safe approach");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error initializing tab content: {ex.Message}");
+                    _instanceLogger?.LogError(ex, "Error initializing tab content");
                     
-                    // The empty tab is already added, so at least the UI won't break
-                    // Set some minimal content
+                    // Create error content
+                    Grid errorGrid = new Grid();
                     TextBlock errorText = new TextBlock
                     {
                         Text = "Error loading folder view.\nPlease try again or restart the application.",
@@ -2258,13 +2243,14 @@ namespace ExplorerPro.UI.MainWindow
                         VerticalAlignment = VerticalAlignment.Center,
                         Foreground = Brushes.Red
                     };
-                    
-                    emptyTab.Content = errorText;
+                    errorGrid.Children.Add(errorText);
+                    newTabItem.Content = errorGrid;
+                    newTabItem.Header = "Error";
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Critical error in SafeAddNewTab: {ex.Message}");
+                _instanceLogger?.LogError(ex, "Critical error in SafeAddNewTab");
                 MessageBox.Show("Unable to create a new tab due to a critical error.",
                     "Critical Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -4313,6 +4299,125 @@ namespace ExplorerPro.UI.MainWindow
             if (bytes < 1024 * 1024) return $"{bytes / 1024:N1} KB";
             if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024 * 1024):N1} MB";
             return $"{bytes / (1024 * 1024 * 1024):N1} GB";
+        }
+
+        /// <summary>
+        /// Sets up Chrome-style tab control event handlers
+        /// </summary>
+        private void SetupChromeStyleTabEvents()
+        {
+            // Note: MainTabs will be available after InitializeComponent is called
+            this.Loaded += (s, e) =>
+            {
+                if (MainTabs is ChromeStyleTabControl chromeTabControl)
+                {
+                    // Handle new tab requests
+                    chromeTabControl.NewTabRequested += OnNewTabRequested;
+                    
+                    // Handle tab close requests
+                    chromeTabControl.TabCloseRequested += OnTabCloseRequested;
+                    
+                    // Handle tab drag events
+                    chromeTabControl.TabDragged += OnTabDragged;
+                    
+                    // Handle tab metadata changes
+                    chromeTabControl.TabMetadataChanged += OnTabMetadataChanged;
+                    
+                    _instanceLogger?.LogInformation("Chrome-style tab events configured");
+                }
+            };
+        }
+
+        /// <summary>
+        /// Handles new tab requests from ChromeStyleTabControl
+        /// </summary>
+        private void OnNewTabRequested(object sender, NewTabRequestedEventArgs e)
+        {
+            try
+            {
+                // Create a MainWindowContainer for the new tab
+                var container = new MainWindowContainer(this);
+                e.TabItem.Content = container;
+                
+                // Initialize the container with file tree
+                var defaultPath = ValidatePath(null);
+                container.InitializeWithFileTree(defaultPath);
+                
+                // Connect the container to the pinned panel system
+                ConnectPinnedPanel(container);
+                
+                // Update the tab title to show proper window numbering (1-based indexing)
+                if (e.TabItem.Title == "New Tab")
+                {
+                    e.TabItem.Title = $"Window {MainTabs.Items.Count + 1}";
+                }
+                
+                _instanceLogger?.LogDebug($"New tab created: {e.TabItem.Title}");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error creating new tab content");
+                e.Cancel = true;
+            }
+        }
+
+        /// <summary>
+        /// Handles tab close requests from ChromeStyleTabControl
+        /// </summary>
+        private void OnTabCloseRequested(object sender, TabCloseRequestedEventArgs e)
+        {
+            try
+            {
+                // Dispose the container if it implements IDisposable
+                if (e.TabItem.Content is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+                
+                _instanceLogger?.LogDebug($"Tab closed: {e.TabItem.Title}");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error closing tab");
+            }
+        }
+
+        /// <summary>
+        /// Handles tab drag events from ChromeStyleTabControl
+        /// </summary>
+        private void OnTabDragged(object sender, TabDragEventArgs e)
+        {
+            try
+            {
+                // Handle tab dragging - could implement detaching to new windows here
+                _instanceLogger?.LogDebug($"Tab dragged: {e.TabItem.Title}");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error handling tab drag");
+            }
+        }
+
+        /// <summary>
+        /// Handles tab metadata changes from ChromeStyleTabControl
+        /// </summary>
+        private void OnTabMetadataChanged(object sender, TabMetadataChangedEventArgs e)
+        {
+            try
+            {
+                // Handle metadata changes (e.g., update window title when active tab changes)
+                if (e.PropertyName == nameof(TabItemModel.IsActive) && (bool)e.NewValue)
+                {
+                    // Note: Direct tab manipulation approach - no ViewModel needed
+                    // Window title updates are handled by the tab selection changed event
+                }
+                
+                _instanceLogger?.LogDebug($"Tab metadata changed: {e.TabItem.Title} - {e.PropertyName}");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error handling tab metadata change");
+            }
         }
 
         /// <summary>

@@ -6,6 +6,7 @@
         xmlns:local="clr-namespace:ExplorerPro.UI.MainWindow"
         xmlns:toolbar="clr-namespace:ExplorerPro.UI.Toolbar"
         xmlns:tabManagement="clr-namespace:ExplorerPro.UI.PaneManagement"
+        xmlns:controls="clr-namespace:ExplorerPro.UI.Controls"
         mc:Ignorable="d"
         Title="Enhanced File Explorer"
         Height="800" 
@@ -326,12 +327,16 @@
 
         <!-- Main Content Area -->
         <Grid>
-            <!-- Main Tab Control for WindowContainers -->
-            <TabControl x:Name="MainTabs" 
-                       TabStripPlacement="Top"
-                       BorderThickness="0"
-                       Padding="0"
-                       Background="Transparent">
+            <!-- Chrome-Style Tab Control for WindowContainers -->
+            <controls:ChromeStyleTabControl x:Name="MainTabs" 
+                                          AllowAddNew="True"
+                                          AllowDelete="True"
+                                          TabStripPlacement="Top"
+                                          BorderThickness="0"
+                                          Padding="0"
+                                          Background="Transparent"
+                                          MaxTabCount="20"
+                                          ShowAddTabButton="True">
                 <TabControl.Resources>
                     <!-- Ultra-Modern Chrome-style TabItem - Override global style -->
                     <Style TargetType="{x:Type TabItem}" x:Key="MainWindowTabStyle">
@@ -666,7 +671,7 @@
                                  IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=TabControl}, Path=Items.Count, Converter={StaticResource CountToEnableConverter}}" />
                     </ContextMenu>
                 </TabControl.ContextMenu>
-            </TabControl>
+            </controls:ChromeStyleTabControl>
         </Grid>
     </DockPanel>
 </Window>
