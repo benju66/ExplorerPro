@@ -67,7 +67,7 @@
         </ContextMenu>
     </UserControl.Resources>
     
-    <Grid>
+    <Grid FocusVisualStyle="{x:Null}">
         <TabControl x:Name="TabControl"
                    Grid.Row="1"
                    Template="{StaticResource ModernTabControlTemplate}"
@@ -78,7 +78,8 @@
                    BorderThickness="0"
                    Padding="0"
                    Margin="0"
-                   ContextMenu="{StaticResource PaneContextMenu}">
+                   ContextMenu="{StaticResource PaneContextMenu}"
+                   FocusVisualStyle="{x:Null}">
         </TabControl>
     </Grid>
 </UserControl> 

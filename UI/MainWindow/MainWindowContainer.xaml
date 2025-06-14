@@ -38,7 +38,7 @@
         </Style>
     </UserControl.Resources>
     
-    <Grid x:Name="MainGrid">
+    <Grid x:Name="MainGrid" FocusVisualStyle="{x:Null}">
         <!-- 
         =============================================================================
         MAIN CONTAINER LAYOUT
@@ -46,7 +46,7 @@
         Three-column layout: Left Sidebar | Main Content | Right Sidebar
         Each section is resizable with splitters between them
         -->
-        <Grid x:Name="DockArea" AllowDrop="True" Background="Transparent">
+        <Grid x:Name="DockArea" AllowDrop="True" Background="Transparent" FocusVisualStyle="{x:Null}">
             <Grid.ColumnDefinitions>
                 <!-- Left Column: Pinned items and Bookmarks panels (resizable, 250px default) -->
                 <ColumnDefinition x:Name="LeftColumn" Width="250" MinWidth="200"/>
@@ -234,7 +234,7 @@
             </GridSplitter>
             
             <!-- Main Content Area (Center) -->
-            <ContentControl x:Name="MainContent" Grid.Column="2">
+            <ContentControl x:Name="MainContent" Grid.Column="2" FocusVisualStyle="{x:Null}">
                 <!-- Tab Manager will be placed here -->
             </ContentControl>
             

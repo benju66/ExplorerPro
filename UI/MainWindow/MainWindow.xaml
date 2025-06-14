@@ -7,6 +7,7 @@
         xmlns:toolbar="clr-namespace:ExplorerPro.UI.Toolbar"
         xmlns:tabManagement="clr-namespace:ExplorerPro.UI.PaneManagement"
         xmlns:controls="clr-namespace:ExplorerPro.UI.Controls"
+        xmlns:converters="clr-namespace:ExplorerPro.UI.Converters"
         mc:Ignorable="d"
         Title="Enhanced File Explorer"
         Height="800" 
@@ -16,18 +17,48 @@
         Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
 
     <Window.Resources>
-        <!-- 
-        =============================================================================
-        VALUE CONVERTERS
-        =============================================================================
-        Converters for binding UI element properties to data values
-        -->
+        <ResourceDictionary>
+            <!-- 
+            =============================================================================
+            MERGED RESOURCE DICTIONARIES
+            =============================================================================
+            Include external style and resource files
+            -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="../Styles/TabStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!-- 
+            =============================================================================
+            VALUE CONVERTERS
+            =============================================================================
+            Converters for binding UI element properties to data values
+            -->
         
         <!-- Converts numeric count to Visibility (useful for hiding elements when count is 0) -->
         <local:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
         
         <!-- Converts numeric count to boolean enabled state (useful for disabling buttons when count is 0) -->
         <local:CountToEnableConverter x:Key="CountToEnableConverter"/>
+        
+        <!-- 
+        =============================================================================
+        PHASE 2 TAB CONVERTERS
+        =============================================================================
+        Converters for tab customization features
+        -->
+        
+        <!-- Converts Color values to SolidColorBrush for tab styling -->
+        <converters:ColorToBrushConverter x:Key="ColorToBrushConverter"/>
+        
+        <!-- Converts Colors to darker shades for borders and accents -->
+        <converters:ColorToDarkerBrushConverter x:Key="ColorToDarkerBrushConverter"/>
+        
+        <!-- Converts Colors to appropriate foreground colors -->
+        <converters:ColorToForegroundConverter x:Key="ColorToForegroundConverter"/>
+        
+        <!-- Converts boolean IsPinned to Visibility for pin indicators -->
+        <converters:PinnedToVisibilityConverter x:Key="PinnedToVisibilityConverter"/>
         
         <!-- 
         =============================================================================
@@ -173,6 +204,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        </ResourceDictionary>
     </Window.Resources>
 
     <Window.CommandBindings>
@@ -327,16 +359,14 @@
 
         <!-- Main Content Area -->
         <Grid>
-            <!-- Chrome-Style Tab Control for WindowContainers -->
+            <!-- Main Tabs with Chrome styling and enhanced features -->
             <controls:ChromeStyleTabControl x:Name="MainTabs" 
-                                          AllowAddNew="True"
-                                          AllowDelete="True"
-                                          TabStripPlacement="Top"
+                                          Grid.Row="1" 
+                                          Background="#FFFFFF"
                                           BorderThickness="0"
-                                          Padding="0"
-                                          Background="Transparent"
-                                          MaxTabCount="20"
-                                          ShowAddTabButton="True">
+                                          TabStripPlacement="Top"
+                                          MouseDown="OnTabControlMouseDown"
+                                          PreviewMouseRightButtonDown="TabControl_PreviewMouseRightButtonDown">
                 <TabControl.Resources>
                     <!-- Ultra-Modern Chrome-style TabItem - Override global style -->
                     <Style TargetType="{x:Type TabItem}" x:Key="MainWindowTabStyle">
@@ -366,6 +396,7 @@
                                             </TransformGroup>
                                         </Border.RenderTransform>
                                         
+                                        <!-- Clean Windows 11 style layout with optional pin icon -->
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto"/>
@@ -373,28 +404,32 @@
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             
-                                            <!-- Window icon -->
-                                            <Image x:Name="TabIcon"
-                                                 Grid.Column="0" 
-                                                 Width="16" Height="16"
-                                                 Margin="8,0,6,0"
-                                                 VerticalAlignment="Center"
-                                                 Source="{StaticResource WindowIcon}"/>
+                                            <!-- Pin icon (only visible when tab is pinned) -->
+                                            <Path x:Name="PinIcon"
+                                                  Grid.Column="0"
+                                                  Width="12" Height="12"
+                                                  Margin="12,0,4,0"
+                                                  VerticalAlignment="Center"
+                                                  Fill="#656D76"
+                                                  Data="M16,12V4H17V2H7V4H8V12L6,14V16H11.2V22H12.8V16H18V14L16,12Z"
+                                                  Visibility="Collapsed"/>
                                             
-                                            <!-- Tab title with better typography -->
+                                            <!-- Clean tab title - Windows 11 style -->
                                             <TextBlock x:Name="TabTitle"
                                                      Grid.Column="1" 
                                                      Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" 
-                                                     Margin="0,10,8,10"
+                                                     Margin="12,6,8,6"
                                                      VerticalAlignment="Center"
+                                                     HorizontalAlignment="Left"
                                                      FontSize="13"
                                                      FontWeight="Medium"
                                                      Foreground="#24292F"
-                                                     TextTrimming="CharacterEllipsis">
-                                                <TextBlock.Effect>
-                                                    <DropShadowEffect Color="White" BlurRadius="1" ShadowDepth="0.5" Opacity="0.8"/>
-                                                </TextBlock.Effect>
-                                            </TextBlock>
+                                                     TextTrimming="CharacterEllipsis"
+                                                     MinHeight="26"
+                                                     ClipToBounds="False"
+                                                     UseLayoutRounding="True"
+                                                     TextOptions.TextFormattingMode="Display"
+                                                     TextOptions.TextRenderingMode="ClearType"/>
                                             
                                             <!-- Enhanced close button (hover-to-show) -->
                                             <Button x:Name="CloseButton"
@@ -465,7 +500,7 @@
                                         <Trigger Property="IsSelected" Value="True">
                                             <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource TabActiveGradient}"/>
                                             <Setter TargetName="TabBorder" Property="BorderBrush" Value="#0969DA"/>
-                                            <Setter TargetName="TabBorder" Property="BorderThickness" Value="1,3,1,0"/>
+                                            <Setter TargetName="TabBorder" Property="BorderThickness" Value="1,1,1,3"/>
                                             <Setter TargetName="TabTitle" Property="Foreground" Value="#0969DA"/>
                                             <Setter TargetName="TabTitle" Property="FontWeight" Value="SemiBold"/>
                                             <Setter Property="Panel.ZIndex" Value="100"/>
@@ -506,6 +541,12 @@
                                             </MultiTrigger.Conditions>
                                             <Setter TargetName="CloseButton" Property="Opacity" Value="0.7"/>
                                         </MultiTrigger>
+                                        
+                                        <!-- Show pin icon when tab is pinned -->
+                                        <DataTrigger Binding="{Binding IsPinned, RelativeSource={RelativeSource TemplatedParent}}" Value="True">
+                                            <Setter TargetName="PinIcon" Property="Visibility" Value="Visible"/>
+                                            <Setter TargetName="TabTitle" Property="Margin" Value="4,6,8,6"/>
+                                        </DataTrigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </Setter.Value>
@@ -658,17 +699,97 @@
 
                 <!-- Context Menu for TabControl -->
                 <TabControl.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="New Tab" Click="NewTabMenuItem_Click" />
-                        <MenuItem Header="Duplicate Tab" Click="DuplicateTabMenuItem_Click" />
-                        <MenuItem Header="Close Tab" Click="CloseTabMenuItem_Click" 
-                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=TabControl}, Path=Items.Count, Converter={StaticResource CountToEnableConverter}}" />
-                        <Separator />
-                        <MenuItem Header="Toggle Split View" Click="ToggleSplitViewMenuItem_Click" />
-                        <MenuItem Header="Detach Tab" Click="DetachTabMenuItem_Click" 
-                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=TabControl}, Path=Items.Count, Converter={StaticResource CountToEnableConverter}}" />
-                        <MenuItem Header="Move to New Window" Click="MoveToNewWindowMenuItem_Click" 
-                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=TabControl}, Path=Items.Count, Converter={StaticResource CountToEnableConverter}}" />
+                    <ContextMenu Style="{StaticResource TabContextMenuStyle}">
+                        <!-- Tab Customization Commands (Phase 2) -->
+                        <MenuItem Header="Rename Tab" 
+                                 Style="{StaticResource TabContextMenuItemStyle}"
+                                 Click="RenameTabMenuItem_Click">
+                            <MenuItem.Icon>
+                                <Path Width="12" Height="12" Fill="#656D76" 
+                                      Data="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z"/>
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        
+                        <MenuItem Header="Change Color" 
+                                 Style="{StaticResource TabContextMenuItemStyle}"
+                                 Click="ChangeColorMenuItem_Click">
+                            <MenuItem.Icon>
+                                <Path Width="12" Height="12" Fill="#656D76"
+                                      Data="M12,18.5A2.5,2.5 0 0,1 9.5,16A2.5,2.5 0 0,1 12,13.5A2.5,2.5 0 0,1 14.5,16A2.5,2.5 0 0,1 12,18.5M19.79,15.41C20.74,13.24 20.74,10.76 19.79,8.59L17.36,9.94C17.65,10.96 17.65,13.04 17.36,14.06L19.79,15.41M4.21,8.59C3.26,10.76 3.26,13.24 4.21,15.41L6.64,14.06C6.35,13.04 6.35,10.96 6.64,9.94L4.21,8.59Z"/>
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        
+                        <MenuItem Header="Pin/Unpin Tab" 
+                                 Style="{StaticResource TabContextMenuItemStyle}"
+                                 Click="TogglePinMenuItem_Click">
+                            <MenuItem.Icon>
+                                <Path Width="12" Height="12" Fill="#656D76"
+                                      Data="M16,12V4H17V2H7V4H8V12L6,14V16H11.2V22H12.8V16H18V14L16,12Z"/>
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        
+                        <Separator Style="{StaticResource ContextMenuSeparatorStyle}"/>
+                        
+                        <!-- Existing Commands -->
+                        <MenuItem Header="New Tab" 
+                                 Style="{StaticResource TabContextMenuItemStyle}"
+                                 Command="{Binding DataContext.AddNewTabCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                            <MenuItem.Icon>
+                                <Path Width="12" Height="12" Fill="#656D76"
+                                      Data="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/>
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        
+                        <MenuItem Header="Duplicate Tab" 
+                                 Style="{StaticResource TabContextMenuItemStyle}"
+                                 Click="DuplicateTabMenuItem_Click">
+                            <MenuItem.Icon>
+                                <Path Width="12" Height="12" Fill="#656D76"
+                                      Data="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z"/>
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        
+                        <MenuItem Header="Close Tab" 
+                                 Style="{StaticResource TabContextMenuItemStyle}"
+                                 Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                 CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=TabControl}, Path=Items.Count, Converter={StaticResource CountToEnableConverter}}">
+                            <MenuItem.Icon>
+                                <Path Width="12" Height="12" Fill="#656D76"
+                                      Data="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        
+                        <Separator Style="{StaticResource ContextMenuSeparatorStyle}"/>
+                        
+                        <MenuItem Header="Toggle Split View" 
+                                 Style="{StaticResource TabContextMenuItemStyle}"
+                                 Click="ToggleSplitViewMenuItem_Click">
+                            <MenuItem.Icon>
+                                <Path Width="12" Height="12" Fill="#656D76"
+                                      Data="M14,10V14H10V10H14M16,10A2,2 0 0,1 18,12V16A2,2 0 0,1 16,18H12A2,2 0 0,1 10,16V12A2,2 0 0,1 12,10H16M8,12V16A2,2 0 0,1 6,18H2A2,2 0 0,1 0,16V12A2,2 0 0,1 2,10H6A2,2 0 0,1 8,12Z"/>
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        
+                        <MenuItem Header="Detach Tab" 
+                                 Style="{StaticResource TabContextMenuItemStyle}"
+                                 Click="DetachTabMenuItem_Click" 
+                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=TabControl}, Path=Items.Count, Converter={StaticResource CountToEnableConverter}}">
+                            <MenuItem.Icon>
+                                <Path Width="12" Height="12" Fill="#656D76"
+                                      Data="M12,16L19.36,10.27L21,9L19.36,7.73L12,2L4.64,7.73L3,9L4.64,10.27L12,16M12,4.15L17.74,8.5L12,12.85L6.26,8.5L12,4.15Z"/>
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        
+                        <MenuItem Header="Move to New Window" 
+                                 Style="{StaticResource TabContextMenuItemStyle}"
+                                 Click="MoveToNewWindowMenuItem_Click" 
+                                 IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=TabControl}, Path=Items.Count, Converter={StaticResource CountToEnableConverter}}">
+                            <MenuItem.Icon>
+                                <Path Width="12" Height="12" Fill="#656D76"
+                                      Data="M4,4H20A2,2 0 0,1 22,6V18A2,2 0 0,1 20,20H4A2,2 0 0,1 2,18V6A2,2 0 0,1 4,4M4,6V18H20V6H4Z"/>
+                            </MenuItem.Icon>
+                        </MenuItem>
                     </ContextMenu>
                 </TabControl.ContextMenu>
             </controls:ChromeStyleTabControl>

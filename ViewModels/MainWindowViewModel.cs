@@ -112,6 +112,21 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         public ICommand TogglePinTabCommand { get; private set; }
 
+        /// <summary>
+        /// Command to rename a tab
+        /// </summary>
+        public ICommand RenameTabCommand { get; private set; }
+
+        /// <summary>
+        /// Command to change tab color
+        /// </summary>
+        public ICommand ChangeColorCommand { get; private set; }
+
+        /// <summary>
+        /// Command to toggle pin state
+        /// </summary>
+        public ICommand TogglePinCommand { get; private set; }
+
         #endregion
 
         #region Public Methods
@@ -336,6 +351,11 @@ namespace ExplorerPro.ViewModels
             CloseCurrentTabCommand = new RelayCommand(() => CloseCurrentTab());
             DuplicateTabCommand = new RelayCommand<TabItemModel>(tab => DuplicateTab(tab));
             TogglePinTabCommand = new RelayCommand<TabItemModel>(TogglePinTab);
+            
+            // Phase 2 Commands
+            RenameTabCommand = Commands.TabCommands.CreateRenameTabCommand(_logger);
+            ChangeColorCommand = Commands.TabCommands.CreateChangeColorCommand(_logger);
+            TogglePinCommand = Commands.TabCommands.CreateTogglePinCommand(_logger);
         }
 
         /// <summary>

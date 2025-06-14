@@ -30,14 +30,9 @@ namespace ExplorerPro
                 return;
             }
 
-            // Regular application startup
-            var app = new Application();
-            app.ShutdownMode = ShutdownMode.OnLastWindowClose;
-            
-            var mainWindow = new MainWindow();
-            app.MainWindow = mainWindow;
-            
-            mainWindow.Show();
+            // Use the proper App.xaml infrastructure for clean shutdown
+            // This ensures App.OnStartup and App.OnExit are called properly
+            var app = new App();
             app.Run();
         }
     }

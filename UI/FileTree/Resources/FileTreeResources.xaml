@@ -212,10 +212,9 @@
                                     Value="{DynamicResource SelectionBorderColor}"/>
                         </Trigger>
                         
-                        <!-- Keyboard focus for accessibility -->
+                        <!-- Keyboard focus for accessibility - hidden -->
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="CenterLine" Property="Opacity" Value="0.7"/>
-                            <Setter TargetName="CenterLine" Property="StrokeDashArray" Value="2,2"/>
+                            <Setter TargetName="CenterLine" Property="Opacity" Value="0"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

@@ -29,7 +29,7 @@
     </UserControl.Resources>
     
     <!-- Main grid -->
-    <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}">
+    <Grid x:Name="MainGrid" Background="{DynamicResource BackgroundColor}" FocusVisualStyle="{x:Null}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -127,6 +127,7 @@
                   x:Name="fileTreeView" 
                   BorderThickness="0"
                   Background="{DynamicResource TreeViewBackground}"
+                  FocusVisualStyle="{x:Null}"
                   VirtualizingPanel.IsVirtualizing="True"
                   VirtualizingPanel.VirtualizationMode="Recycling"
                   VirtualizingPanel.ScrollUnit="Pixel"

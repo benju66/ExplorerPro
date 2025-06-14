@@ -474,8 +474,7 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Main window view model for Chrome-style tab system
         /// </summary>
-        // Note: ViewModel removed - using direct TabItem manipulation instead of MVVM
-        // private MainWindowViewModel _viewModel;
+        private MainWindowViewModel _viewModel;
 
         #endregion
 
@@ -497,6 +496,11 @@ namespace ExplorerPro.UI.MainWindow
         /// Provides logging with this window's specific context.
         /// </summary>
         private ILogger<MainWindow> _instanceLogger;
+
+        /// <summary>
+        /// Stores the tab that was right-clicked for context menu operations
+        /// </summary>
+        private TabItem _rightClickedTab;
 
         /// <summary>
         /// Public property to check if the window has been disposed
@@ -746,8 +750,10 @@ namespace ExplorerPro.UI.MainWindow
                 // Phase 2: WPF initialization (keep context in Created state for now)
                 InitializeComponent();
                 
-                // Note: No longer using MVVM since we removed ItemsSource binding
-                // DataContext = _viewModel;
+                // Create and set the MainWindowViewModel for Phase 2 tab commands
+                var viewModelLogger = SharedLoggerFactory.CreateLogger<ViewModels.MainWindowViewModel>();
+                _viewModel = new MainWindowViewModel(viewModelLogger);
+                DataContext = _viewModel;
                 
                 // Create instance logger after we have a handle
                 var windowId = Guid.NewGuid().ToString("N").Substring(0, 8);
@@ -2335,7 +2341,101 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void DuplicateTabMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            DuplicateCurrentTab();
+            try
+            {
+                if (sender is MenuItem menuItem && menuItem.Parent is ContextMenu contextMenu)
+                {
+                    var tabModel = GetContextMenuTabModel(contextMenu);
+                    if (tabModel != null && _viewModel?.DuplicateTabCommand?.CanExecute(tabModel) == true)
+                    {
+                        _viewModel.DuplicateTabCommand.Execute(tabModel);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error executing duplicate tab command");
+            }
+        }
+
+        private void RenameTabMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is MenuItem menuItem && menuItem.Parent is ContextMenu contextMenu)
+                {
+                    var tabModel = GetContextMenuTabModel(contextMenu);
+                    var contextTabItem = GetContextMenuTabItem(contextMenu);
+                    
+                    if (tabModel != null && contextTabItem != null && _viewModel?.RenameTabCommand?.CanExecute(tabModel) == true)
+                    {
+                        // Show rename dialog with smart positioning
+                        var dialog = new UI.Dialogs.RenameDialog(tabModel.Title, this, contextTabItem);
+                        if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.NewName))
+                        {
+                            var oldTitle = tabModel.Title;
+                            tabModel.Title = dialog.NewName.Trim();
+                            tabModel.UpdateLastAccessed();
+                            _instanceLogger?.LogDebug($"Tab renamed from '{oldTitle}' to '{tabModel.Title}'");
+                            
+                                                    // Sync changes back to the UI TabItem
+                        UpdateTabItemFromModel(contextTabItem, tabModel);
+                    }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error executing rename tab command");
+            }
+        }
+
+        private void ChangeColorMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is MenuItem menuItem && menuItem.Parent is ContextMenu contextMenu)
+                {
+                    var tabModel = GetContextMenuTabModel(contextMenu);
+                    var contextTabItem = GetContextMenuTabItem(contextMenu);
+                    
+                    if (tabModel != null && contextTabItem != null && _viewModel?.ChangeColorCommand?.CanExecute(tabModel) == true)
+                    {
+                        _viewModel.ChangeColorCommand.Execute(tabModel);
+                        
+                        // Sync changes back to the UI TabItem
+                        UpdateTabItemFromModel(contextTabItem, tabModel);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error executing change color command");
+            }
+        }
+
+        private void TogglePinMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is MenuItem menuItem && menuItem.Parent is ContextMenu contextMenu)
+                {
+                    var tabModel = GetContextMenuTabModel(contextMenu);
+                    var contextTabItem = GetContextMenuTabItem(contextMenu);
+                    
+                    if (tabModel != null && contextTabItem != null && _viewModel?.TogglePinCommand?.CanExecute(tabModel) == true)
+                    {
+                        _viewModel.TogglePinCommand.Execute(tabModel);
+                        
+                        // Sync changes back to the UI TabItem
+                        UpdateTabItemFromModel(contextTabItem, tabModel);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error toggling pin state for tab");
+            }
         }
 
         /// <summary>
@@ -4323,9 +4423,43 @@ namespace ExplorerPro.UI.MainWindow
                     // Handle tab metadata changes
                     chromeTabControl.TabMetadataChanged += OnTabMetadataChanged;
                     
+                    // Add middle-click support to close tabs
+                    chromeTabControl.MouseDown += OnTabControlMouseDown;
+                    
                     _instanceLogger?.LogInformation("Chrome-style tab events configured");
                 }
             };
+        }
+
+        /// <summary>
+        /// Handles middle-click on tabs to close them
+        /// </summary>
+        private void OnTabControlMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == MouseButton.Middle && e.ButtonState == MouseButtonState.Pressed)
+            {
+                try
+                {
+                    // Find the tab item that was clicked
+                    var source = e.OriginalSource as DependencyObject;
+                    var tabItem = FindParent<TabItem>(source);
+                    
+                    if (tabItem != null && MainTabs.Items.Count > 1) // Don't close the last tab
+                    {
+                        var index = MainTabs.Items.IndexOf(tabItem);
+                        if (index >= 0)
+                        {
+                            CloseTab(index);
+                            e.Handled = true;
+                            _instanceLogger?.LogDebug($"Tab closed via middle-click: {tabItem.Header}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _instanceLogger?.LogError(ex, "Error handling middle-click tab close");
+                }
+            }
         }
 
         /// <summary>
@@ -5007,6 +5141,228 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         #endregion
+
+        /// <summary>
+        /// Gets the TabItemModel corresponding to a TabItem
+        /// </summary>
+        /// <param name="tabItem">The TabItem to find the model for</param>
+        /// <returns>The corresponding TabItemModel or null if not found</returns>
+        private TabItemModel GetTabItemModel(TabItem tabItem)
+        {
+            if (tabItem == null) return null;
+
+            try
+            {
+                // Create a TabItemModel based on the TabItem's current state
+                var tabModel = new TabItemModel
+                {
+                    Title = tabItem.Header?.ToString() ?? "Untitled",
+                    Content = tabItem.Content,
+                    IsPinned = false, // Default value - could be stored in Tag
+                    TabColor = Colors.LightGray, // Default value
+                    HasUnsavedChanges = false // Default value
+                };
+
+                // Try to extract metadata from TabItem's Tag if available
+                if (tabItem.Tag is Dictionary<string, object> metadata)
+                {
+                    if (metadata.ContainsKey("IsPinned") && metadata["IsPinned"] is bool pinned)
+                        tabModel.IsPinned = pinned;
+                    
+                    if (metadata.ContainsKey("TabColor") && metadata["TabColor"] is Color color)
+                        tabModel.TabColor = color;
+                        
+                    if (metadata.ContainsKey("HasUnsavedChanges") && metadata["HasUnsavedChanges"] is bool hasChanges)
+                        tabModel.HasUnsavedChanges = hasChanges;
+                }
+
+                return tabModel;
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error creating TabItemModel for TabItem");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Updates a TabItem based on a TabItemModel's properties
+        /// </summary>
+        /// <param name="tabItem">The TabItem to update</param>
+        /// <param name="tabModel">The model with updated properties</param>
+        private void UpdateTabItemFromModel(TabItem tabItem, TabItemModel tabModel)
+        {
+            if (tabItem == null || tabModel == null) return;
+
+            try
+            {
+                // Update header/title
+                tabItem.Header = tabModel.Title;
+
+                // Create or update metadata in Tag
+                var metadata = tabItem.Tag as Dictionary<string, object> ?? new Dictionary<string, object>();
+                
+                metadata["IsPinned"] = tabModel.IsPinned;
+                metadata["TabColor"] = tabModel.TabColor;
+                metadata["HasUnsavedChanges"] = tabModel.HasUnsavedChanges;
+                
+                tabItem.Tag = metadata;
+
+                // Apply visual styling based on the model
+                ApplyTabStyling(tabItem, tabModel);
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error updating TabItem from model");
+            }
+        }
+
+        /// <summary>
+        /// Applies visual styling to a TabItem based on TabItemModel properties
+        /// </summary>
+        /// <param name="tabItem">The TabItem to style</param>
+        /// <param name="tabModel">The model with styling information</param>
+        private void ApplyTabStyling(TabItem tabItem, TabItemModel tabModel)
+        {
+            try
+            {
+                // Apply color styling
+                if (tabModel.TabColor != Colors.LightGray)
+                {
+                    // You can implement color application here if needed
+                    // For now, the styling is handled by the TabStyles.xaml
+                }
+
+                // Apply pinned state styling
+                if (tabModel.IsPinned)
+                {
+                    // Add pinned indicator styling
+                }
+
+                // Force refresh of the tab's visual state
+                tabItem.UpdateLayout();
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error applying tab styling");
+            }
+        }
+
+        /// <summary>
+        /// Gets the TabItemModel for the currently right-clicked tab in context menu
+        /// </summary>
+        /// <param name="contextMenu">The context menu</param>
+        /// <returns>The TabItemModel or null if not found</returns>
+        private TabItemModel GetContextMenuTabModel(ContextMenu contextMenu)
+        {
+            try
+            {
+                // Use the stored right-clicked tab
+                if (_rightClickedTab != null)
+                {
+                    return GetTabItemModel(_rightClickedTab);
+                }
+                
+                // Fallback to selected tab if no right-clicked tab stored
+                if (contextMenu?.PlacementTarget is TabControl tabControl)
+                {
+                    var selectedTabItem = tabControl.SelectedItem as TabItem;
+                    if (selectedTabItem != null)
+                    {
+                        return GetTabItemModel(selectedTabItem);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error getting context menu tab model");
+            }
+
+            return null;
+        }
+        
+        /// <summary>
+        /// Gets the currently selected TabItem
+        /// </summary>
+        /// <returns>The selected TabItem or null if none selected</returns>
+        private TabItem GetSelectedTabItem()
+        {
+            try
+            {
+                return MainTabs?.SelectedItem as TabItem;
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error getting selected tab item");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Gets the TabItem that was right-clicked from context menu
+        /// </summary>
+        /// <param name="contextMenu">The context menu</param>
+        /// <returns>The right-clicked TabItem or null if not found</returns>
+        private TabItem GetContextMenuTabItem(ContextMenu contextMenu)
+        {
+            try
+            {
+                // Use the stored right-clicked tab
+                if (_rightClickedTab != null)
+                {
+                    return _rightClickedTab;
+                }
+                
+                // Fallback to selected tab if no right-clicked tab stored
+                if (contextMenu?.PlacementTarget is TabControl tabControl)
+                {
+                    return tabControl.SelectedItem as TabItem;
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error getting context menu tab item");
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Handles the preview mouse right button down event to capture which tab was right-clicked
+        /// </summary>
+        private void TabControl_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            try
+            {
+                if (sender is TabControl tabControl)
+                {
+                    // Get the mouse position relative to the TabControl
+                    var mousePosition = e.GetPosition(tabControl);
+                    var hitTest = VisualTreeHelper.HitTest(tabControl, mousePosition);
+                    
+                    if (hitTest?.VisualHit != null)
+                    {
+                        // Find the TabItem that contains the hit point
+                        var tabItem = FindParent<TabItem>(hitTest.VisualHit);
+                        if (tabItem != null)
+                        {
+                            _rightClickedTab = tabItem;
+                            _instanceLogger?.LogDebug($"Right-clicked on tab: {tabItem.Header}");
+                            return;
+                        }
+                    }
+                    
+                    // Fallback to selected tab if hit test fails
+                    _rightClickedTab = tabControl.SelectedItem as TabItem;
+                    _instanceLogger?.LogDebug($"Right-click detected, using selected tab as fallback: {_rightClickedTab?.Header}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error determining right-clicked tab");
+                _rightClickedTab = SafeMainTabs?.SelectedItem as TabItem;
+            }
+        }
     }
 
     #region Window State and Actions for Transactions
