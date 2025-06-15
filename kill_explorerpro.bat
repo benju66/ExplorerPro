@@ -1,0 +1,6 @@
+@echo off
+echo Terminating all ExplorerPro processes...
+taskkill /F /IM ExplorerPro.exe /T 2>nul || echo No ExplorerPro processes found.
+echo Cleaning up lock files...
+timeout /t 2 /nobreak >nul
+echo Ready for build. 

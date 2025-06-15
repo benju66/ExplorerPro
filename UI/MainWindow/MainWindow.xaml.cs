@@ -2364,23 +2364,56 @@ namespace ExplorerPro.UI.MainWindow
             {
                 if (sender is MenuItem menuItem && menuItem.Parent is ContextMenu contextMenu)
                 {
-                    var tabModel = GetContextMenuTabModel(contextMenu);
                     var contextTabItem = GetContextMenuTabItem(contextMenu);
                     
-                    if (tabModel != null && contextTabItem != null && _viewModel?.RenameTabCommand?.CanExecute(tabModel) == true)
+                    if (contextTabItem != null)
                     {
+                        var oldTitle = contextTabItem.Header?.ToString() ?? "Untitled";
+                        
                         // Show rename dialog with smart positioning
-                        var dialog = new UI.Dialogs.RenameDialog(tabModel.Title, this, contextTabItem);
+                        var dialog = new UI.Dialogs.RenameDialog(oldTitle, this, contextTabItem);
                         if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.NewName))
                         {
-                            var oldTitle = tabModel.Title;
-                            tabModel.Title = dialog.NewName.Trim();
-                            tabModel.UpdateLastAccessed();
-                            _instanceLogger?.LogDebug($"Tab renamed from '{oldTitle}' to '{tabModel.Title}'");
+                            var newTitle = dialog.NewName.Trim();
                             
-                                                    // Sync changes back to the UI TabItem
-                        UpdateTabItemFromModel(contextTabItem, tabModel);
-                    }
+                            // Update the UI TabItem directly (most important)
+                            contextTabItem.Header = newTitle;
+                            
+                            // Update any associated model in the ViewModel
+                            if (_viewModel?.TabItems != null)
+                            {
+                                var viewModelTab = _viewModel.TabItems.FirstOrDefault(t => 
+                                    t.Title == oldTitle || 
+                                    (t.Content != null && t.Content == contextTabItem.Content));
+                                if (viewModelTab != null)
+                                {
+                                    viewModelTab.Title = newTitle;
+                                    viewModelTab.UpdateLastAccessed();
+                                }
+                            }
+                            
+                            // Update metadata stored in TabItem.Tag if it exists
+                            if (contextTabItem.Tag is Dictionary<string, object> metadata)
+                            {
+                                metadata["Title"] = newTitle;
+                                metadata["LastModified"] = DateTime.Now;
+                            }
+                            else
+                            {
+                                contextTabItem.Tag = new Dictionary<string, object>
+                                {
+                                    ["Title"] = newTitle,
+                                    ["LastModified"] = DateTime.Now
+                                };
+                            }
+                            
+                            // Force immediate UI refresh
+                            contextTabItem.UpdateLayout();
+                            contextTabItem.InvalidateVisual();
+                            MainTabs?.UpdateLayout();
+                            
+                            _instanceLogger?.LogDebug($"Tab renamed from '{oldTitle}' to '{newTitle}'");
+                        }
                     }
                 }
             }
@@ -5101,6 +5134,15 @@ namespace ExplorerPro.UI.MainWindow
                 });
                 MainTabs.SelectionChanged += MainTabs_SelectionChanged;
                 _eventSubscriptions.Add(subscription1);
+
+                // Subscribe to PreviewMouseRightButtonDown for context menu positioning
+                var subscription3 = Disposable.Create(() =>
+                {
+                    if (MainTabs != null)
+                        MainTabs.PreviewMouseRightButtonDown -= TabControl_PreviewMouseRightButtonDown;
+                });
+                MainTabs.PreviewMouseRightButtonDown += TabControl_PreviewMouseRightButtonDown;
+                _eventSubscriptions.Add(subscription3);
             }
             
             // Subscribe to Closing using weak pattern
@@ -5260,6 +5302,18 @@ namespace ExplorerPro.UI.MainWindow
                 // Use the stored right-clicked tab
                 if (_rightClickedTab != null)
                 {
+                    // Try to find the corresponding model from the ViewModel's collection first
+                    if (_viewModel?.TabItems != null)
+                    {
+                        var tabTitle = _rightClickedTab.Header?.ToString();
+                        var matchingModel = _viewModel.TabItems.FirstOrDefault(t => t.Title == tabTitle);
+                        if (matchingModel != null)
+                        {
+                            return matchingModel;
+                        }
+                    }
+                    
+                    // Fallback to creating a model from the TabItem
                     return GetTabItemModel(_rightClickedTab);
                 }
                 
@@ -5269,6 +5323,17 @@ namespace ExplorerPro.UI.MainWindow
                     var selectedTabItem = tabControl.SelectedItem as TabItem;
                     if (selectedTabItem != null)
                     {
+                        // Try to find the corresponding model from the ViewModel's collection first
+                        if (_viewModel?.TabItems != null)
+                        {
+                            var tabTitle = selectedTabItem.Header?.ToString();
+                            var matchingModel = _viewModel.TabItems.FirstOrDefault(t => t.Title == tabTitle);
+                            if (matchingModel != null)
+                            {
+                                return matchingModel;
+                            }
+                        }
+                        
                         return GetTabItemModel(selectedTabItem);
                     }
                 }
