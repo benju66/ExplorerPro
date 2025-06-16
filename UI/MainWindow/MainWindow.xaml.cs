@@ -2127,7 +2127,9 @@ namespace ExplorerPro.UI.MainWindow
                 var newTab = new TabItem
                 {
                     Header = tabTitle,
-                    Content = container
+                    Content = container,
+                    // Ensure new tabs are not pinned by default
+                    Tag = new Dictionary<string, object> { ["IsPinned"] = false }
                 };
                 
                 // Add the tab to the control using proper positioning
@@ -3016,6 +3018,8 @@ namespace ExplorerPro.UI.MainWindow
                 if (tabItem != null && IsTabPinned(tabItem))
                 {
                     _instanceLogger?.LogDebug($"Cannot close pinned tab: {tabItem.Header}");
+                    MessageBox.Show("Cannot close pinned tab. Unpin it first to close.", 
+                        "Pinned Tab", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
                 
@@ -5686,25 +5690,21 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                // Apply color styling first (this preserves pinned state)
+                // Ensure the model is always set as Tag for binding consistency
+                tabItem.Tag = tabModel;
+
+                // Apply color styling (this preserves pinned state)
                 if (tabModel.TabColor != Colors.LightGray)
                 {
                     SetTabColorDataContext(tabItem, tabModel.TabColor);
                 }
-                else if (tabModel.IsPinned)
+                else
                 {
-                    // For pinned tabs without custom colors, ensure DataContext is set for binding
-                    var tabData = new TabColorData
-                    {
-                        TabColor = Colors.LightGray,
-                        Header = tabItem.Header?.ToString() ?? "",
-                        IsPinned = tabModel.IsPinned
-                    };
-                    tabItem.DataContext = tabData;
+                    // For tabs without custom colors, clear DataContext to let Tag binding work
+                    tabItem.DataContext = null;
+                    // Clear any custom styling to return to default
+                    ClearTabColorStyling(tabItem);
                 }
-
-                // Ensure the model is always set as Tag for binding consistency
-                tabItem.Tag = tabModel;
 
                 // Force refresh of the tab's visual state to apply triggers
                 tabItem.UpdateLayout();
@@ -6084,6 +6084,8 @@ namespace ExplorerPro.UI.MainWindow
                 _rightClickedTab = SafeMainTabs?.SelectedItem as TabItem;
             }
         }
+
+
     }
 
     #region Window State and Actions for Transactions
