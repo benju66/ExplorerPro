@@ -176,4 +176,32 @@ namespace ExplorerPro.UI.Converters
             return false;
         }
     }
+
+    /// <summary>
+    /// Converter that checks if a color is not the default color (LightGray)
+    /// </summary>
+    public class IsNotDefaultColorConverter : IValueConverter
+    {
+        /// <summary>
+        /// Converts a Color to a boolean indicating if it's not the default color
+        /// </summary>
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is Color color)
+            {
+                // Check if color is not the default LightGray or Transparent
+                return color != Colors.LightGray && color != Colors.Transparent && color.A > 0;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Converts back (not implemented for this one-way converter)
+        /// </summary>
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException("IsNotDefaultColorConverter is a one-way converter");
+        }
+    }
 } 

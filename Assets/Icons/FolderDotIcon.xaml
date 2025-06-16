@@ -1,0 +1,21 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <DrawingImage x:Key="FolderDotIcon">
+    <DrawingImage.Drawing>
+      <DrawingGroup>
+        <!-- Folder shape -->
+        <GeometryDrawing Brush="{DynamicResource IconBrush}">
+          <GeometryDrawing.Geometry>
+            <PathGeometry Figures="M2,4 L8,4 L10,6 L18,6 C19.1,6 20,6.9 20,8 L20,16 C20,17.1 19.1,18 18,18 L4,18 C2.9,18 2,17.1 2,16 L2,4 Z"/>
+          </GeometryDrawing.Geometry>
+        </GeometryDrawing>
+        <!-- Dot indicator -->
+        <GeometryDrawing Brush="{DynamicResource IconBrush}">
+          <GeometryDrawing.Geometry>
+            <EllipseGeometry Center="16,14" RadiusX="2" RadiusY="2"/>
+          </GeometryDrawing.Geometry>
+        </GeometryDrawing>
+      </DrawingGroup>
+    </DrawingImage.Drawing>
+  </DrawingImage>
+</ResourceDictionary>

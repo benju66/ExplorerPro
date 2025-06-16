@@ -2130,8 +2130,8 @@ namespace ExplorerPro.UI.MainWindow
                     Content = container
                 };
                 
-                // Add the tab to the control
-                MainTabs.Items.Add(newTab);
+                // Add the tab to the control using proper positioning
+                InsertTabAtCorrectPosition(newTab);
                 MainTabs.SelectedItem = newTab;
 
                 // Connect signals if available
@@ -2520,79 +2520,62 @@ namespace ExplorerPro.UI.MainWindow
                 
                 if (sender is ContextMenu contextMenu)
                 {
-                    _instanceLogger?.LogDebug($"Context menu found with {contextMenu.Items.Count} items");
-                    
                     var contextTabItem = GetContextMenuTabItem(contextMenu);
-                    _instanceLogger?.LogDebug($"Context tab item: {(contextTabItem != null ? contextTabItem.Header?.ToString() ?? "unnamed" : "null")}");
-                    
-                    // Find the Clear Color menu item by iterating through all items
-                    MenuItem clearColorMenuItem = null;
-                    foreach (var item in contextMenu.Items)
+                    if (contextTabItem != null)
                     {
-                        if (item is MenuItem menuItem)
-                        {
-                            _instanceLogger?.LogDebug($"Found MenuItem: Name='{menuItem.Name}', Header='{menuItem.Header}', IsEnabled='{menuItem.IsEnabled}'");
-                            if (menuItem.Name == "ClearColorMenuItem" || (menuItem.Header?.ToString()?.Contains("Clear Color") == true))
-                            {
-                                clearColorMenuItem = menuItem;
-                                _instanceLogger?.LogDebug($"Found Clear Color menu item! Current IsEnabled: {clearColorMenuItem.IsEnabled}");
-                                break;
-                            }
-                        }
-                    }
-                    
-                    _instanceLogger?.LogDebug($"Clear Color menu item found: {clearColorMenuItem != null}");
-                    
-                    if (clearColorMenuItem != null && contextTabItem != null)
-                    {
-                        // Check if the tab has a custom color applied
+                        bool isTabPinned = IsTabPinned(contextTabItem);
                         bool hasCustomColor = TabHasCustomColor(contextTabItem);
-                        _instanceLogger?.LogDebug($"Tab has custom color: {hasCustomColor}");
                         
-                        // Enable/disable the Clear Color menu item
-                        _instanceLogger?.LogDebug($"Setting IsEnabled to {hasCustomColor} (was {clearColorMenuItem.IsEnabled})");
-                        clearColorMenuItem.IsEnabled = hasCustomColor;
-                        _instanceLogger?.LogDebug($"After setting: IsEnabled = {clearColorMenuItem.IsEnabled}");
+                        _instanceLogger?.LogDebug($"Tab: {contextTabItem.Header}, Pinned: {isTabPinned}, HasColor: {hasCustomColor}");
                         
-                        // Optional: Add visual indication in the header
-                        if (hasCustomColor)
+                        // Find menu items
+                        MenuItem clearColorMenuItem = null;
+                        MenuItem pinTabMenuItem = null;
+                        MenuItem unpinTabMenuItem = null;
+                        MenuItem closeTabMenuItem = null;
+                        
+                        foreach (var item in contextMenu.Items)
                         {
-                            clearColorMenuItem.Header = "Clear Color";
-                        }
-                        else
-                        {
-                            clearColorMenuItem.Header = "Clear Color (No custom color)";
-                        }
-                        
-                        // Force a visual refresh of the menu item
-                        clearColorMenuItem.InvalidateVisual();
-                        clearColorMenuItem.UpdateLayout();
-                        
-                        _instanceLogger?.LogDebug($"Final state - IsEnabled: {clearColorMenuItem.IsEnabled}, Header: '{clearColorMenuItem.Header}'");
-                    }
-                    else
-                    {
-                        _instanceLogger?.LogDebug($"Missing components - ClearColorMenuItem: {clearColorMenuItem != null}, ContextTabItem: {contextTabItem != null}");
-                        
-                        // Try to find it using a different approach
-                        if (clearColorMenuItem == null)
-                        {
-                            _instanceLogger?.LogDebug("Trying alternative search method...");
-                            for (int i = 0; i < contextMenu.Items.Count; i++)
+                            if (item is MenuItem menuItem)
                             {
-                                var item = contextMenu.Items[i];
-                                _instanceLogger?.LogDebug($"Item {i}: Type = {item.GetType().Name}");
-                                if (item is MenuItem mi)
-                                {
-                                    _instanceLogger?.LogDebug($"  MenuItem {i}: Name = '{mi.Name}', Header = '{mi.Header}'");
-                                }
+                                if (menuItem.Name == "ClearColorMenuItem" || menuItem.Header?.ToString()?.Contains("Clear Color") == true)
+                                    clearColorMenuItem = menuItem;
+                                else if (menuItem.Name == "PinTabMenuItem")
+                                    pinTabMenuItem = menuItem;
+                                else if (menuItem.Name == "UnpinTabMenuItem")
+                                    unpinTabMenuItem = menuItem;
+                                else if (menuItem.Header?.ToString() == "Close Tab")
+                                    closeTabMenuItem = menuItem;
                             }
                         }
+                        
+                        // Update Clear Color menu item
+                        if (clearColorMenuItem != null)
+                        {
+                            clearColorMenuItem.IsEnabled = hasCustomColor;
+                            clearColorMenuItem.Header = hasCustomColor ? "Clear Color" : "Clear Color (No custom color)";
+                        }
+                        
+                        // Update Pin/Unpin menu items
+                        if (pinTabMenuItem != null)
+                        {
+                            pinTabMenuItem.Visibility = isTabPinned ? Visibility.Collapsed : Visibility.Visible;
+                        }
+                        
+                        if (unpinTabMenuItem != null)
+                        {
+                            unpinTabMenuItem.Visibility = isTabPinned ? Visibility.Visible : Visibility.Collapsed;
+                        }
+                        
+                        // Disable Close Tab for pinned tabs
+                        if (closeTabMenuItem != null)
+                        {
+                            closeTabMenuItem.IsEnabled = !isTabPinned;
+                            closeTabMenuItem.ToolTip = isTabPinned ? "Cannot close pinned tabs. Unpin first to close." : null;
+                        }
+                        
+                        _instanceLogger?.LogDebug($"Context menu updated - Pin visible: {pinTabMenuItem?.Visibility}, Unpin visible: {unpinTabMenuItem?.Visibility}, Close enabled: {closeTabMenuItem?.IsEnabled}");
                     }
-                }
-                else
-                {
-                    _instanceLogger?.LogDebug("Sender is not a ContextMenu");
                 }
             }
             catch (Exception ex)
@@ -2746,12 +2729,141 @@ namespace ExplorerPro.UI.MainWindow
                         
                         // Sync changes back to the UI TabItem
                         UpdateTabItemFromModel(contextTabItem, tabModel);
+                        
+                        // Reorder tabs to keep pinned tabs on the left
+                        ReorderTabsAfterPinToggle();
                     }
                 }
             }
             catch (Exception ex)
             {
                 _instanceLogger?.LogError(ex, "Error toggling pin state for tab");
+            }
+        }
+
+        /// <summary>
+        /// Reorders tabs so that pinned tabs are always on the left side
+        /// </summary>
+        private void ReorderTabsAfterPinToggle()
+        {
+            try
+            {
+                if (MainTabs?.Items == null || MainTabs.Items.Count <= 1) return;
+
+                var allTabs = MainTabs.Items.Cast<TabItem>().ToList();
+                var pinnedTabs = new List<TabItem>();
+                var regularTabs = new List<TabItem>();
+
+                // Separate pinned and regular tabs
+                foreach (var tab in allTabs)
+                {
+                    if (IsTabPinned(tab))
+                    {
+                        pinnedTabs.Add(tab);
+                    }
+                    else
+                    {
+                        regularTabs.Add(tab);
+                    }
+                }
+
+                // Clear all tabs
+                var selectedTab = MainTabs.SelectedItem as TabItem;
+                MainTabs.Items.Clear();
+
+                // Add pinned tabs first (left side)
+                foreach (var pinnedTab in pinnedTabs)
+                {
+                    MainTabs.Items.Add(pinnedTab);
+                }
+
+                // Add regular tabs after pinned tabs
+                foreach (var regularTab in regularTabs)
+                {
+                    MainTabs.Items.Add(regularTab);
+                }
+
+                // Restore selection
+                if (selectedTab != null)
+                {
+                    MainTabs.SelectedItem = selectedTab;
+                }
+
+                _instanceLogger?.LogDebug($"Reordered tabs: {pinnedTabs.Count} pinned, {regularTabs.Count} regular");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error reordering tabs after pin toggle");
+            }
+        }
+
+        /// <summary>
+        /// Checks if a tab is pinned by examining its tag
+        /// </summary>
+        private bool IsTabPinned(TabItem tabItem)
+        {
+            try
+            {
+                if (tabItem?.Tag is TabItemModel model)
+                {
+                    return model.IsPinned;
+                }
+
+                // Fallback: check metadata
+                if (tabItem?.Tag is Dictionary<string, object> metadata &&
+                    metadata.ContainsKey("IsPinned") &&
+                    metadata["IsPinned"] is bool isPinned)
+                {
+                    return isPinned;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error checking if tab is pinned");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Ensures that when new tabs are added, they are placed after pinned tabs
+        /// </summary>
+        private void InsertTabAtCorrectPosition(TabItem newTab)
+        {
+            try
+            {
+                if (MainTabs?.Items == null) return;
+
+                // If this is a pinned tab, add it at the end of pinned tabs
+                if (IsTabPinned(newTab))
+                {
+                    int insertPosition = 0;
+                    // Find the position after the last pinned tab
+                    for (int i = 0; i < MainTabs.Items.Count; i++)
+                    {
+                        if (MainTabs.Items[i] is TabItem tab && IsTabPinned(tab))
+                        {
+                            insertPosition = i + 1;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                    MainTabs.Items.Insert(insertPosition, newTab);
+                }
+                else
+                {
+                    // Regular tab goes at the end
+                    MainTabs.Items.Add(newTab);
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error inserting tab at correct position");
+                // Fallback: just add to the end
+                MainTabs.Items.Add(newTab);
             }
         }
 
@@ -2898,6 +3010,15 @@ namespace ExplorerPro.UI.MainWindow
             
             if (index >= 0 && index < MainTabs.Items.Count)
             {
+                var tabItem = MainTabs.Items[index] as TabItem;
+                
+                // Don't close pinned tabs
+                if (tabItem != null && IsTabPinned(tabItem))
+                {
+                    _instanceLogger?.LogDebug($"Cannot close pinned tab: {tabItem.Header}");
+                    return;
+                }
+                
                 MainTabs.Items.RemoveAt(index);
             }
         }
@@ -5479,6 +5600,12 @@ namespace ExplorerPro.UI.MainWindow
 
             try
             {
+                // First try to get existing model from Tag
+                if (tabItem.Tag is TabItemModel existingModel)
+                {
+                    return existingModel;
+                }
+
                 // Create a TabItemModel based on the TabItem's current state
                 var tabModel = new TabItemModel
                 {
@@ -5501,6 +5628,9 @@ namespace ExplorerPro.UI.MainWindow
                     if (metadata.ContainsKey("HasUnsavedChanges") && metadata["HasUnsavedChanges"] is bool hasChanges)
                         tabModel.HasUnsavedChanges = hasChanges;
                 }
+
+                // Set the model as the Tag for future reference
+                tabItem.Tag = tabModel;
 
                 return tabModel;
             }
@@ -5525,17 +5655,21 @@ namespace ExplorerPro.UI.MainWindow
                 // Update header/title
                 tabItem.Header = tabModel.Title;
 
-                // Create or update metadata in Tag
-                var metadata = tabItem.Tag as Dictionary<string, object> ?? new Dictionary<string, object>();
-                
-                metadata["IsPinned"] = tabModel.IsPinned;
-                metadata["TabColor"] = tabModel.TabColor;
-                metadata["HasUnsavedChanges"] = tabModel.HasUnsavedChanges;
-                
-                tabItem.Tag = metadata;
+                // Set the model directly as the Tag for better binding
+                tabItem.Tag = tabModel;
 
                 // Apply visual styling based on the model
                 ApplyTabStyling(tabItem, tabModel);
+                
+                // Update tooltip for pinned tabs
+                if (tabModel.IsPinned)
+                {
+                    tabItem.ToolTip = tabModel.Title;
+                }
+                else
+                {
+                    tabItem.ToolTip = null;
+                }
             }
             catch (Exception ex)
             {
@@ -5552,20 +5686,35 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                // Apply color styling
+                // Apply color styling first (this preserves pinned state)
                 if (tabModel.TabColor != Colors.LightGray)
                 {
                     SetTabColorDataContext(tabItem, tabModel.TabColor);
                 }
-
-                // Apply pinned state styling
-                if (tabModel.IsPinned)
+                else if (tabModel.IsPinned)
                 {
-                    // Add pinned indicator styling
+                    // For pinned tabs without custom colors, ensure DataContext is set for binding
+                    var tabData = new TabColorData
+                    {
+                        TabColor = Colors.LightGray,
+                        Header = tabItem.Header?.ToString() ?? "",
+                        IsPinned = tabModel.IsPinned
+                    };
+                    tabItem.DataContext = tabData;
                 }
 
-                // Force refresh of the tab's visual state
+                // Ensure the model is always set as Tag for binding consistency
+                tabItem.Tag = tabModel;
+
+                // Force refresh of the tab's visual state to apply triggers
                 tabItem.UpdateLayout();
+                tabItem.InvalidateVisual();
+                
+                // Use dispatcher to ensure all bindings are updated
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    tabItem.ApplyTemplate();
+                }), DispatcherPriority.Loaded);
             }
             catch (Exception ex)
             {
@@ -5582,22 +5731,46 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
+                // Get current pinned state before creating TabColorData
+                bool isPinned = false;
+                if (tabItem.Tag is TabItemModel model)
+                {
+                    isPinned = model.IsPinned;
+                }
+                else if (tabItem.Tag is Dictionary<string, object> metadata &&
+                         metadata.ContainsKey("IsPinned") &&
+                         metadata["IsPinned"] is bool pinnedValue)
+                {
+                    isPinned = pinnedValue;
+                }
+
                 // Create or update a simple data object for binding
                 var tabData = new TabColorData
                 {
                     TabColor = color,
                     Header = tabItem.Header?.ToString() ?? "",
-                    IsPinned = false // This can be enhanced later
+                    IsPinned = isPinned // Preserve the pinned state
                 };
                 
                 // Set the DataContext to enable binding
                 tabItem.DataContext = tabData;
                 
-                // Also store in Tag for persistence
-                var metadata = tabItem.Tag as Dictionary<string, object> ?? new Dictionary<string, object>();
-                metadata["TabColor"] = color;
-                metadata["TabColorData"] = tabData;
-                tabItem.Tag = metadata;
+                // Keep the original Tag if it's a TabItemModel, otherwise use metadata
+                if (tabItem.Tag is TabItemModel originalModel)
+                {
+                    // Keep the original model as Tag for proper binding
+                    originalModel.TabColor = color;
+                    tabItem.Tag = originalModel;
+                }
+                else
+                {
+                    // Use metadata approach for legacy compatibility
+                    var metadata = tabItem.Tag as Dictionary<string, object> ?? new Dictionary<string, object>();
+                    metadata["TabColor"] = color;
+                    metadata["TabColorData"] = tabData;
+                    metadata["IsPinned"] = isPinned;
+                    tabItem.Tag = metadata;
+                }
                 
                 // Use dispatcher to ensure template is applied before styling
                 Dispatcher.BeginInvoke(new Action(() =>

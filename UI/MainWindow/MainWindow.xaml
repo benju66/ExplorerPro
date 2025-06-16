@@ -26,6 +26,7 @@
             -->
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="../Styles/TabStyles.xaml"/>
+                <ResourceDictionary Source="../../Assets/Icons/FolderDotIcon.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             
             <!-- 
@@ -396,7 +397,7 @@
                                             </TransformGroup>
                                         </Border.RenderTransform>
                                         
-                                        <!-- Clean Windows 11 style layout with optional pin icon -->
+                                        <!-- Dynamic layout for pinned vs regular tabs -->
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto"/>
@@ -404,94 +405,112 @@
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             
-                                            <!-- Pin icon (only visible when tab is pinned) -->
-                                            <Path x:Name="PinIcon"
-                                                  Grid.Column="0"
-                                                  Width="12" Height="12"
-                                                  Margin="12,0,4,0"
-                                                  VerticalAlignment="Center"
-                                                  Fill="#656D76"
-                                                  Data="M16,12V4H17V2H7V4H8V12L6,14V16H11.2V22H12.8V16H18V14L16,12Z"
-                                                  Visibility="Collapsed"/>
+                                            <!-- Pinned tab content (icon only) -->
+                                            <Grid x:Name="PinnedContent" Grid.Column="0" Grid.ColumnSpan="3" 
+                                                  Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <Image x:Name="PinnedIcon" 
+                                                       Width="20" Height="20" 
+                                                       Source="{StaticResource FolderDotIcon}"
+                                                       Margin="8,6,8,6"/>
+                                            </Grid>
                                             
-                                            <!-- Clean tab title - Windows 11 style -->
-                                            <TextBlock x:Name="TabTitle"
-                                                     Grid.Column="1" 
-                                                     Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" 
-                                                     Margin="12,6,8,6"
-                                                     VerticalAlignment="Center"
-                                                     HorizontalAlignment="Left"
-                                                     FontSize="13"
-                                                     FontWeight="Medium"
-                                                     Foreground="#24292F"
-                                                     TextTrimming="CharacterEllipsis"
-                                                     MinHeight="26"
-                                                     ClipToBounds="False"
-                                                     UseLayoutRounding="True"
-                                                     TextOptions.TextFormattingMode="Display"
-                                                     TextOptions.TextRenderingMode="ClearType"/>
-                                            
-                                            <!-- Enhanced close button (hover-to-show) -->
-                                            <Button x:Name="CloseButton"
-                                                  Grid.Column="2" 
-                                                  Content="✕" 
-                                                  FontSize="12"
-                                                  FontWeight="Bold"
-                                                  Width="24" Height="24"
-                                                  Margin="4,0,8,0"
-                                                  BorderThickness="0"
-                                                  Background="Transparent"
-                                                  Foreground="#656D76"
-                                                  VerticalAlignment="Center"
-                                                  Click="TabCloseButton_Click"
-                                                  ToolTip="Close Tab (Middle-click also closes)"
-                                                  Opacity="0"
-                                                  Style="{x:Null}">
-                                                <Button.Template>
-                                                    <ControlTemplate TargetType="Button">
-                                                        <Border x:Name="CloseButtonBorder"
-                                                              Background="Transparent"
-                                                              CornerRadius="12"
-                                                              Padding="4">
-                                                            <ContentPresenter HorizontalAlignment="Center" 
-                                                                            VerticalAlignment="Center"/>
-                                                            <Border.Effect>
-                                                                <DropShadowEffect x:Name="CloseButtonShadow" 
-                                                                                Color="#FF000000" 
-                                                                                BlurRadius="3" 
-                                                                                ShadowDepth="1" 
-                                                                                Opacity="0"/>
-                                                            </Border.Effect>
-                                                        </Border>
-                                                        <ControlTemplate.Triggers>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Trigger.EnterActions>
-                                                                    <BeginStoryboard>
-                                                                        <Storyboard>
-                                                                            <ColorAnimation Storyboard.TargetName="CloseButtonBorder"
-                                                                                          Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                                                          To="#E53E3E" Duration="0:0:0.15"/>
-                                                                            <ColorAnimation Storyboard.TargetProperty="(TextBlock.Foreground).(SolidColorBrush.Color)"
-                                                                                          To="White" Duration="0:0:0.15"/>
-                                                                        </Storyboard>
-                                                                    </BeginStoryboard>
-                                                                </Trigger.EnterActions>
-                                                                <Trigger.ExitActions>
-                                                                    <BeginStoryboard>
-                                                                        <Storyboard>
-                                                                            <ColorAnimation Storyboard.TargetName="CloseButtonBorder"
-                                                                                          Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                                                          To="Transparent" Duration="0:0:0.15"/>
-                                                                            <ColorAnimation Storyboard.TargetProperty="(TextBlock.Foreground).(SolidColorBrush.Color)"
-                                                                                          To="#656D76" Duration="0:0:0.15"/>
-                                                                        </Storyboard>
-                                                                    </BeginStoryboard>
-                                                                </Trigger.ExitActions>
-                                                            </Trigger>
-                                                        </ControlTemplate.Triggers>
-                                                    </ControlTemplate>
-                                                </Button.Template>
-                                            </Button>
+                                            <!-- Regular tab content (title + close button) -->
+                                            <Grid x:Name="RegularContent" Grid.Column="0" Grid.ColumnSpan="3">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                
+                                                <!-- Pin icon (only visible when tab is pinned) -->
+                                                <Path x:Name="PinIcon"
+                                                      Grid.Column="0"
+                                                      Width="12" Height="12"
+                                                      Margin="12,0,4,0"
+                                                      VerticalAlignment="Center"
+                                                      Fill="#656D76"
+                                                      Data="M16,12V4H17V2H7V4H8V12L6,14V16H11.2V22H12.8V16H18V14L16,12Z"
+                                                      Visibility="Collapsed"/>
+                                                
+                                                <!-- Clean tab title - Windows 11 style -->
+                                                <TextBlock x:Name="TabTitle"
+                                                         Grid.Column="1" 
+                                                         Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" 
+                                                         Margin="12,6,8,6"
+                                                         VerticalAlignment="Center"
+                                                         HorizontalAlignment="Left"
+                                                         FontSize="13"
+                                                         FontWeight="Medium"
+                                                         Foreground="#24292F"
+                                                         TextTrimming="CharacterEllipsis"
+                                                         MinHeight="26"
+                                                         ClipToBounds="False"
+                                                         UseLayoutRounding="True"
+                                                         TextOptions.TextFormattingMode="Display"
+                                                         TextOptions.TextRenderingMode="ClearType"/>
+                                                
+                                                <!-- Enhanced close button (hover-to-show) -->
+                                                <Button x:Name="CloseButton"
+                                                      Grid.Column="2" 
+                                                      Content="✕" 
+                                                      FontSize="12"
+                                                      FontWeight="Bold"
+                                                      Width="24" Height="24"
+                                                      Margin="4,0,8,0"
+                                                      BorderThickness="0"
+                                                      Background="Transparent"
+                                                      Foreground="#656D76"
+                                                      VerticalAlignment="Center"
+                                                      Click="TabCloseButton_Click"
+                                                      ToolTip="Close Tab (Middle-click also closes)"
+                                                      Opacity="0"
+                                                      Style="{x:Null}">
+                                                    <Button.Template>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border x:Name="CloseButtonBorder"
+                                                                  Background="Transparent"
+                                                                  CornerRadius="12"
+                                                                  Padding="4">
+                                                                <ContentPresenter HorizontalAlignment="Center" 
+                                                                                VerticalAlignment="Center"/>
+                                                                <Border.Effect>
+                                                                    <DropShadowEffect x:Name="CloseButtonShadow" 
+                                                                                    Color="#FF000000" 
+                                                                                    BlurRadius="3" 
+                                                                                    ShadowDepth="1" 
+                                                                                    Opacity="0"/>
+                                                                </Border.Effect>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Trigger.EnterActions>
+                                                                        <BeginStoryboard>
+                                                                            <Storyboard>
+                                                                                <ColorAnimation Storyboard.TargetName="CloseButtonBorder"
+                                                                                              Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                                              To="#E53E3E" Duration="0:0:0.15"/>
+                                                                                <ColorAnimation Storyboard.TargetProperty="(TextBlock.Foreground).(SolidColorBrush.Color)"
+                                                                                              To="White" Duration="0:0:0.15"/>
+                                                                            </Storyboard>
+                                                                        </BeginStoryboard>
+                                                                    </Trigger.EnterActions>
+                                                                    <Trigger.ExitActions>
+                                                                        <BeginStoryboard>
+                                                                            <Storyboard>
+                                                                                <ColorAnimation Storyboard.TargetName="CloseButtonBorder"
+                                                                                              Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                                                                              To="Transparent" Duration="0:0:0.15"/>
+                                                                                <ColorAnimation Storyboard.TargetProperty="(TextBlock.Foreground).(SolidColorBrush.Color)"
+                                                                                              To="#656D76" Duration="0:0:0.15"/>
+                                                                            </Storyboard>
+                                                                        </BeginStoryboard>
+                                                                    </Trigger.ExitActions>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Button.Template>
+                                                </Button>
+                                            </Grid>
                                         </Grid>
                                     </Border>
                                     
@@ -513,7 +532,7 @@
                                                 <BeginStoryboard Storyboard="{StaticResource TabHoverStoryboard}"/>
                                                 <BeginStoryboard>
                                                     <Storyboard>
-                                                        <!-- Show close button on hover -->
+                                                        <!-- Show close button on hover (only for regular tabs) -->
                                                         <DoubleAnimation Storyboard.TargetName="CloseButton"
                                                                        Storyboard.TargetProperty="Opacity"
                                                                        To="1" Duration="0:0:0.2"
@@ -534,7 +553,7 @@
                                             </Trigger.ExitActions>
                                         </Trigger>
                                         
-                                        <!-- Always show close button when selected -->
+                                        <!-- Always show close button when selected (only for regular tabs) -->
                                         <MultiTrigger>
                                             <MultiTrigger.Conditions>
                                                 <Condition Property="IsSelected" Value="True"/>
@@ -542,11 +561,39 @@
                                             <Setter TargetName="CloseButton" Property="Opacity" Value="0.7"/>
                                         </MultiTrigger>
                                         
-                                        <!-- Show pin icon when tab is pinned -->
-                                        <DataTrigger Binding="{Binding IsPinned, RelativeSource={RelativeSource TemplatedParent}}" Value="True">
-                                            <Setter TargetName="PinIcon" Property="Visibility" Value="Visible"/>
-                                            <Setter TargetName="TabTitle" Property="Margin" Value="4,6,8,6"/>
+                                        <!-- Pinned tab styling - Check both Tag.IsPinned and DataContext.IsPinned -->
+                                        <DataTrigger Binding="{Binding Path=Tag.IsPinned, RelativeSource={RelativeSource Self}}" Value="True">
+                                            <!-- Hide regular content and show pinned content -->
+                                            <Setter TargetName="RegularContent" Property="Visibility" Value="Collapsed"/>
+                                            <Setter TargetName="PinnedContent" Property="Visibility" Value="Visible"/>
+                                            <!-- Set compact size for pinned tabs (more compact) -->
+                                            <Setter Property="Width" Value="32"/>
+                                            <Setter Property="MinWidth" Value="32"/>
+                                            <Setter Property="MaxWidth" Value="32"/>
+                                            <!-- Add tooltip for pinned tabs -->
+                                            <Setter Property="ToolTip" Value="{Binding Header, RelativeSource={RelativeSource Self}}"/>
                                         </DataTrigger>
+                                        
+                                        <!-- Alternative pinned tab styling for DataContext binding -->
+                                        <DataTrigger Binding="{Binding Path=DataContext.IsPinned, RelativeSource={RelativeSource Self}}" Value="True">
+                                            <!-- Hide regular content and show pinned content -->
+                                            <Setter TargetName="RegularContent" Property="Visibility" Value="Collapsed"/>
+                                            <Setter TargetName="PinnedContent" Property="Visibility" Value="Visible"/>
+                                            <!-- Set compact size for pinned tabs (more compact) -->
+                                            <Setter Property="Width" Value="32"/>
+                                            <Setter Property="MinWidth" Value="32"/>
+                                            <Setter Property="MaxWidth" Value="32"/>
+                                            <!-- Add tooltip for pinned tabs -->
+                                            <Setter Property="ToolTip" Value="{Binding Header, RelativeSource={RelativeSource Self}}"/>
+                                        </DataTrigger>
+                                        
+
+                                        
+
+                                        
+
+                                        
+
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </Setter.Value>
@@ -729,12 +776,24 @@
                             </MenuItem.Icon>
                         </MenuItem>
                         
-                        <MenuItem Header="Pin/Unpin Tab" 
+                        <MenuItem x:Name="PinTabMenuItem"
+                                 Header="Pin Tab" 
                                  Style="{StaticResource TabContextMenuItemStyle}"
                                  Click="TogglePinMenuItem_Click">
                             <MenuItem.Icon>
                                 <Path Width="12" Height="12" Fill="#656D76"
                                       Data="M16,12V4H17V2H7V4H8V12L6,14V16H11.2V22H12.8V16H18V14L16,12Z"/>
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        
+                        <MenuItem x:Name="UnpinTabMenuItem"
+                                 Header="Unpin Tab" 
+                                 Style="{StaticResource TabContextMenuItemStyle}"
+                                 Click="TogglePinMenuItem_Click"
+                                 Visibility="Collapsed">
+                            <MenuItem.Icon>
+                                <Path Width="12" Height="12" Fill="#656D76"
+                                      Data="M2,5.27L3.28,4L20,20.72L18.73,22L12.8,16.07V22H11.2V16H6V14L8,12V11.27L2,5.27M16,12V4H17V2H7V4H8V9.18L16,17.18V12Z"/>
                             </MenuItem.Icon>
                         </MenuItem>
                         
