@@ -699,7 +699,7 @@
 
                 <!-- Context Menu for TabControl -->
                 <TabControl.ContextMenu>
-                    <ContextMenu Style="{StaticResource TabContextMenuStyle}">
+                    <ContextMenu Style="{StaticResource TabContextMenuStyle}" Opened="TabContextMenu_Opened" Loaded="TabContextMenu_Loaded">
                         <!-- Tab Customization Commands (Phase 2) -->
                         <MenuItem Header="Rename Tab" 
                                  Style="{StaticResource TabContextMenuItemStyle}"
@@ -714,14 +714,15 @@
                                  Style="{StaticResource TabContextMenuItemStyle}"
                                  Click="ChangeColorMenuItem_Click">
                             <MenuItem.Icon>
-                                <Path Width="12" Height="12" Fill="#656D76"
-                                      Data="M12,18.5A2.5,2.5 0 0,1 9.5,16A2.5,2.5 0 0,1 12,13.5A2.5,2.5 0 0,1 14.5,16A2.5,2.5 0 0,1 12,18.5M19.79,15.41C20.74,13.24 20.74,10.76 19.79,8.59L17.36,9.94C17.65,10.96 17.65,13.04 17.36,14.06L19.79,15.41M4.21,8.59C3.26,10.76 3.26,13.24 4.21,15.41L6.64,14.06C6.35,13.04 6.35,10.96 6.64,9.94L4.21,8.59Z"/>
+                                <Path Width="12" Height="12" Fill="#656D76" Stretch="Uniform"
+                                      Data="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22C13.25,22 14.45,21.78 15.56,21.38C16.28,21.12 17,20.5 17,19.5C17,18.12 15.88,17 14.5,17H13A2,2 0 0,1 11,15V14A2,2 0 0,1 13,12H14.5A3.5,3.5 0 0,0 18,8.5A5.5,5.5 0 0,0 12.5,3A5.5,5.5 0 0,0 7.5,8V9A1,1 0 0,1 6.5,10A1,1 0 0,1 5.5,9V8A6.5,6.5 0 0,1 12,2M6.5,11A1.5,1.5 0 0,1 8,12.5A1.5,1.5 0 0,1 6.5,14A1.5,1.5 0 0,1 5,12.5A1.5,1.5 0 0,1 6.5,11M9,14A1.5,1.5 0 0,1 10.5,15.5A1.5,1.5 0 0,1 9,17A1.5,1.5 0 0,1 7.5,15.5A1.5,1.5 0 0,1 9,14M17.5,7A1.5,1.5 0 0,1 19,8.5A1.5,1.5 0 0,1 17.5,10A1.5,1.5 0 0,1 16,8.5A1.5,1.5 0 0,1 17.5,7Z"/>
                             </MenuItem.Icon>
                         </MenuItem>
                         
                         <MenuItem Header="Clear Color" 
                                  Style="{StaticResource TabContextMenuItemStyle}"
-                                 Click="ClearColorMenuItem_Click">
+                                 Click="ClearColorMenuItem_Click"
+                                 Name="ClearColorMenuItem">
                             <MenuItem.Icon>
                                 <Path Width="12" Height="12" Fill="#656D76"
                                       Data="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>

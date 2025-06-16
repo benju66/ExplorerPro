@@ -2497,16 +2497,198 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
+        /// <summary>
+        /// Handles the context menu loaded event 
+        /// </summary>
+        /// <param name="sender">The context menu</param>
+        /// <param name="e">Event arguments</param>
+        private void TabContextMenu_Loaded(object sender, RoutedEventArgs e)
+        {
+            _instanceLogger?.LogDebug("TabContextMenu_Loaded event fired");
+        }
+
+        /// <summary>
+        /// Handles the context menu opening event to enable/disable menu items based on tab state
+        /// </summary>
+        /// <param name="sender">The context menu</param>
+        /// <param name="e">Event arguments</param>
+        private void TabContextMenu_Opened(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _instanceLogger?.LogDebug("TabContextMenu_Opened event fired");
+                
+                if (sender is ContextMenu contextMenu)
+                {
+                    _instanceLogger?.LogDebug($"Context menu found with {contextMenu.Items.Count} items");
+                    
+                    var contextTabItem = GetContextMenuTabItem(contextMenu);
+                    _instanceLogger?.LogDebug($"Context tab item: {(contextTabItem != null ? contextTabItem.Header?.ToString() ?? "unnamed" : "null")}");
+                    
+                    // Find the Clear Color menu item by iterating through all items
+                    MenuItem clearColorMenuItem = null;
+                    foreach (var item in contextMenu.Items)
+                    {
+                        if (item is MenuItem menuItem)
+                        {
+                            _instanceLogger?.LogDebug($"Found MenuItem: Name='{menuItem.Name}', Header='{menuItem.Header}', IsEnabled='{menuItem.IsEnabled}'");
+                            if (menuItem.Name == "ClearColorMenuItem" || (menuItem.Header?.ToString()?.Contains("Clear Color") == true))
+                            {
+                                clearColorMenuItem = menuItem;
+                                _instanceLogger?.LogDebug($"Found Clear Color menu item! Current IsEnabled: {clearColorMenuItem.IsEnabled}");
+                                break;
+                            }
+                        }
+                    }
+                    
+                    _instanceLogger?.LogDebug($"Clear Color menu item found: {clearColorMenuItem != null}");
+                    
+                    if (clearColorMenuItem != null && contextTabItem != null)
+                    {
+                        // Check if the tab has a custom color applied
+                        bool hasCustomColor = TabHasCustomColor(contextTabItem);
+                        _instanceLogger?.LogDebug($"Tab has custom color: {hasCustomColor}");
+                        
+                        // Enable/disable the Clear Color menu item
+                        _instanceLogger?.LogDebug($"Setting IsEnabled to {hasCustomColor} (was {clearColorMenuItem.IsEnabled})");
+                        clearColorMenuItem.IsEnabled = hasCustomColor;
+                        _instanceLogger?.LogDebug($"After setting: IsEnabled = {clearColorMenuItem.IsEnabled}");
+                        
+                        // Optional: Add visual indication in the header
+                        if (hasCustomColor)
+                        {
+                            clearColorMenuItem.Header = "Clear Color";
+                        }
+                        else
+                        {
+                            clearColorMenuItem.Header = "Clear Color (No custom color)";
+                        }
+                        
+                        // Force a visual refresh of the menu item
+                        clearColorMenuItem.InvalidateVisual();
+                        clearColorMenuItem.UpdateLayout();
+                        
+                        _instanceLogger?.LogDebug($"Final state - IsEnabled: {clearColorMenuItem.IsEnabled}, Header: '{clearColorMenuItem.Header}'");
+                    }
+                    else
+                    {
+                        _instanceLogger?.LogDebug($"Missing components - ClearColorMenuItem: {clearColorMenuItem != null}, ContextTabItem: {contextTabItem != null}");
+                        
+                        // Try to find it using a different approach
+                        if (clearColorMenuItem == null)
+                        {
+                            _instanceLogger?.LogDebug("Trying alternative search method...");
+                            for (int i = 0; i < contextMenu.Items.Count; i++)
+                            {
+                                var item = contextMenu.Items[i];
+                                _instanceLogger?.LogDebug($"Item {i}: Type = {item.GetType().Name}");
+                                if (item is MenuItem mi)
+                                {
+                                    _instanceLogger?.LogDebug($"  MenuItem {i}: Name = '{mi.Name}', Header = '{mi.Header}'");
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    _instanceLogger?.LogDebug("Sender is not a ContextMenu");
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error handling context menu opened event");
+            }
+        }
+
+        /// <summary>
+        /// Checks if a TabItem has a custom color applied
+        /// </summary>
+        /// <param name="tabItem">The TabItem to check</param>
+        /// <returns>True if the tab has a custom color, false otherwise</returns>
+        private bool TabHasCustomColor(TabItem tabItem)
+        {
+            try
+            {
+                _instanceLogger?.LogDebug($"Checking custom color for tab: {tabItem?.Header?.ToString() ?? "unnamed"}");
+                
+                // Check if there's color metadata stored in the TabItem's Tag
+                if (tabItem.Tag is Dictionary<string, object> metadata)
+                {
+                    _instanceLogger?.LogDebug($"Found metadata with {metadata.Count} entries: {string.Join(", ", metadata.Keys)}");
+                    
+                    if (metadata.ContainsKey("TabColor") && metadata["TabColor"] is Color color)
+                    {
+                        _instanceLogger?.LogDebug($"Found TabColor in metadata: {color}");
+                        // Consider LightGray as the default "no color" value
+                        bool hasCustomColor = color != Colors.LightGray && color != Colors.Transparent;
+                        _instanceLogger?.LogDebug($"Is custom color (not LightGray/Transparent): {hasCustomColor}");
+                        return hasCustomColor;
+                    }
+                    
+                    if (metadata.ContainsKey("TabColorData"))
+                    {
+                        _instanceLogger?.LogDebug("Found TabColorData in metadata");
+                        return true; // If TabColorData exists, there's a custom color
+                    }
+                }
+                else
+                {
+                    _instanceLogger?.LogDebug($"No metadata found. Tag type: {tabItem.Tag?.GetType()?.Name ?? "null"}");
+                }
+                
+                // Check if the tab has a custom DataContext for color binding
+                if (tabItem.DataContext is TabColorData colorData)
+                {
+                    _instanceLogger?.LogDebug($"Found TabColorData in DataContext: {colorData.TabColor}");
+                    bool hasCustomColor = colorData.TabColor != Colors.LightGray && colorData.TabColor != Colors.Transparent;
+                    _instanceLogger?.LogDebug($"DataContext has custom color: {hasCustomColor}");
+                    return hasCustomColor;
+                }
+                else
+                {
+                    _instanceLogger?.LogDebug($"DataContext type: {tabItem.DataContext?.GetType()?.Name ?? "null"}");
+                }
+                
+                // Check if any custom styling has been applied directly to the tab
+                if (tabItem.Background != null && tabItem.Background != Brushes.Transparent)
+                {
+                    _instanceLogger?.LogDebug($"Found custom Background: {tabItem.Background}");
+                    return true;
+                }
+                
+                _instanceLogger?.LogDebug("No custom color found");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error checking if tab has custom color");
+                return false;
+            }
+        }
+
         private void ClearColorMenuItem_Click(object sender, RoutedEventArgs e)
         {
             try
             {
+                _instanceLogger?.LogDebug("ClearColorMenuItem_Click called");
+                
                 if (sender is MenuItem menuItem && menuItem.Parent is ContextMenu contextMenu)
                 {
                     var contextTabItem = GetContextMenuTabItem(contextMenu);
                     
                     if (contextTabItem != null)
                     {
+                        // Check if this action should be allowed
+                        bool hasCustomColor = TabHasCustomColor(contextTabItem);
+                        _instanceLogger?.LogDebug($"Tab has custom color to clear: {hasCustomColor}");
+                        
+                        if (!hasCustomColor)
+                        {
+                            _instanceLogger?.LogDebug("Clear Color clicked on tab with no custom color - ignoring");
+                            return; // Exit early if no custom color to clear
+                        }
+                        
                         var defaultColor = Colors.LightGray;
                         
                         // Update metadata stored in TabItem.Tag
