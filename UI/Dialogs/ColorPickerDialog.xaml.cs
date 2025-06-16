@@ -32,15 +32,78 @@ namespace ExplorerPro.UI.Dialogs
         /// Initializes a new instance of ColorPickerDialog
         /// </summary>
         /// <param name="currentColor">The current color of the tab</param>
-        public ColorPickerDialog(Color currentColor)
+        public ColorPickerDialog(Color currentColor) : this(currentColor, null, null)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of ColorPickerDialog with smart positioning
+        /// </summary>
+        /// <param name="currentColor">The current color of the tab</param>
+        /// <param name="owner">The owner window for positioning</param>
+        /// <param name="relativeElement">The UI element to position relative to (optional)</param>
+        public ColorPickerDialog(Color currentColor, Window owner, FrameworkElement relativeElement)
         {
             InitializeComponent();
             
             OriginalColor = currentColor;
             SelectedColor = currentColor;
             
+            // Set owner for proper modal behavior
+            if (owner != null)
+            {
+                Owner = owner;
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                
+                // Position dialog smartly relative to the element or owner
+                PositionDialog(owner, relativeElement);
+            }
+            
             InitializeColorPalette();
             UpdateCurrentColorPreview();
+        }
+
+        /// <summary>
+        /// Positions the dialog smartly relative to the owner and optional element
+        /// </summary>
+        /// <param name="owner">The owner window</param>
+        /// <param name="relativeElement">The element to position relative to</param>
+        private void PositionDialog(Window owner, FrameworkElement relativeElement)
+        {
+            try
+            {
+                if (relativeElement != null)
+                {
+                    // Get the position of the relative element
+                    var elementPosition = relativeElement.PointToScreen(new Point(0, 0));
+                    
+                    // Position dialog near the element but offset to avoid covering it
+                    Left = elementPosition.X + relativeElement.ActualWidth / 2 - 175; // Center horizontally on element
+                    Top = elementPosition.Y + relativeElement.ActualHeight + 10; // Below the element with padding
+                    
+                    // Ensure dialog stays within screen bounds
+                    var screenBounds = SystemParameters.WorkArea;
+                    if (Left + Width > screenBounds.Right)
+                        Left = screenBounds.Right - Width - 10;
+                    if (Left < screenBounds.Left)
+                        Left = screenBounds.Left + 10;
+                    if (Top + Height > screenBounds.Bottom)
+                        Top = elementPosition.Y - Height - 10; // Above the element if no room below
+                    if (Top < screenBounds.Top)
+                        Top = screenBounds.Top + 10;
+                }
+                else
+                {
+                    // Center on owner window
+                    Left = owner.Left + (owner.Width - Width) / 2;
+                    Top = owner.Top + (owner.Height - Height) / 2;
+                }
+            }
+            catch
+            {
+                // Fallback to center screen
+                WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
         }
 
         /// <summary>

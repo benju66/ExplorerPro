@@ -2429,21 +2429,123 @@ namespace ExplorerPro.UI.MainWindow
             {
                 if (sender is MenuItem menuItem && menuItem.Parent is ContextMenu contextMenu)
                 {
-                    var tabModel = GetContextMenuTabModel(contextMenu);
                     var contextTabItem = GetContextMenuTabItem(contextMenu);
                     
-                    if (tabModel != null && contextTabItem != null && _viewModel?.ChangeColorCommand?.CanExecute(tabModel) == true)
+                    if (contextTabItem != null)
                     {
-                        _viewModel.ChangeColorCommand.Execute(tabModel);
+                        // Get current color from metadata or use default
+                        var currentColor = Colors.LightGray; // Default color
+                        if (contextTabItem.Tag is Dictionary<string, object> metadata && metadata.ContainsKey("TabColor"))
+                        {
+                            if (metadata["TabColor"] is Color storedColor)
+                            {
+                                currentColor = storedColor;
+                            }
+                        }
                         
-                        // Sync changes back to the UI TabItem
-                        UpdateTabItemFromModel(contextTabItem, tabModel);
+                        // Show color picker dialog with smart positioning
+                        var dialog = new UI.Dialogs.ColorPickerDialog(currentColor, this, contextTabItem);
+                        if (dialog.ShowDialog() == true)
+                        {
+                            var newColor = dialog.SelectedColor;
+                            
+                            // Update metadata stored in TabItem.Tag
+                            if (contextTabItem.Tag is Dictionary<string, object> existingMetadata)
+                            {
+                                existingMetadata["TabColor"] = newColor;
+                                existingMetadata["LastModified"] = DateTime.Now;
+                            }
+                            else
+                            {
+                                contextTabItem.Tag = new Dictionary<string, object>
+                                {
+                                    ["TabColor"] = newColor,
+                                    ["LastModified"] = DateTime.Now
+                                };
+                            }
+                            
+                            // Update any associated model in the ViewModel
+                            if (_viewModel?.TabItems != null)
+                            {
+                                var tabTitle = contextTabItem.Header?.ToString();
+                                var viewModelTab = _viewModel.TabItems.FirstOrDefault(t => 
+                                    t.Title == tabTitle || 
+                                    (t.Content != null && t.Content == contextTabItem.Content));
+                                if (viewModelTab != null)
+                                {
+                                    viewModelTab.TabColor = newColor;
+                                    viewModelTab.UpdateLastAccessed();
+                                }
+                            }
+                            
+                            // Set the DataContext to enable binding-based color changes
+                            SetTabColorDataContext(contextTabItem, newColor);
+                            
+                            // Force immediate UI refresh
+                            contextTabItem.UpdateLayout();
+                            contextTabItem.InvalidateVisual();
+                            MainTabs?.UpdateLayout();
+                            
+                            _instanceLogger?.LogDebug($"Tab color changed to {newColor}");
+                        }
                     }
                 }
             }
             catch (Exception ex)
             {
                 _instanceLogger?.LogError(ex, "Error executing change color command");
+            }
+        }
+
+        private void ClearColorMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is MenuItem menuItem && menuItem.Parent is ContextMenu contextMenu)
+                {
+                    var contextTabItem = GetContextMenuTabItem(contextMenu);
+                    
+                    if (contextTabItem != null)
+                    {
+                        var defaultColor = Colors.LightGray;
+                        
+                        // Update metadata stored in TabItem.Tag
+                        if (contextTabItem.Tag is Dictionary<string, object> existingMetadata)
+                        {
+                            existingMetadata.Remove("TabColor");
+                            existingMetadata.Remove("TabColorData");
+                            existingMetadata["LastModified"] = DateTime.Now;
+                        }
+                        
+                        // Update any associated model in the ViewModel
+                        if (_viewModel?.TabItems != null)
+                        {
+                            var tabTitle = contextTabItem.Header?.ToString();
+                            var viewModelTab = _viewModel.TabItems.FirstOrDefault(t => 
+                                t.Title == tabTitle || 
+                                (t.Content != null && t.Content == contextTabItem.Content));
+                            if (viewModelTab != null)
+                            {
+                                viewModelTab.TabColor = defaultColor;
+                                viewModelTab.UpdateLastAccessed();
+                            }
+                        }
+                        
+                        // Clear the DataContext and reset to original template styling
+                        ClearTabColorStyling(contextTabItem);
+                        
+                        // Force immediate UI refresh
+                        contextTabItem.UpdateLayout();
+                        contextTabItem.InvalidateVisual();
+                        MainTabs?.UpdateLayout();
+                        
+                        _instanceLogger?.LogDebug("Tab color cleared to default");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error clearing tab color");
             }
         }
 
@@ -5271,8 +5373,7 @@ namespace ExplorerPro.UI.MainWindow
                 // Apply color styling
                 if (tabModel.TabColor != Colors.LightGray)
                 {
-                    // You can implement color application here if needed
-                    // For now, the styling is handled by the TabStyles.xaml
+                    SetTabColorDataContext(tabItem, tabModel.TabColor);
                 }
 
                 // Apply pinned state styling
@@ -5287,6 +5388,206 @@ namespace ExplorerPro.UI.MainWindow
             catch (Exception ex)
             {
                 _instanceLogger?.LogError(ex, "Error applying tab styling");
+            }
+        }
+
+        /// <summary>
+        /// Sets up the DataContext for a TabItem to enable color binding
+        /// </summary>
+        /// <param name="tabItem">The TabItem to set up</param>
+        /// <param name="color">The color to apply</param>
+        private void SetTabColorDataContext(TabItem tabItem, Color color)
+        {
+            try
+            {
+                // Create or update a simple data object for binding
+                var tabData = new TabColorData
+                {
+                    TabColor = color,
+                    Header = tabItem.Header?.ToString() ?? "",
+                    IsPinned = false // This can be enhanced later
+                };
+                
+                // Set the DataContext to enable binding
+                tabItem.DataContext = tabData;
+                
+                // Also store in Tag for persistence
+                var metadata = tabItem.Tag as Dictionary<string, object> ?? new Dictionary<string, object>();
+                metadata["TabColor"] = color;
+                metadata["TabColorData"] = tabData;
+                tabItem.Tag = metadata;
+                
+                // Use dispatcher to ensure template is applied before styling
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    ApplyColorBindingStyle(tabItem);
+                }), DispatcherPriority.Loaded);
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error setting tab color data context");
+            }
+        }
+
+        /// <summary>
+        /// Applies a style that supports color binding to a TabItem
+        /// </summary>
+        /// <param name="tabItem">The TabItem to style</param>
+        private void ApplyColorBindingStyle(TabItem tabItem)
+        {
+            try
+            {
+                // Force the template to be applied if it hasn't been yet
+                tabItem.ApplyTemplate();
+                
+                // Try to find the TabBorder in the control template
+                var tabBorder = tabItem.Template?.FindName("TabBorder", tabItem) as Border;
+                
+                if (tabBorder != null)
+                {
+                    var tabData = tabItem.DataContext as TabColorData;
+                    if (tabData != null && tabData.TabColor != Colors.LightGray)
+                    {
+                        // Apply color with transparency for a modern look
+                        var lightBrush = new SolidColorBrush(Color.FromArgb(80, tabData.TabColor.R, tabData.TabColor.G, tabData.TabColor.B));
+                        var borderBrush = new SolidColorBrush(Color.FromArgb(200, tabData.TabColor.R, tabData.TabColor.G, tabData.TabColor.B));
+                        
+                        tabBorder.Background = lightBrush;
+                        tabBorder.BorderBrush = borderBrush;
+                        
+                        // Ensure the border is visible
+                        if (tabBorder.BorderThickness.Bottom < 2)
+                        {
+                            tabBorder.BorderThickness = new Thickness(1, 1, 1, 2);
+                        }
+                    }
+                    else
+                    {
+                        // Reset to default by clearing the values, letting the template take over
+                        tabBorder.ClearValue(Border.BackgroundProperty);
+                        tabBorder.ClearValue(Border.BorderBrushProperty);
+                        tabBorder.ClearValue(Border.BorderThicknessProperty);
+                    }
+                }
+                else
+                {
+                    // If TabBorder not found, try applying to the TabItem directly
+                    var tabData = tabItem.DataContext as TabColorData;
+                    if (tabData != null && tabData.TabColor != Colors.LightGray)
+                    {
+                        var lightBrush = new SolidColorBrush(Color.FromArgb(60, tabData.TabColor.R, tabData.TabColor.G, tabData.TabColor.B));
+                        var borderBrush = new SolidColorBrush(Color.FromArgb(180, tabData.TabColor.R, tabData.TabColor.G, tabData.TabColor.B));
+                        
+                        tabItem.Background = lightBrush;
+                        tabItem.BorderBrush = borderBrush;
+                        tabItem.BorderThickness = new Thickness(0, 0, 0, 3);
+                    }
+                    else
+                    {
+                        tabItem.ClearValue(TabItem.BackgroundProperty);
+                        tabItem.ClearValue(TabItem.BorderBrushProperty);
+                        tabItem.ClearValue(TabItem.BorderThicknessProperty);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error applying color binding style");
+            }
+        }
+
+        /// <summary>
+        /// Clears all color styling from a TabItem and restores original template behavior
+        /// </summary>
+        /// <param name="tabItem">The TabItem to clear styling from</param>
+        private void ClearTabColorStyling(TabItem tabItem)
+        {
+            try
+            {
+                // Clear the DataContext that was set for color binding
+                tabItem.ClearValue(TabItem.DataContextProperty);
+                
+                // Force the template to be applied if it hasn't been yet
+                tabItem.ApplyTemplate();
+                
+                // Try to find the TabBorder in the control template and clear its styling
+                var tabBorder = tabItem.Template?.FindName("TabBorder", tabItem) as Border;
+                
+                if (tabBorder != null)
+                {
+                    // Clear all custom styling to let the template take over
+                    tabBorder.ClearValue(Border.BackgroundProperty);
+                    tabBorder.ClearValue(Border.BorderBrushProperty);
+                    tabBorder.ClearValue(Border.BorderThicknessProperty);
+                }
+                
+                // Also clear any direct styling on the TabItem itself
+                tabItem.ClearValue(TabItem.BackgroundProperty);
+                tabItem.ClearValue(TabItem.BorderBrushProperty);
+                tabItem.ClearValue(TabItem.BorderThicknessProperty);
+                
+                // Force the tab to re-evaluate its template triggers and styling
+                tabItem.InvalidateVisual();
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error clearing tab color styling");
+            }
+        }
+
+        /// <summary>
+        /// Simple data class for tab color binding
+        /// </summary>
+        private class TabColorData : INotifyPropertyChanged
+        {
+            private Color _tabColor = Colors.LightGray;
+            private string _header = "";
+            private bool _isPinned = false;
+
+            public Color TabColor
+            {
+                get => _tabColor;
+                set
+                {
+                    if (_tabColor != value)
+                    {
+                        _tabColor = value;
+                        OnPropertyChanged();
+                    }
+                }
+            }
+
+            public string Header
+            {
+                get => _header;
+                set
+                {
+                    if (_header != value)
+                    {
+                        _header = value;
+                        OnPropertyChanged();
+                    }
+                }
+            }
+
+            public bool IsPinned
+            {
+                get => _isPinned;
+                set
+                {
+                    if (_isPinned != value)
+                    {
+                        _isPinned = value;
+                        OnPropertyChanged();
+                    }
+                }
+            }
+
+            public event PropertyChangedEventHandler PropertyChanged;
+
+            private void OnPropertyChanged([CallerMemberName] string propertyName = null)
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
             }
         }
 
