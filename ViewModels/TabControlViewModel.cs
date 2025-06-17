@@ -172,9 +172,15 @@ namespace ExplorerPro.ViewModels
             {
                 // Create a logger specifically for TabViewModel
                 var tabLogger = _loggerFactory.CreateLogger<TabViewModel>();
-                var tabViewModel = new TabViewModel(tabLogger, _tabManager, e.Tab);
-                _tabs.Add(tabViewModel);
-                SelectedTab = tabViewModel;
+                
+                // Convert TabModel to Tab for TabViewModel
+                var tab = _tabManager.GetTab(e.Tab.Id);
+                if (tab != null)
+                {
+                    var tabViewModel = new TabViewModel(tabLogger, _tabManager, tab);
+                    _tabs.Add(tabViewModel);
+                    SelectedTab = tabViewModel;
+                }
             }
             catch (Exception ex)
             {

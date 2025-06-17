@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using ExplorerPro.Models;
 
 namespace ExplorerPro.Core.TabManagement
 {
@@ -78,7 +79,7 @@ namespace ExplorerPro.Core.TabManagement
                 _virtualizationManager.RegisterTabAccess(tabId);
 
                 // Raise event
-                TabAdded?.Invoke(this, new TabEventArgs(tab));
+                TabAdded?.Invoke(this, new TabEventArgs(ConvertToTabModel(tab)));
 
                 return tab;
             }
@@ -114,7 +115,7 @@ namespace ExplorerPro.Core.TabManagement
                     _previewManager.RemoveFromCache(tabId);
 
                     // Raise event
-                    TabRemoved?.Invoke(this, new TabEventArgs(tab));
+                    TabRemoved?.Invoke(this, new TabEventArgs(ConvertToTabModel(tab)));
                 }
             }
             catch (Exception ex)
@@ -151,7 +152,7 @@ namespace ExplorerPro.Core.TabManagement
 
                 if (tab != null)
                 {
-                    TabActivated?.Invoke(this, new TabEventArgs(tab));
+                    TabActivated?.Invoke(this, new TabEventArgs(ConvertToTabModel(tab)));
                 }
             }
             catch (Exception ex)
@@ -176,7 +177,7 @@ namespace ExplorerPro.Core.TabManagement
 
                 if (tab != null)
                 {
-                    TabDeactivated?.Invoke(this, new TabEventArgs(tab));
+                    TabDeactivated?.Invoke(this, new TabEventArgs(ConvertToTabModel(tab)));
                 }
             }
             catch (Exception ex)
@@ -215,7 +216,7 @@ namespace ExplorerPro.Core.TabManagement
 
                 if (tab != null)
                 {
-                    TabStateChanged?.Invoke(this, new TabEventArgs(tab));
+                    TabStateChanged?.Invoke(this, new TabEventArgs(ConvertToTabModel(tab)));
                 }
             }
             catch (Exception ex)
@@ -270,6 +271,18 @@ namespace ExplorerPro.Core.TabManagement
         {
             return _virtualizationManager.GetMemoryStats();
         }
+
+        /// <summary>
+        /// Converts a Tab to TabModel for event args
+        /// </summary>
+        private TabModel ConvertToTabModel(Tab tab)
+        {
+            return new TabModel(tab.Title, tab.Path)
+            {
+                Id = tab.Id,
+                IsPinned = tab.IsPinned
+            };
+        }
     }
 
     /// <summary>
@@ -285,16 +298,5 @@ namespace ExplorerPro.Core.TabManagement
         public DateTime LastAccessed { get; set; }
     }
 
-    /// <summary>
-    /// Event arguments for tab events
-    /// </summary>
-    public class TabEventArgs : EventArgs
-    {
-        public Tab Tab { get; }
 
-        public TabEventArgs(Tab tab)
-        {
-            Tab = tab;
-        }
-    }
 } 

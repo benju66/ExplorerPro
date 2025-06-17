@@ -281,14 +281,8 @@ namespace ExplorerPro.Core
         
         private void SendTelemetry(ExceptionResult result)
         {
-            _telemetry.TrackException(result.Exception, new Dictionary<string, string>
-            {
-                ["OperationName"] = result.Context.OperationName,
-                ["Category"] = result.Category.ToString(),
-                ["Severity"] = result.Severity.ToString(),
-                ["CanContinue"] = result.CanContinue.ToString(),
-                ["Location"] = result.CallerInfo.ToString()
-            });
+            var context = $"Operation: {result.Context.OperationName}, Category: {result.Category}, Severity: {result.Severity}, CanContinue: {result.CanContinue}, Location: {result.CallerInfo}";
+            _telemetry.TrackException(result.Exception, context);
         }
         
         private void ApplyRecoveryPolicies(ExceptionResult result)
@@ -393,31 +387,7 @@ namespace ExplorerPro.Core
         void Apply(ExceptionResult result);
     }
     
-    public interface ITelemetryService
-    {
-        void TrackException(Exception exception, Dictionary<string, string> properties);
-    }
     
-    /// <summary>
-    /// Simple console-based telemetry service for development/testing.
-    /// </summary>
-    public class ConsoleTelemetryService : ITelemetryService
-    {
-        public void TrackException(Exception exception, Dictionary<string, string> properties)
-        {
-            Console.WriteLine($"[TELEMETRY] Exception tracked: {exception.GetType().Name}");
-            Console.WriteLine($"[TELEMETRY] Message: {exception.Message}");
-            
-            if (properties?.Count > 0)
-            {
-                Console.WriteLine("[TELEMETRY] Properties:");
-                foreach (var prop in properties)
-                {
-                    Console.WriteLine($"  {prop.Key}: {prop.Value}");
-                }
-            }
-        }
-    }
     
     public class OperationFailedException : Exception
     {
