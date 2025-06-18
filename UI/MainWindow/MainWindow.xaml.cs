@@ -5858,8 +5858,21 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
+                // Clear the TabItemModel color data to prevent reversion
+                if (tabItem.Tag is TabItemModel model)
+                {
+                    model.TabColor = Colors.LightGray; // Reset to default
+                }
+                
                 // Clear the DataContext that was set for color binding
                 tabItem.ClearValue(TabItem.DataContextProperty);
+                
+                // Clear any metadata that might store color information
+                if (tabItem.Tag is Dictionary<string, object> metadata)
+                {
+                    metadata.Remove("TabColor");
+                    metadata.Remove("TabColorData");
+                }
                 
                 // Force the template to be applied if it hasn't been yet
                 tabItem.ApplyTemplate();
@@ -5882,6 +5895,8 @@ namespace ExplorerPro.UI.MainWindow
                 
                 // Force the tab to re-evaluate its template triggers and styling
                 tabItem.InvalidateVisual();
+                
+                _instanceLogger?.LogDebug("Tab color styling cleared completely");
             }
             catch (Exception ex)
             {
