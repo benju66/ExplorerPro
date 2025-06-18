@@ -455,10 +455,23 @@ All dependencies mapped and validation tests established.
         </Border>
         
         <!-- PHASE 2: MAIN CONTENT AREA - WRAPPED IN DOCKPANEL -->
+        <!-- PHASE 3: UPDATED TO POSITION CHROME TABS ABOVE TOOLBAR -->
         <DockPanel Grid.Column="1" LastChildFill="True">
-            <!-- Main Toolbar -->
-            <toolbar:Toolbar x:Name="Toolbar" DockPanel.Dock="Top" />
-
+            <!-- 
+            =============================================================================
+            PHASE 3: CHROME TABS RELOCATED TO TOP OF MAIN CONTENT AREA
+            =============================================================================
+            
+            CHANGE: ChromeStyleTabControl moved from nested Grid to DockPanel top
+            REASON: Create cleaner visual hierarchy with tabs above toolbar
+            
+            NEW HIERARCHY:
+            DockPanel (Grid.Column="1")
+            ├── Status Bar (DockPanel.Dock="Bottom") - MUST BE FIRST
+            └── Chrome Tabs with embedded Toolbar (LastChildFill="True") - FILLS REMAINING SPACE
+            -->
+            
+            <!-- PHASE 3 FIX: StatusBar must be positioned BEFORE TabControl to dock properly -->
             <!-- Ultra-Modern Status Bar -->
             <Border DockPanel.Dock="Bottom" 
                     Height="32"
@@ -523,12 +536,9 @@ All dependencies mapped and validation tests established.
                     </StackPanel>
                 </Grid>
             </Border>
-
-            <!-- Main Content Area -->
-            <Grid>
-            <!-- Main Tabs with Chrome styling and enhanced features -->
+            
+            <!-- PHASE 3: CHROME TABS - NOW FILLS REMAINING SPACE WITH EMBEDDED TOOLBAR -->
             <controls:ChromeStyleTabControl x:Name="MainTabs" 
-                                          Grid.Row="1" 
                                           Background="#FFFFFF"
                                           BorderThickness="0"
                                           TabStripPlacement="Top"
@@ -579,15 +589,15 @@ All dependencies mapped and validation tests established.
                                             <Setter Property="Panel.ZIndex" Value="2"/>
                                         </Trigger>
                                         
-                                                                <!-- Pinned State Trigger -->
-                        <DataTrigger Binding="{Binding Tag[IsPinned], RelativeSource={RelativeSource Self}}" Value="True">
-                            <!-- Narrow the tab -->
-                            <Setter Property="Width" Value="40"/>
-                            <Setter Property="MinWidth" Value="40"/>
-                            <Setter Property="MaxWidth" Value="40"/>
-                            <!-- Add tooltip for pinned tabs -->
-                            <Setter Property="ToolTip" Value="{Binding Header, RelativeSource={RelativeSource Self}}"/>
-                        </DataTrigger>
+                                        <!-- Pinned State Trigger -->
+                                        <DataTrigger Binding="{Binding Tag[IsPinned], RelativeSource={RelativeSource Self}}" Value="True">
+                                            <!-- Narrow the tab -->
+                                            <Setter Property="Width" Value="40"/>
+                                            <Setter Property="MinWidth" Value="40"/>
+                                            <Setter Property="MaxWidth" Value="40"/>
+                                            <!-- Add tooltip for pinned tabs -->
+                                            <Setter Property="ToolTip" Value="{Binding Header, RelativeSource={RelativeSource Self}}"/>
+                                        </DataTrigger>
                                         
                                         <!-- Enhanced hover effect -->
                                         <Trigger Property="IsMouseOver" Value="True">
@@ -659,13 +669,14 @@ All dependencies mapped and validation tests established.
                     </DataTemplate>
                 </TabControl.ItemTemplate>
 
-                <!-- Ultra-Modern TabControl Template matching File Tree tabs -->
+                <!-- Ultra-Modern TabControl Template with integrated Toolbar -->
                 <TabControl.Template>
                     <ControlTemplate TargetType="{x:Type TabControl}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" /><!-- Tab headers -->
+                                <RowDefinition Height="Auto" /><!-- Toolbar -->
+                                <RowDefinition Height="*" />   <!-- Tab content -->
                             </Grid.RowDefinitions>
 
                             <!-- Ultra-Modern Enhanced tab header with glass effect -->
@@ -771,8 +782,11 @@ All dependencies mapped and validation tests established.
                                 </Grid>
                             </Border>
 
+                            <!-- PHASE 3 FIX: Toolbar embedded in TabControl template -->
+                            <toolbar:Toolbar x:Name="EmbeddedToolbar" Grid.Row="1" />
+
                             <!-- Enhanced content area -->
-                            <Border Grid.Row="1" 
+                            <Border Grid.Row="2" 
                                    Background="{TemplateBinding Background}"
                                    Padding="0"
                                    Margin="0">
@@ -902,7 +916,8 @@ All dependencies mapped and validation tests established.
                     </ContextMenu>
                 </TabControl.ContextMenu>
             </controls:ChromeStyleTabControl>
-        </Grid>
+            
+            <!-- PHASE 3: TabControl now fills remaining space and contains its own content area -->
         </DockPanel>
     </Grid>
 </Window>

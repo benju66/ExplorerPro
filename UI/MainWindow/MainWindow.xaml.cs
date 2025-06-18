@@ -536,6 +536,14 @@ namespace ExplorerPro.UI.MainWindow
         private TabItem _rightClickedTab;
 
         /// <summary>
+        /// PHASE 3 OPTIMIZATION: Cached embedded toolbar to avoid repeated visual tree searches
+        /// The toolbar is embedded within the ChromeStyleTabControl template and accessed frequently.
+        /// This cache prevents expensive FindName() operations on every toolbar access.
+        /// </summary>
+        private UI.Toolbar.Toolbar? _cachedEmbeddedToolbar;
+        private bool _toolbarCacheInitialized = false;
+
+        /// <summary>
         /// Public property to check if the window has been disposed
         /// IMPLEMENTATION OF FIX 2: Thread-Safety Issues in UI Updates
         /// Now uses unified state manager instead of separate _isDisposed field
@@ -1564,6 +1572,9 @@ namespace ExplorerPro.UI.MainWindow
                         // Cleanup event subscriptions
                         _eventSubscriptions?.Dispose();
                         
+                        // PHASE 3 OPTIMIZATION: Clear cached toolbar reference
+                        InvalidateEmbeddedToolbarCache();
+                        
                         // Cleanup logger reference
                         DecrementLoggerRef();
                         
@@ -1635,9 +1646,10 @@ namespace ExplorerPro.UI.MainWindow
                 Console.WriteLine("ERROR: MainTabs is null - this is a critical UI element");
             }
             
-            if (Toolbar == null)
+            var embeddedToolbar = FindEmbeddedToolbar();
+            if (embeddedToolbar == null)
             {
-                Console.WriteLine("ERROR: Toolbar is null - this is a critical UI element");
+                Console.WriteLine("ERROR: Embedded Toolbar is null - this is a critical UI element");
             }
             
             if (StatusText == null)
@@ -1646,7 +1658,7 @@ namespace ExplorerPro.UI.MainWindow
             }
             
             // Log success if everything is available
-            if (MainTabs != null && Toolbar != null && StatusText != null)
+            if (MainTabs != null && embeddedToolbar != null && StatusText != null)
             {
                 Console.WriteLine("All critical UI elements are available");
             }
@@ -1983,10 +1995,11 @@ namespace ExplorerPro.UI.MainWindow
                         }
                     }
                     
-                    // Refresh toolbar
-                    if (Toolbar != null)
+                    // Refresh embedded toolbar
+                    var embeddedToolbar = FindEmbeddedToolbar();
+                    if (embeddedToolbar != null)
                     {
-                        Toolbar.RefreshThemeElements();
+                        embeddedToolbar.RefreshThemeElements();
                     }
                     
                     // Update theme-sensitive button content
@@ -2037,6 +2050,55 @@ namespace ExplorerPro.UI.MainWindow
             // Implement searching for your theme toggle button
             // This is a placeholder, adjust to your actual UI structure
             return null;
+        }
+
+        /// <summary>
+        /// Finds the embedded toolbar within the TabControl template
+        /// PHASE 3 OPTIMIZATION: Now uses caching to avoid repeated visual tree searches
+        /// </summary>
+        private UI.Toolbar.Toolbar? FindEmbeddedToolbar()
+        {
+            // Return cached toolbar if available and valid
+            if (_toolbarCacheInitialized && _cachedEmbeddedToolbar != null)
+            {
+                return _cachedEmbeddedToolbar;
+            }
+
+            try
+            {
+                // Perform visual tree search only when cache is empty
+                if (MainTabs?.Template?.FindName("EmbeddedToolbar", MainTabs) is UI.Toolbar.Toolbar toolbar)
+                {
+                    // Cache the found toolbar for future use
+                    _cachedEmbeddedToolbar = toolbar;
+                    _toolbarCacheInitialized = true;
+                    
+                    _instanceLogger?.LogDebug("Cached embedded toolbar successfully");
+                    return toolbar;
+                }
+                
+                // Mark as initialized even if toolbar not found to prevent repeated searches
+                _toolbarCacheInitialized = true;
+                _instanceLogger?.LogDebug("Embedded toolbar not found, cached negative result");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error finding embedded toolbar");
+                // Don't mark as initialized on error, allow retry
+            }
+            
+            return null;
+        }
+
+        /// <summary>
+        /// Invalidates the embedded toolbar cache when the TabControl template changes
+        /// PHASE 3 OPTIMIZATION: Allows cache refresh when needed
+        /// </summary>
+        private void InvalidateEmbeddedToolbarCache()
+        {
+            _cachedEmbeddedToolbar = null;
+            _toolbarCacheInitialized = false;
+            _instanceLogger?.LogDebug("Invalidated embedded toolbar cache");
         }
         
         /// <summary>
@@ -3582,7 +3644,8 @@ namespace ExplorerPro.UI.MainWindow
             {
                 try
                 {
-                    if (Toolbar != null && !IsDisposed)
+                    var embeddedToolbar = FindEmbeddedToolbar();
+                    if (embeddedToolbar != null && !IsDisposed)
                     {
                         if (string.IsNullOrEmpty(path)) return;
                         
@@ -3593,7 +3656,7 @@ namespace ExplorerPro.UI.MainWindow
                         }
 
                         // Update toolbar address bar
-                        Toolbar.SetAddressText(path); // Changed method name
+                        embeddedToolbar?.SetAddressText(path); // Changed method name
                         
                         // Update status bar
                         UpdateStatus($"Current path: {path}");
@@ -4334,7 +4397,8 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void FocusAddressBar()
         {
-            Toolbar?.SetAddressBarFocus(); // Changed method name
+            var embeddedToolbar = FindEmbeddedToolbar();
+            embeddedToolbar?.SetAddressBarFocus(); // Changed method name
         }
 
         /// <summary>
@@ -4342,7 +4406,8 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void FocusSearch()
         {
-            Toolbar?.SetSearchFocus(); // Changed method name
+            var embeddedToolbar = FindEmbeddedToolbar();
+            embeddedToolbar?.SetSearchFocus(); // Changed method name
         }
 
         /// <summary>
