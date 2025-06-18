@@ -12,6 +12,7 @@ using System.Windows.Threading;
 using System.Windows.Media.Animation;
 using ExplorerPro.UI.FileTree;
 using ExplorerPro.UI.Converters;
+using Microsoft.Extensions.Logging;
 
 namespace ExplorerPro.UI.MainWindow
 {
@@ -94,6 +95,11 @@ namespace ExplorerPro.UI.MainWindow
         /// Maintained for cleanup and coordination purposes.
         /// </summary>
         private readonly List<Window> _detachedWindows = new List<Window>();
+
+        /// <summary>
+        /// Logger for this instance
+        /// </summary>
+        private ILogger<MainWindowTabs>? _instanceLogger;
 
         /// <summary>
         /// Starting point coordinates for drag operations.
@@ -1111,7 +1117,21 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void MoveToNewWindowMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            MoveTabToNewWindow();
+            try
+            {
+                if (TabControl.SelectedItem is TabItem selectedTab)
+                {
+                    // Remove the duplicate functionality, just use detach
+                    DetachTabToNewWindow(selectedTab);
+                    _instanceLogger?.LogInformation($"Moved tab to new window: {selectedTab.Header}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error moving tab to new window");
+                MessageBox.Show($"Failed to move tab: {ex.Message}", 
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         /// <summary>

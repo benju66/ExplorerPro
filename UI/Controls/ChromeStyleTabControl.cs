@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using ExplorerPro.Models;
+using Microsoft.Extensions.Logging;
 
 namespace ExplorerPro.UI.Controls
 {
@@ -17,6 +18,15 @@ namespace ExplorerPro.UI.Controls
     /// </summary>
     public class ChromeStyleTabControl : TabControl
     {
+        #region Fields
+        
+        /// <summary>
+        /// Logger for this control
+        /// </summary>
+        private readonly ILogger<ChromeStyleTabControl>? _logger;
+        
+        #endregion
+
         #region Dependency Properties
 
         /// <summary>
@@ -177,6 +187,18 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         public ChromeStyleTabControl()
         {
+            // Initialize logger with a simple fallback
+            try
+            {
+                var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+                _logger = loggerFactory.CreateLogger<ChromeStyleTabControl>();
+            }
+            catch
+            {
+                // Fallback if logging setup fails
+                _logger = null;
+            }
+
             // Initialize tab items collection if not set
             if (TabItems == null)
             {
@@ -244,6 +266,46 @@ namespace ExplorerPro.UI.Controls
             {
                 AddNewTab();
                 e.Handled = true;
+            }
+        }
+
+        /// <summary>
+        /// Handles tab close requests
+        /// </summary>
+        private void OnTabCloseRequested(object sender, TabCloseRequestedEventArgs e)
+        {
+            try
+            {
+                if (e.TabItem != null && Items.Count > 1)
+                {
+                    var tabIndex = Items.IndexOf(e.TabItem);
+                    if (tabIndex >= 0)
+                    {
+                        // Fire the close requested event for parent handling
+                        TabCloseRequested?.Invoke(this, e);
+                        
+                        // If not cancelled, remove the tab
+                        if (!e.Cancel)
+                        {
+                            Items.RemoveAt(tabIndex);
+                            
+                            // Update selection if needed
+                            if (SelectedIndex >= Items.Count)
+                            {
+                                SelectedIndex = Items.Count - 1;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    e.Cancel = true; // Don't close the last tab
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error handling tab close request");
+                e.Cancel = true;
             }
         }
 

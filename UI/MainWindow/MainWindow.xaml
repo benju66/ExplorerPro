@@ -856,7 +856,7 @@ All dependencies mapped and validation tests established.
                         <!-- Existing Commands -->
                         <MenuItem Header="New Tab" 
                                  Style="{StaticResource TabContextMenuItemStyle}"
-                                 Command="{Binding DataContext.AddNewTabCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                                 Click="NewTabMenuItem_Click">
                             <MenuItem.Icon>
                                 <Path Width="12" Height="12" Fill="#656D76"
                                       Data="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/>
@@ -874,8 +874,7 @@ All dependencies mapped and validation tests established.
                         
                         <MenuItem Header="Close Tab" 
                                  Style="{StaticResource TabContextMenuItemStyle}"
-                                 Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                 CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                 Click="CloseTabMenuItem_Click"
                                  IsEnabled="{Binding RelativeSource={RelativeSource AncestorType=TabControl}, Path=Items.Count, Converter={StaticResource CountToEnableConverter}}">
                             <MenuItem.Icon>
                                 <Path Width="12" Height="12" Fill="#656D76"

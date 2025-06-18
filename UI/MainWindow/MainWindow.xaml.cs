@@ -2433,7 +2433,20 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void NewTabMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            AddNewMainWindowTab();
+            try
+            {
+                var container = AddNewMainWindowTab();
+                if (container != null)
+                {
+                    _instanceLogger?.LogInformation("New tab created via context menu");
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error creating new tab from context menu");
+                MessageBox.Show($"Failed to create new tab: {ex.Message}", 
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         /// <summary>
@@ -2443,18 +2456,34 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                if (sender is MenuItem menuItem && menuItem.Parent is ContextMenu contextMenu)
+                var contextMenu = sender as MenuItem;
+                var tabModel = GetContextMenuTabModel(contextMenu?.Parent as ContextMenu);
+                
+                if (tabModel != null && MainTabs?.SelectedItem is TabItem currentTab)
                 {
-                    var tabModel = GetContextMenuTabModel(contextMenu);
-                    if (tabModel != null && _viewModel?.DuplicateTabCommand?.CanExecute(tabModel) == true)
+                    // Get the current container
+                    var currentContainer = currentTab.Content as MainWindowContainer;
+                    if (currentContainer != null)
                     {
-                        _viewModel.DuplicateTabCommand.Execute(tabModel);
+                        // Create new tab with same path
+                        var fileTree = currentContainer.FindFileTree();
+                        string currentPath = fileTree?.GetCurrentPath() ?? 
+                            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                        
+                        var newContainer = AddNewMainWindowTab(currentPath);
+                        if (newContainer != null && MainTabs.SelectedItem is TabItem newTab)
+                        {
+                            newTab.Header = $"{currentTab.Header} - Copy";
+                            _instanceLogger?.LogInformation($"Duplicated tab: {currentTab.Header}");
+                        }
                     }
                 }
             }
             catch (Exception ex)
             {
-                _instanceLogger?.LogError(ex, "Error executing duplicate tab command");
+                _instanceLogger?.LogError(ex, "Error duplicating tab");
+                MessageBox.Show($"Failed to duplicate tab: {ex.Message}", 
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -2965,7 +2994,22 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void CloseTabMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            CloseCurrentTab();
+            try
+            {
+                if (_rightClickedTab != null)
+                {
+                    var index = MainTabs.Items.IndexOf(_rightClickedTab);
+                    if (index >= 0)
+                    {
+                        CloseTab(index);
+                        _instanceLogger?.LogInformation($"Closed tab via context menu: {_rightClickedTab.Header}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error closing tab from context menu");
+            }
         }
 
         /// <summary>
@@ -2981,10 +3025,89 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void DetachTabMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            // FIX 5: Use new managed detachment method
-            if (MainTabs.SelectedItem is TabItem selectedTab)
+            try
             {
-                DetachToNewWindow(selectedTab);
+                if (MainTabs.SelectedItem is TabItem selectedTab)
+                {
+                    DetachSimpleToNewWindow(selectedTab);
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error detaching tab from context menu");
+                MessageBox.Show($"Failed to detach tab: {ex.Message}", 
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Simple detach method based on working MainWindowTabs implementation
+        /// </summary>
+        private void DetachSimpleToNewWindow(TabItem tabToDetach)
+        {
+            try
+            {
+                var container = tabToDetach.Content as MainWindowContainer;
+                if (container == null)
+                {
+                    MessageBox.Show("Cannot detach tab - no container found", "Error", 
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                if (MainTabs.Items.Count <= 1)
+                {
+                    MessageBox.Show("Cannot detach the only tab", "Error", 
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                string tabTitle = tabToDetach.Header?.ToString() ?? "Detached";
+
+                // Remove tab from current window
+                MainTabs.Items.Remove(tabToDetach);
+
+                // Create new window
+                MainWindow newWindow = new MainWindow();
+
+                // Clear existing tabs in new window and wait for it to be ready
+                newWindow.Show(); // Show first so the window is properly initialized
+                
+                // Clear any default tabs
+                while (newWindow.MainTabs.Items.Count > 0)
+                {
+                    newWindow.MainTabs.Items.RemoveAt(0);
+                }
+
+                // Create new tab item for detached container
+                TabItem newTabItem = new TabItem
+                {
+                    Header = tabTitle,
+                    Content = container
+                };
+
+                // Add to new window
+                newWindow.MainTabs.Items.Add(newTabItem);
+                newWindow.MainTabs.SelectedItem = newTabItem;
+
+                // Configure new window
+                newWindow.Title = $"ExplorerPro - {tabTitle}";
+                newWindow.Width = this.Width * 0.8;
+                newWindow.Height = this.Height * 0.8;
+
+                // Position offset from parent
+                newWindow.Left = this.Left + 50;
+                newWindow.Top = this.Top + 50;
+
+                newWindow.Activate();
+
+                _instanceLogger?.LogInformation($"Successfully detached tab: {tabTitle}");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error in simple detach to new window");
+                MessageBox.Show($"Failed to detach tab: {ex.Message}", 
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
