@@ -1,4 +1,143 @@
-﻿<Window x:Class="ExplorerPro.UI.MainWindow.MainWindow"
+﻿<!-- 
+=============================================================================
+PHASE 1: LAYOUT ANALYSIS AND DOCUMENTATION - CURRENT STRUCTURE MAPPING
+=============================================================================
+
+OBJECTIVE: Document existing MainWindow layout before restructuring for comprehensive understanding
+
+CURRENT LAYOUT HIERARCHY (Root to Leaf):
+=============================================================================
+
+Window (MainWindow)
+├── Window.Resources (Styles, Converters, Animations, Icons)
+├── Window.CommandBindings (Navigation, Edit, Custom Commands)
+└── DockPanel (LastChildFill="True") [ROOT LAYOUT CONTAINER]
+    ├── Toolbar (DockPanel.Dock="Top") [NAVIGATION BAR]
+    │   └── UserControl with Grid layout
+    │       ├── Navigation buttons (Up, Refresh)
+    │       ├── Action buttons (Undo, Redo)  
+    │       ├── Search/Address bar (TextBox)
+    │       ├── Sidebar toggles (Left/Right panel buttons)
+    │       └── Settings button
+    ├── Border (DockPanel.Dock="Bottom") [STATUS BAR]
+    │   └── Grid with 4 columns
+    │       ├── StatusText ("Ready" indicator)
+    │       ├── ItemCountText ("0 items")
+    │       ├── [Empty space]
+    │       └── SelectionText (Selection info)
+    ├── Border (DockPanel.Dock="Left") [ACTIVITY BAR - VS CODE STYLE]
+    │   └── ScrollViewer
+    │       └── StackPanel (ActivityBar)
+    │           ├── ActivityBarPinnedButton (Toggle Pinned Panel)
+    │           ├── ActivityBarBookmarksButton (Toggle Bookmarks)
+    │           ├── ActivityBarProcoreButton (Toggle Procore Links)
+    │           └── ActivityBarTodoButton (Toggle To-do)
+    └── Grid [MAIN CONTENT AREA - LastChildFill="True"]
+        └── ChromeStyleTabControl (MainTabs) [TAB CONTAINER]
+            ├── Resources (Custom TabItem styles)
+            ├── ItemContainerStyle (MainWindowTabStyle)
+            ├── ItemTemplate (Tab header content with close buttons)
+            ├── Template (Custom TabControl template)
+            └── ContextMenu (Tab right-click menu)
+
+CRITICAL UI ELEMENTS WITH x:Name REFERENCES:
+=============================================================================
+These elements will be affected by layout restructuring:
+
+LAYOUT CONTAINERS:
+- [DockPanel] - Root layout container (unnamed)
+- ActivityBar (StackPanel) - Contains activity buttons
+
+NAVIGATION & TOOLBAR:
+- Toolbar (UserControl) - Top navigation toolbar
+
+STATUS & INFORMATION:
+- StatusText (TextBlock) - "Ready" status indicator  
+- ItemCountText (TextBlock) - File count display
+- SelectionText (TextBlock) - Selection information
+
+ACTIVITY BAR BUTTONS:
+- ActivityBarPinnedButton - Toggles Pinned Panel (Ctrl+P)
+- ActivityBarBookmarksButton - Toggles Bookmarks (Ctrl+B) 
+- ActivityBarProcoreButton - Toggles Procore Links (Ctrl+K)
+- ActivityBarTodoButton - Toggles To-do Panel (Ctrl+D)
+
+TAB MANAGEMENT:
+- MainTabs (ChromeStyleTabControl) - Main tab container
+- AddTabButton - Add new tab functionality
+
+DOCKING POSITIONS MAPPING:
+=============================================================================
+Current DockPanel docking assignments:
+
+- Toolbar: DockPanel.Dock="Top" (First docked element)
+- Status Bar: DockPanel.Dock="Bottom" 
+- Activity Bar: DockPanel.Dock="Left" (48px width)
+- Main Content: LastChildFill="True" (Remaining space)
+
+LAYOUT DEPENDENCIES TO TRACK:
+=============================================================================
+Code-behind dependencies that assume current structure:
+
+1. INITIALIZATION:
+   - MainWindow.xaml.cs: InitializeMainWindow() method
+   - Window loading events: OnSourceInitialized, MainWindow_Loaded
+   - UI element availability checks in EnsureUIElementsAvailable()
+
+2. EVENT HANDLERS:
+   - Activity Bar Click Handlers: 
+     * TogglePinnedPanel_Click
+     * ToggleBookmarksPanel_Click  
+     * ToggleProcorePanel_Click
+     * ToggleTodoPanel_Click
+   - Tab Management:
+     * AddTabButton_Click
+     * TabCloseButton_Click
+     * MainTabs_SelectionChanged
+
+3. UI UPDATE METHODS:
+   - UpdateActivityBarButtonStates() - Updates button appearance
+   - UpdateStatus(), UpdateItemCount(), UpdateSelectionInfo()
+   - RefreshThemeElements() - Theme switching
+   - UpdateAddressBar() / UpdateToolbarAddressBar()
+
+4. SAFE ACCESSORS:
+   - SafeMainTabs, SafeStatusText, SafeItemCountText, SafeSelectionText
+   - TryAccessUIElement<T>() method for thread-safe UI access
+
+VALIDATION CHECKLIST FOR PHASE 1 SUCCESS:
+=============================================================================
+✓ Application builds and runs without errors
+✓ Activity Bar toggles work (Pinned, Bookmarks, Procore, Todo)
+✓ Tabs can be created and closed
+✓ Toolbar functions (navigation, search, settings)
+✓ Sidebars toggle correctly (Left/Right panels)
+✓ Status bar updates properly
+✓ Theme switching maintains functionality
+✓ All keyboard shortcuts work
+✓ Context menus appear and function
+✓ Window resizing works correctly
+
+RESTRUCTURING IMPACT ASSESSMENT:
+=============================================================================
+Elements that will MOVE in restructuring:
+- Activity Bar (currently DockPanel.Dock="Left") 
+- ChromeStyleTabControl (currently in Grid)
+- Toolbar positioning may change
+
+Elements that will STAY:
+- Status Bar (DockPanel.Dock="Bottom")
+- Main resource definitions
+- Command bindings structure
+
+NEXT PHASE PREPARATION:
+=============================================================================
+Ready for Phase 2 changes after this documentation is complete.
+All dependencies mapped and validation tests established.
+=============================================================================
+-->
+
+<Window x:Class="ExplorerPro.UI.MainWindow.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -232,78 +371,34 @@
         <!-- Custom Commands (will be defined in code-behind) -->
     </Window.CommandBindings>
 
-    <DockPanel LastChildFill="True">
-        <!-- Main Toolbar -->
-        <toolbar:Toolbar x:Name="Toolbar" DockPanel.Dock="Top" />
-
-        <!-- Ultra-Modern Status Bar -->
-        <Border DockPanel.Dock="Bottom" 
-                Height="32"
-                Background="#F6F8FA"
-                BorderBrush="#D0D7DE"
-                BorderThickness="0,1,0,0"
-                Padding="12,0">
-            <Border.Effect>
-                <DropShadowEffect Color="#FF000000" Direction="90" ShadowDepth="1" BlurRadius="3" Opacity="0.05"/>
-            </Border.Effect>
-            
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                
-                <!-- Status Section -->
-                <StackPanel Grid.Column="0" 
-                           Orientation="Horizontal" 
-                           VerticalAlignment="Center">
-                    <Border Background="#22C55E" 
-                            CornerRadius="4" 
-                            Padding="6,2"
-                            Margin="0,0,8,0">
-                        <TextBlock x:Name="StatusText" 
-                                  Text="Ready" 
-                                  FontSize="11"
-                                  FontWeight="SemiBold"
-                                  Foreground="White"/>
-                    </Border>
-                </StackPanel>
-                
-                <!-- Item Count Section -->
-                <StackPanel Grid.Column="1" 
-                           Orientation="Horizontal" 
-                           VerticalAlignment="Center">
-                    <!-- Modern separator -->
-                    <Rectangle Width="1" Height="16" Fill="#E1E4E8" Margin="8,0"/>
-                    
-                    <TextBlock x:Name="ItemCountText" 
-                              Text="0 items" 
-                              FontSize="12"
-                              FontWeight="Medium"
-                              Foreground="#656D76"
-                              VerticalAlignment="Center"
-                              Margin="8,0,0,0"/>
-                </StackPanel>
-                
-                <!-- Selection Section -->
-                <StackPanel Grid.Column="3" 
-                           Orientation="Horizontal" 
-                           VerticalAlignment="Center">
-                    <TextBlock x:Name="SelectionText" 
-                              Text="" 
-                              FontSize="12"
-                              FontWeight="Medium"
-                              Foreground="#0969DA"
-                              VerticalAlignment="Center"/>
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <!-- VS Code Style Activity Bar -->
-        <Border DockPanel.Dock="Left" 
-                Width="48"
+    <!-- 
+    =============================================================================
+    PHASE 2: NEW WINDOW-LEVEL LAYOUT STRUCTURE
+    =============================================================================
+    
+    CHANGE: Root layout changed from DockPanel to Grid
+    REASON: Extract Activity Bar to window level for full-height spanning
+    
+    NEW STRUCTURE:
+    Grid (Root)
+    ├── Activity Bar (Grid.Column="0", Width="52") - Full Height, Window Level
+    └── DockPanel (Grid.Column="1") - Everything Else
+        ├── Toolbar (DockPanel.Dock="Top")
+        ├── Status Bar (DockPanel.Dock="Bottom") 
+        └── Main Content (LastChildFill="True")
+    -->
+    
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <!-- PHASE 2: Activity Bar - Fixed width, window level -->
+            <ColumnDefinition Width="52"/>
+            <!-- PHASE 2: Main content - Remaining space -->
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        
+        <!-- PHASE 2: Activity Bar - EXTRACTED TO WINDOW LEVEL -->
+        <!-- SPANS FULL HEIGHT FROM TITLE BAR TO BOTTOM -->
+        <Border Grid.Column="0" 
                 Background="#F6F8FA"
                 BorderBrush="#D0D7DE"
                 BorderThickness="0,0,1,0">
@@ -358,9 +453,79 @@
                 </StackPanel>
             </ScrollViewer>
         </Border>
+        
+        <!-- PHASE 2: MAIN CONTENT AREA - WRAPPED IN DOCKPANEL -->
+        <DockPanel Grid.Column="1" LastChildFill="True">
+            <!-- Main Toolbar -->
+            <toolbar:Toolbar x:Name="Toolbar" DockPanel.Dock="Top" />
 
-        <!-- Main Content Area -->
-        <Grid>
+            <!-- Ultra-Modern Status Bar -->
+            <Border DockPanel.Dock="Bottom" 
+                    Height="32"
+                    Background="#F6F8FA"
+                    BorderBrush="#D0D7DE"
+                    BorderThickness="0,1,0,0"
+                    Padding="12,0">
+                <Border.Effect>
+                    <DropShadowEffect Color="#FF000000" Direction="90" ShadowDepth="1" BlurRadius="3" Opacity="0.05"/>
+                </Border.Effect>
+                
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Status Section -->
+                    <StackPanel Grid.Column="0" 
+                               Orientation="Horizontal" 
+                               VerticalAlignment="Center">
+                        <Border Background="#22C55E" 
+                                CornerRadius="4" 
+                                Padding="6,2"
+                                Margin="0,0,8,0">
+                            <TextBlock x:Name="StatusText" 
+                                      Text="Ready" 
+                                      FontSize="11"
+                                      FontWeight="SemiBold"
+                                      Foreground="White"/>
+                        </Border>
+                    </StackPanel>
+                    
+                    <!-- Item Count Section -->
+                    <StackPanel Grid.Column="1" 
+                               Orientation="Horizontal" 
+                               VerticalAlignment="Center">
+                        <!-- Modern separator -->
+                        <Rectangle Width="1" Height="16" Fill="#E1E4E8" Margin="8,0"/>
+                        
+                        <TextBlock x:Name="ItemCountText" 
+                                  Text="0 items" 
+                                  FontSize="12"
+                                  FontWeight="Medium"
+                                  Foreground="#656D76"
+                                  VerticalAlignment="Center"
+                                  Margin="8,0,0,0"/>
+                    </StackPanel>
+                    
+                    <!-- Selection Section -->
+                    <StackPanel Grid.Column="3" 
+                               Orientation="Horizontal" 
+                               VerticalAlignment="Center">
+                        <TextBlock x:Name="SelectionText" 
+                                  Text="" 
+                                  FontSize="12"
+                                  FontWeight="Medium"
+                                  Foreground="#0969DA"
+                                  VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Main Content Area -->
+            <Grid>
             <!-- Main Tabs with Chrome styling and enhanced features -->
             <controls:ChromeStyleTabControl x:Name="MainTabs" 
                                           Grid.Row="1" 
@@ -738,5 +903,6 @@
                 </TabControl.ContextMenu>
             </controls:ChromeStyleTabControl>
         </Grid>
-    </DockPanel>
+        </DockPanel>
+    </Grid>
 </Window>

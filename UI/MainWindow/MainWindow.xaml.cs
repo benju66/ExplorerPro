@@ -67,6 +67,39 @@ namespace ExplorerPro.UI.MainWindow
     /// - Concurrent collection usage for window tracking
     /// 
     /// ENHANCED FOR FIX 4: Event Handler Memory Leaks - Implements IDisposable
+    /// 
+    /// =============================================================================
+    /// PHASE 1: LAYOUT DEPENDENCIES DOCUMENTATION
+    /// =============================================================================
+    /// 
+    /// LAYOUT-DEPENDENT CODE SECTIONS TO TRACK FOR RESTRUCTURING:
+    /// 
+    /// 1. UI ELEMENT REFERENCES (Direct access to layout elements):
+    ///    - MainTabs (ChromeStyleTabControl) - Tab container
+    ///    - Toolbar (UserControl) - Navigation toolbar
+    ///    - StatusText, ItemCountText, SelectionText - Status bar elements
+    ///    - ActivityBar buttons - Panel toggles
+    /// 
+    /// 2. INITIALIZATION METHODS (Assume current layout):
+    ///    - InitializeMainWindow() - Sets up UI element references
+    ///    - OnSourceInitialized() - Window initialization
+    ///    - EnsureUIElementsAvailable() - Validates layout elements exist
+    /// 
+    /// 3. EVENT HANDLERS (Layout-specific button clicks):
+    ///    - TogglePinnedPanel_Click, ToggleBookmarksPanel_Click, etc.
+    ///    - AddTabButton_Click, TabCloseButton_Click
+    ///    - MainTabs_SelectionChanged
+    /// 
+    /// 4. UI UPDATE METHODS (Direct manipulation of layout elements):
+    ///    - UpdateActivityBarButtonStates() 
+    ///    - UpdateStatus(), UpdateItemCount(), UpdateSelectionInfo()
+    ///    - RefreshThemeElements()
+    /// 
+    /// 5. SAFE ACCESSORS (Thread-safe element access):
+    ///    - SafeMainTabs, SafeStatusText, SafeItemCountText, SafeSelectionText
+    ///    - TryAccessUIElement<T>() pattern
+    /// 
+    /// =============================================================================
     /// </summary>
     public partial class MainWindow : Window, IDisposable
     {
@@ -1287,6 +1320,9 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Safely accesses the MainTabs control with null checking.
+        /// 
+        /// LAYOUT DEPENDENCY: Direct reference to MainTabs control
+        /// Will need updating if tab control moves in layout restructuring
         /// </summary>
         protected TabControl MainTabsSafe
         {
@@ -3277,7 +3313,9 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
+        /// LAYOUT DEPENDENCY: Activity Bar Panel Toggle
         /// Toggle pinned panel visibility in current container.
+        /// Called by ActivityBarPinnedButton in Activity Bar (DockPanel.Dock="Left")
         /// </summary>
         private void TogglePinnedPanel()
         {
@@ -3286,7 +3324,9 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Event handler for pinned panel toggle button.
+        /// LAYOUT DEPENDENCY: Activity Bar Button Click Handler
+        /// Event handler for ActivityBarPinnedButton in Activity Bar
+        /// Linked via Click="TogglePinnedPanel_Click" in MainWindow.xaml
         /// </summary>
         private void TogglePinnedPanel_Click(object sender, RoutedEventArgs e)
         {
@@ -3294,7 +3334,9 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
+        /// LAYOUT DEPENDENCY: Activity Bar Panel Toggle
         /// Toggle bookmarks panel visibility in current container.
+        /// Called by ActivityBarBookmarksButton in Activity Bar (DockPanel.Dock="Left")
         /// </summary>
         private void ToggleBookmarksPanel()
         {
@@ -3303,7 +3345,9 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Event handler for bookmarks panel toggle button.
+        /// LAYOUT DEPENDENCY: Activity Bar Button Click Handler
+        /// Event handler for ActivityBarBookmarksButton in Activity Bar
+        /// Linked via Click="ToggleBookmarksPanel_Click" in MainWindow.xaml
         /// </summary>
         private void ToggleBookmarksPanel_Click(object sender, RoutedEventArgs e)
         {
@@ -3311,7 +3355,9 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
+        /// LAYOUT DEPENDENCY: Activity Bar Panel Toggle
         /// Toggle to-do panel visibility in current container.
+        /// Called by ActivityBarTodoButton in Activity Bar (DockPanel.Dock="Left")
         /// </summary>
         private void ToggleTodoPanel()
         {
@@ -3320,7 +3366,9 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Event handler for to-do panel toggle button.
+        /// LAYOUT DEPENDENCY: Activity Bar Button Click Handler
+        /// Event handler for ActivityBarTodoButton in Activity Bar
+        /// Linked via Click="ToggleTodoPanel_Click" in MainWindow.xaml
         /// </summary>
         private void ToggleTodoPanel_Click(object sender, RoutedEventArgs e)
         {
@@ -3328,7 +3376,9 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
+        /// LAYOUT DEPENDENCY: Activity Bar Panel Toggle
         /// Toggle Procore links panel visibility in current container.
+        /// Called by ActivityBarProcoreButton in Activity Bar (DockPanel.Dock="Left")
         /// </summary>
         private void ToggleProcorePanel()
         {
@@ -3337,7 +3387,9 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Event handler for Procore panel toggle button.
+        /// LAYOUT DEPENDENCY: Activity Bar Button Click Handler
+        /// Event handler for ActivityBarProcoreButton in Activity Bar
+        /// Linked via Click="ToggleProcorePanel_Click" in MainWindow.xaml
         /// </summary>
         private void ToggleProcorePanel_Click(object sender, RoutedEventArgs e)
         {
@@ -3446,7 +3498,11 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
+        /// LAYOUT DEPENDENCY: Activity Bar Button State Management
         /// Update activity bar button states to reflect current panel visibility.
+        /// Assumes Activity Bar buttons exist in current layout (DockPanel.Dock="Left")
+        /// References: ActivityBarPinnedButton, ActivityBarBookmarksButton, 
+        /// ActivityBarProcoreButton, ActivityBarTodoButton
         /// </summary>
         private void UpdateActivityBarButtonStates()
         {
@@ -3514,8 +3570,10 @@ namespace ExplorerPro.UI.MainWindow
         #region Navigation and File Operations
 
         /// <summary>
+        /// LAYOUT DEPENDENCY: Toolbar Address Bar Update
         /// Update the address bar with path.
         /// ENHANCED FOR FIX 2: Thread-Safety Issues in UI Updates
+        /// Assumes Toolbar exists in current layout (DockPanel.Dock="Top")
         /// </summary>
         /// <param name="path">Path to display</param>
         public void UpdateToolbarAddressBar(string path) // Changed method name
