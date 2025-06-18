@@ -2806,20 +2806,13 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
+                // Single source of truth - only check TabItemModel
                 if (tabItem?.Tag is TabItemModel model)
                 {
                     return model.IsPinned;
                 }
-
-                // Fallback: check metadata
-                if (tabItem?.Tag is Dictionary<string, object> metadata &&
-                    metadata.ContainsKey("IsPinned") &&
-                    metadata["IsPinned"] is bool isPinned)
-                {
-                    return isPinned;
-                }
-
-                return false;
+                
+                return false; // No fallbacks, consistent behavior
             }
             catch (Exception ex)
             {
@@ -5656,24 +5649,30 @@ namespace ExplorerPro.UI.MainWindow
 
             try
             {
-                // Update header/title
-                tabItem.Header = tabModel.Title;
-
-                // Set the model directly as the Tag for better binding
+                // Ensure consistent Tag binding
                 tabItem.Tag = tabModel;
-
-                // Apply visual styling based on the model
-                ApplyTabStyling(tabItem, tabModel);
                 
-                // Update tooltip for pinned tabs
+                // Update header
+                tabItem.Header = tabModel.Title;
+                
+                // Apply Chrome-style width for pinned tabs
                 if (tabModel.IsPinned)
                 {
-                    tabItem.ToolTip = tabModel.Title;
+                    tabItem.Width = 50; // Chrome-style narrow width
+                    tabItem.MinWidth = 50;
+                    tabItem.MaxWidth = 50;
+                    tabItem.ToolTip = tabModel.Title; // Show full title in tooltip
                 }
                 else
                 {
-                    tabItem.ToolTip = null;
+                    tabItem.Width = double.NaN; // Auto width
+                    tabItem.MinWidth = 100;
+                    tabItem.MaxWidth = 200;
+                    tabItem.ClearValue(TabItem.ToolTipProperty);
                 }
+
+                // Apply visual styling based on the model
+                ApplyTabStyling(tabItem, tabModel);
             }
             catch (Exception ex)
             {

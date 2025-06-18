@@ -22,6 +22,7 @@ namespace ExplorerPro.ViewModels
         private TabItemModel _selectedTabItem;
         private string _windowTitle;
         private bool _isInitialized;
+        private ExplorerPro.Core.TabManagement.ITabManagerService _tabManager;
 
         #endregion
 
@@ -278,13 +279,29 @@ namespace ExplorerPro.ViewModels
         /// Toggles the pin state of the specified tab
         /// </summary>
         /// <param name="tabItem">Tab to toggle pin state</param>
-        public void TogglePinTab(TabItemModel tabItem)
+        public async void TogglePinTab(TabItemModel tabItem)
         {
             if (tabItem == null) return;
 
             try
             {
+                // Update the model
                 tabItem.IsPinned = !tabItem.IsPinned;
+                
+                // Sync with TabManagerService if available
+                if (_tabManager != null)
+                {
+                    // Find corresponding TabModel in the service and sync pin state
+                    var correspondingTabModel = _tabManager.Tabs?.FirstOrDefault(t => t.Title == tabItem.Title);
+                    if (correspondingTabModel != null)
+                    {
+                        await _tabManager.SetTabPinnedAsync(correspondingTabModel, tabItem.IsPinned);
+                    }
+                }
+                
+                // Force UI update
+                OnPropertyChanged(nameof(TabItems));
+                
                 _logger?.LogDebug($"Toggled pin state for tab: {tabItem.Title}, Pinned: {tabItem.IsPinned}");
             }
             catch (Exception ex)
