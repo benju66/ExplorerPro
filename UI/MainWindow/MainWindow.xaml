@@ -414,15 +414,15 @@
                                             <Setter Property="Panel.ZIndex" Value="2"/>
                                         </Trigger>
                                         
-                                        <!-- Pinned State Trigger -->
-                                        <DataTrigger Binding="{Binding Tag.IsPinned, RelativeSource={RelativeSource Self}}" Value="True">
-                                            <!-- Narrow the tab -->
-                                            <Setter Property="Width" Value="40"/>
-                                            <Setter Property="MinWidth" Value="40"/>
-                                            <Setter Property="MaxWidth" Value="40"/>
-                                            <!-- Add tooltip for pinned tabs -->
-                                            <Setter Property="ToolTip" Value="{Binding Header, RelativeSource={RelativeSource Self}}"/>
-                                        </DataTrigger>
+                                                                <!-- Pinned State Trigger -->
+                        <DataTrigger Binding="{Binding Tag[IsPinned], RelativeSource={RelativeSource Self}}" Value="True">
+                            <!-- Narrow the tab -->
+                            <Setter Property="Width" Value="40"/>
+                            <Setter Property="MinWidth" Value="40"/>
+                            <Setter Property="MaxWidth" Value="40"/>
+                            <!-- Add tooltip for pinned tabs -->
+                            <Setter Property="ToolTip" Value="{Binding Header, RelativeSource={RelativeSource Self}}"/>
+                        </DataTrigger>
                                         
                                         <!-- Enhanced hover effect -->
                                         <Trigger Property="IsMouseOver" Value="True">
@@ -466,7 +466,7 @@
                                 </Grid.ColumnDefinitions>
                                 
                                 <TextBlock Grid.Column="0" 
-                                          Text="{Binding Header}" 
+                                          Text="{Binding Title}" 
                                           VerticalAlignment="Center"
                                           Margin="8,0,8,0"/>
                                 
@@ -486,7 +486,7 @@
                         </Grid>
                         
                         <DataTemplate.Triggers>
-                            <DataTrigger Binding="{Binding Tag.IsPinned, RelativeSource={RelativeSource AncestorType=TabItem}}" Value="True">
+                            <DataTrigger Binding="{Binding Tag[IsPinned], RelativeSource={RelativeSource AncestorType=TabItem}}" Value="True">
                                 <Setter TargetName="RegularLayout" Property="Visibility" Value="Collapsed"/>
                                 <Setter TargetName="PinnedIcon" Property="Visibility" Value="Visible"/>
                             </DataTrigger>
