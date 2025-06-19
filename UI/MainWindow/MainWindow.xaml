@@ -830,24 +830,13 @@ All dependencies mapped and validation tests established.
                             </MenuItem.Icon>
                         </MenuItem>
                         
-                        <MenuItem x:Name="PinTabMenuItem"
+                        <MenuItem x:Name="TogglePinMenuItem"
                                  Header="Pin Tab" 
                                  Style="{StaticResource TabContextMenuItemStyle}"
                                  Click="TogglePinMenuItem_Click">
                             <MenuItem.Icon>
-                                <Path Width="12" Height="12" Fill="#656D76"
+                                <Path x:Name="PinIcon" Width="12" Height="12" Fill="#656D76"
                                       Data="M16,12V4H17V2H7V4H8V12L6,14V16H11.2V22H12.8V16H18V14L16,12Z"/>
-                            </MenuItem.Icon>
-                        </MenuItem>
-                        
-                        <MenuItem x:Name="UnpinTabMenuItem"
-                                 Header="Unpin Tab" 
-                                 Style="{StaticResource TabContextMenuItemStyle}"
-                                 Click="TogglePinMenuItem_Click"
-                                 Visibility="Collapsed">
-                            <MenuItem.Icon>
-                                <Path Width="12" Height="12" Fill="#656D76"
-                                      Data="M2,5.27L3.28,4L20,20.72L18.73,22L12.8,16.07V22H11.2V16H6V14L8,12V11.27L2,5.27M16,12V4H17V2H7V4H8V9.18L16,17.18V12Z"/>
                             </MenuItem.Icon>
                         </MenuItem>
                         

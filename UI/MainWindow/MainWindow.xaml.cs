@@ -530,10 +530,25 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private ILogger<MainWindow> _instanceLogger;
 
-        /// <summary>
-        /// Stores the tab that was right-clicked for context menu operations
-        /// </summary>
-        private TabItem _rightClickedTab;
+        private TabItem? _rightClickedTab;
+
+        #region Phase 1 Enhancement Fields
+
+        // 3. Event Handler Debouncing
+        private DateTime _lastContextMenuAction = DateTime.MinValue;
+        private const int DEBOUNCE_INTERVAL_MS = 500;
+
+        // 4. Smart Memory Cleanup tracking
+        private int _operationCount = 0;
+        private const int CLEANUP_THRESHOLD = 50;
+
+        // 5. Context Menu Caching
+        private bool _contextMenuStateValid = false;
+        private int _cachedTabCount = 0;
+        private bool _cachedPinnedState = false;
+        private int _cachedSelectedTabHash = 0;
+
+        #endregion
 
         /// <summary>
         /// PHASE 3 OPTIMIZATION: Cached embedded toolbar to avoid repeated visual tree searches
@@ -2430,15 +2445,35 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Handler for new tab menu item click.
+        /// Enhanced with Phase 1 improvements: debouncing, smart positioning, memory cleanup
         /// </summary>
         private void NewTabMenuItem_Click(object sender, RoutedEventArgs e)
         {
+            // 3. Event Handler Debouncing
+            if (IsDebounced()) return;
+
             try
             {
                 var container = AddNewMainWindowTab();
                 if (container != null)
                 {
-                    _instanceLogger?.LogInformation("New tab created via context menu");
+                    // 2. Smart Tab Positioning - Move new tab to correct position
+                    if (MainTabs?.Items.Count > 1)
+                    {
+                        var insertIndex = GetSmartInsertionIndex() - 1; // Adjust since tab was added at end
+                        var newTab = MainTabs.Items[MainTabs.Items.Count - 1] as TabItem;
+                        if (newTab != null && insertIndex < MainTabs.Items.Count - 1)
+                        {
+                            MainTabs.Items.RemoveAt(MainTabs.Items.Count - 1);
+                            MainTabs.Items.Insert(insertIndex, newTab);
+                            MainTabs.SelectedItem = newTab;
+                        }
+                    }
+
+                    _instanceLogger?.LogInformation("New tab created via context menu with smart positioning");
+                    
+                    // 4. Smart Memory Cleanup
+                    PerformSmartCleanup();
                 }
             }
             catch (Exception ex)
@@ -2451,9 +2486,13 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Handler for duplicate tab menu item click.
+        /// Enhanced with Phase 1 improvements: debouncing, smart positioning, memory cleanup
         /// </summary>
         private void DuplicateTabMenuItem_Click(object sender, RoutedEventArgs e)
         {
+            // 3. Event Handler Debouncing
+            if (IsDebounced()) return;
+
             try
             {
                 var contextMenu = sender as MenuItem;
@@ -2473,8 +2512,22 @@ namespace ExplorerPro.UI.MainWindow
                         var newContainer = AddNewMainWindowTab(currentPath);
                         if (newContainer != null && MainTabs.SelectedItem is TabItem newTab)
                         {
+                            // 2. Smart Tab Positioning - Move duplicated tab next to original
+                            var originalIndex = MainTabs.Items.IndexOf(currentTab);
+                            var newTabIndex = MainTabs.Items.IndexOf(newTab);
+                            
+                            if (originalIndex >= 0 && newTabIndex >= 0 && originalIndex != newTabIndex - 1)
+                            {
+                                MainTabs.Items.RemoveAt(newTabIndex);
+                                MainTabs.Items.Insert(originalIndex + 1, newTab);
+                                MainTabs.SelectedItem = newTab;
+                            }
+
                             newTab.Header = $"{currentTab.Header} - Copy";
-                            _instanceLogger?.LogInformation($"Duplicated tab: {currentTab.Header}");
+                            _instanceLogger?.LogInformation($"Duplicated tab with smart positioning: {currentTab.Header}");
+                            
+                            // 4. Smart Memory Cleanup
+                            PerformSmartCleanup();
                         }
                     }
                 }
@@ -2638,6 +2691,7 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Handles the context menu opening event to enable/disable menu items based on tab state
+        /// Enhanced with Phase 1 improvements: dynamic states and caching
         /// </summary>
         /// <param name="sender">The context menu</param>
         /// <param name="e">Event arguments</param>
@@ -2649,32 +2703,23 @@ namespace ExplorerPro.UI.MainWindow
                 
                 if (sender is ContextMenu contextMenu)
                 {
+                    // Use centralized context menu state management
+                    UpdateContextMenuStates(contextMenu);
+                    
+                    // Handle Clear Color menu item separately (special case not handled by UpdateContextMenuStates)
                     var contextTabItem = GetContextMenuTabItem(contextMenu);
                     if (contextTabItem != null)
                     {
-                        bool isTabPinned = IsTabPinned(contextTabItem);
-                        bool hasCustomColor = TabHasCustomColor(contextTabItem);
+                        var hasCustomColor = TabHasCustomColor(contextTabItem);
                         
-                        _instanceLogger?.LogDebug($"Tab: {contextTabItem.Header}, Pinned: {isTabPinned}, HasColor: {hasCustomColor}");
-                        
-                        // Find menu items
-                        MenuItem clearColorMenuItem = null;
-                        MenuItem pinTabMenuItem = null;
-                        MenuItem unpinTabMenuItem = null;
-                        MenuItem closeTabMenuItem = null;
-                        
+                        MenuItem? clearColorMenuItem = null;
                         foreach (var item in contextMenu.Items)
                         {
-                            if (item is MenuItem menuItem)
+                            if (item is MenuItem menuItem && 
+                                (menuItem.Name == "ClearColorMenuItem" || menuItem.Header?.ToString()?.Contains("Clear Color") == true))
                             {
-                                if (menuItem.Name == "ClearColorMenuItem" || menuItem.Header?.ToString()?.Contains("Clear Color") == true)
-                                    clearColorMenuItem = menuItem;
-                                else if (menuItem.Name == "PinTabMenuItem")
-                                    pinTabMenuItem = menuItem;
-                                else if (menuItem.Name == "UnpinTabMenuItem")
-                                    unpinTabMenuItem = menuItem;
-                                else if (menuItem.Header?.ToString() == "Close Tab")
-                                    closeTabMenuItem = menuItem;
+                                clearColorMenuItem = menuItem;
+                                break;
                             }
                         }
                         
@@ -2685,25 +2730,7 @@ namespace ExplorerPro.UI.MainWindow
                             clearColorMenuItem.Header = hasCustomColor ? "Clear Color" : "Clear Color (No custom color)";
                         }
                         
-                        // Update Pin/Unpin menu items
-                        if (pinTabMenuItem != null)
-                        {
-                            pinTabMenuItem.Visibility = isTabPinned ? Visibility.Collapsed : Visibility.Visible;
-                        }
-                        
-                        if (unpinTabMenuItem != null)
-                        {
-                            unpinTabMenuItem.Visibility = isTabPinned ? Visibility.Visible : Visibility.Collapsed;
-                        }
-                        
-                        // Disable Close Tab for pinned tabs
-                        if (closeTabMenuItem != null)
-                        {
-                            closeTabMenuItem.IsEnabled = !isTabPinned;
-                            closeTabMenuItem.ToolTip = isTabPinned ? "Cannot close pinned tabs. Unpin first to close." : null;
-                        }
-                        
-                        _instanceLogger?.LogDebug($"Context menu updated - Pin visible: {pinTabMenuItem?.Visibility}, Unpin visible: {unpinTabMenuItem?.Visibility}, Close enabled: {closeTabMenuItem?.IsEnabled}");
+                        _instanceLogger?.LogDebug($"Context menu opened for tab: {contextTabItem.Header}, HasColor: {hasCustomColor}");
                     }
                 }
             }
@@ -2854,13 +2881,24 @@ namespace ExplorerPro.UI.MainWindow
                     
                     if (tabModel != null && contextTabItem != null && _viewModel?.TogglePinCommand?.CanExecute(tabModel) == true)
                     {
+                        var wasPin = tabModel.IsPinned;
+                        
                         _viewModel.TogglePinCommand.Execute(tabModel);
                         
                         // Sync changes back to the UI TabItem
                         UpdateTabItemFromModel(contextTabItem, tabModel);
                         
+                        // IMMEDIATE: Update the context menu item text to reflect the new state
+                        var newPinState = !wasPin;
+                        menuItem.Header = newPinState ? "Unpin Tab" : "Pin Tab";
+                        
                         // Reorder tabs to keep pinned tabs on the left
                         ReorderTabsAfterPinToggle();
+                        
+                        // CRITICAL: Invalidate context menu cache since pin state changed
+                        InvalidateContextMenuCache();
+                        
+                        _instanceLogger?.LogInformation($"Tab pin state changed: {contextTabItem.Header} - {(wasPin ? "Unpinned" : "Pinned")}");
                     }
                 }
             }
@@ -2992,8 +3030,15 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Handler for close tab menu item click.
         /// </summary>
+        /// <summary>
+        /// Handler for close tab menu item click.
+        /// Enhanced with Phase 1 improvements: debouncing, memory cleanup
+        /// </summary>
         private void CloseTabMenuItem_Click(object sender, RoutedEventArgs e)
         {
+            // 3. Event Handler Debouncing
+            if (IsDebounced()) return;
+
             try
             {
                 if (_rightClickedTab != null)
@@ -3003,12 +3048,17 @@ namespace ExplorerPro.UI.MainWindow
                     {
                         CloseTab(index);
                         _instanceLogger?.LogInformation($"Closed tab via context menu: {_rightClickedTab.Header}");
+                        
+                        // 4. Smart Memory Cleanup
+                        PerformSmartCleanup();
                     }
                 }
             }
             catch (Exception ex)
             {
                 _instanceLogger?.LogError(ex, "Error closing tab from context menu");
+                MessageBox.Show($"Failed to close tab: {ex.Message}", 
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -3022,14 +3072,21 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Handler for detach tab menu item click.
+        /// Enhanced with Phase 1 improvements: debouncing, memory cleanup
         /// </summary>
         private void DetachTabMenuItem_Click(object sender, RoutedEventArgs e)
         {
+            // 3. Event Handler Debouncing
+            if (IsDebounced()) return;
+
             try
             {
                 if (MainTabs.SelectedItem is TabItem selectedTab)
                 {
                     DetachSimpleToNewWindow(selectedTab);
+                    
+                    // 4. Smart Memory Cleanup
+                    PerformSmartCleanup();
                 }
             }
             catch (Exception ex)
@@ -6345,6 +6402,150 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
+        #region Phase 1 Enhancement Methods
+
+        /// <summary>
+        /// 3. Event Handler Debouncing - Prevents rapid-fire context menu actions
+        /// </summary>
+        private bool IsDebounced()
+        {
+            var now = DateTime.Now;
+            if (now - _lastContextMenuAction < TimeSpan.FromMilliseconds(DEBOUNCE_INTERVAL_MS))
+            {
+                return true; // Still in debounce period
+            }
+            _lastContextMenuAction = now;
+            return false;
+        }
+
+        /// <summary>
+        /// Enhanced UpdateContextMenuStates with proper pin/unpin support and cache invalidation
+        /// </summary>
+        private void UpdateContextMenuStates(ContextMenu contextMenu)
+        {
+            if (contextMenu == null) return;
+
+            var tabCount = MainTabs?.Items.Count ?? 0;
+            var contextTabItem = GetContextMenuTabItem(contextMenu);
+            var isTabPinned = contextTabItem != null && IsTabPinned(contextTabItem);
+            
+            // Enhanced cache validation - also check pinned state changes
+            var currentStateSignature = $"{tabCount}_{isTabPinned}_{MainTabs?.SelectedItem?.GetHashCode() ?? 0}";
+            var cachedStateSignature = $"{_cachedTabCount}_{_cachedPinnedState}_{_cachedSelectedTabHash}";
+            
+            if (_contextMenuStateValid && currentStateSignature == cachedStateSignature)
+                return;
+
+            MenuItem? togglePinMenuItem = null;
+
+            foreach (MenuItem item in contextMenu.Items)
+            {
+                // Check by Name first (more reliable), then by Header as fallback
+                if (item.Name == "TogglePinMenuItem")
+                {
+                    togglePinMenuItem = item;
+                    continue;
+                }
+
+                switch (item.Header?.ToString())
+                {
+                    case "Close Tab":
+                        // Enhanced Close Tab logic - combine pinned and tab count checks
+                        var canClose = !isTabPinned && tabCount > 1;
+                        item.IsEnabled = canClose;
+                        
+                        if (isTabPinned)
+                            item.ToolTip = "Cannot close pinned tabs. Unpin first to close.";
+                        else if (tabCount <= 1)
+                            item.ToolTip = "Cannot close the last tab.";
+                        else
+                            item.ToolTip = null;
+                        break;
+                    case "Detach Tab":
+                        item.IsEnabled = tabCount > 1;
+                        item.ToolTip = tabCount <= 1 ? "Cannot detach the last tab." : null;
+                        break;
+                    case "Duplicate Tab":
+                        item.IsEnabled = MainTabs?.SelectedItem != null;
+                        item.ToolTip = MainTabs?.SelectedItem == null ? "No tab selected to duplicate." : null;
+                        break;
+                    case "Pin Tab":
+                    case "Unpin Tab":
+                        // Fallback: find by header if name didn't match
+                        if (togglePinMenuItem == null)
+                        {
+                            togglePinMenuItem = item;
+                        }
+                        break;
+                }
+            }
+            
+            // Update Pin/Unpin menu item text based on current state
+            if (togglePinMenuItem != null)
+            {
+                togglePinMenuItem.Header = isTabPinned ? "Unpin Tab" : "Pin Tab";
+            }
+
+            // Update enhanced cache with pinned state
+            _contextMenuStateValid = true;
+            _cachedTabCount = tabCount;
+            _cachedPinnedState = isTabPinned;
+            _cachedSelectedTabHash = MainTabs?.SelectedItem?.GetHashCode() ?? 0;
+            
+            _instanceLogger?.LogDebug($"Context menu states updated - Count: {tabCount}, Pinned: {isTabPinned}, Toggle Pin text: {togglePinMenuItem?.Header}");
+        }
+
+        /// <summary>
+        /// 2. Smart Tab Positioning - Gets the correct insertion index for new tabs
+        /// </summary>
+        private int GetSmartInsertionIndex()
+        {
+            if (MainTabs?.SelectedItem == null) return MainTabs?.Items.Count ?? 0;
+            
+            var currentIndex = MainTabs.Items.IndexOf(MainTabs.SelectedItem);
+            return currentIndex + 1; // Insert right after current tab
+        }
+
+        /// <summary>
+        /// 4. Smart Memory Cleanup - Performs cleanup after tab operations
+        /// </summary>
+        private void PerformSmartCleanup()
+        {
+            _operationCount++;
+            
+            if (_operationCount >= CLEANUP_THRESHOLD)
+            {
+                try
+                {
+                    // Invalidate context menu cache
+                    InvalidateContextMenuCache();
+                    
+                    // Force garbage collection (only occasionally)
+                    GC.Collect(0, GCCollectionMode.Optimized);
+                    
+                    _operationCount = 0;
+                    _instanceLogger?.LogDebug("Performed smart cleanup after {Count} operations", CLEANUP_THRESHOLD);
+                }
+                catch (Exception ex)
+                {
+                    _instanceLogger?.LogWarning(ex, "Smart cleanup encountered an issue");
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Invalidates the context menu cache to force recalculation of states
+        /// </summary>
+        private void InvalidateContextMenuCache()
+        {
+            _contextMenuStateValid = false;
+            _cachedTabCount = -1;
+            _cachedPinnedState = false;
+            _cachedSelectedTabHash = 0;
+            _instanceLogger?.LogDebug("Context menu cache invalidated");
+        }
+
+        #endregion
 
     }
 
