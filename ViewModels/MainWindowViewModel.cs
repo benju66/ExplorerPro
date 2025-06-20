@@ -23,6 +23,7 @@ namespace ExplorerPro.ViewModels
         private string _windowTitle;
         private bool _isInitialized;
         private ExplorerPro.Core.TabManagement.ITabManagerService _tabManager;
+        private ExplorerPro.Core.TabManagement.TabOperationsManager _tabOperationsManager;
 
         #endregion
 
@@ -82,6 +83,15 @@ namespace ExplorerPro.ViewModels
         {
             get => _isInitialized;
             private set => SetProperty(ref _isInitialized, value);
+        }
+
+        /// <summary>
+        /// Gets or sets the tab operations manager
+        /// </summary>
+        public ExplorerPro.Core.TabManagement.TabOperationsManager TabOperationsManager
+        {
+            get => _tabOperationsManager;
+            set => SetProperty(ref _tabOperationsManager, value);
         }
 
         #endregion

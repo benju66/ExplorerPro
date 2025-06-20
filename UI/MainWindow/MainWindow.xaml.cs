@@ -1697,11 +1697,47 @@ namespace ExplorerPro.UI.MainWindow
 
                 // Set up keyboard shortcuts
                 InitializeKeyboardShortcuts();
+                
+                // Initialize tab operations
+                InitializeTabOperations();
             }
             catch (Exception ex)
             {
                 WPF.MessageBox.Show($"Error initializing main window: {ex.Message}", 
                     "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Initialize tab operations manager
+        /// </summary>
+        private void InitializeTabOperations()
+        {
+            try
+            {
+                // Create the operations manager with required dependencies
+                var detachedWindowManager = new ExplorerPro.Core.TabManagement.SimpleDetachedWindowManager();
+                
+                // Create logger factory for the TabOperationsManager
+                var loggerFactory = LoggerFactory.Create(builder =>
+                {
+                    builder.AddConsole().SetMinimumLevel(LogLevel.Debug);
+                });
+                var tabOpsLogger = loggerFactory.CreateLogger<ExplorerPro.Core.TabManagement.TabOperationsManager>();
+                
+                var operationsManager = new ExplorerPro.Core.TabManagement.TabOperationsManager(
+                    tabOpsLogger,
+                    detachedWindowManager);
+                
+                if (DataContext is MainWindowViewModel viewModel)
+                {
+                    viewModel.TabOperationsManager = operationsManager;
+                    _logger?.LogInformation("TabOperationsManager initialized successfully");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to initialize TabOperationsManager");
             }
         }
 

@@ -7,7 +7,10 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using ExplorerPro.Core.TabManagement;
 using ExplorerPro.Models;
+using ExplorerPro.UI.MainWindow;
 using Microsoft.Extensions.Logging;
 
 namespace ExplorerPro.UI.Controls
@@ -167,6 +170,21 @@ namespace ExplorerPro.UI.Controls
         public event EventHandler<TabDragEventArgs> TabDragged;
 
         /// <summary>
+        /// Event fired when a tab drag operation starts
+        /// </summary>
+        public event EventHandler<TabDragEventArgs> TabDragStarted;
+
+        /// <summary>
+        /// Event fired during tab dragging
+        /// </summary>
+        public event EventHandler<TabDragEventArgs> TabDragging;
+
+        /// <summary>
+        /// Event fired when a tab drag operation completes
+        /// </summary>
+        public event EventHandler<TabDragEventArgs> TabDragCompleted;
+
+        /// <summary>
         /// Event fired when a tab's metadata changes
         /// </summary>
         public event EventHandler<TabMetadataChangedEventArgs> TabMetadataChanged;
@@ -210,6 +228,496 @@ namespace ExplorerPro.UI.Controls
             KeyDown += OnKeyDown;
             MouseDoubleClick += OnMouseDoubleClick;
         }
+
+        #endregion
+
+        #region Drag and Drop Support
+
+        private Point? _dragStartPoint;
+        private TabItem _draggedTab;
+        private bool _isDragging;
+        private TabOperationsManager _tabOperationsManager;
+        private ITabDragDropService _dragDropService;
+        private DragOperation _currentDragOperation;
+
+        // Thresholds for drag operations
+        private const double DRAG_THRESHOLD = 5.0;
+        private const double TEAR_OFF_THRESHOLD = 40.0;
+
+        /// <summary>
+        /// Gets or sets the tab operations manager
+        /// </summary>
+        public TabOperationsManager TabOperationsManager
+        {
+            get => _tabOperationsManager;
+            set => _tabOperationsManager = value;
+        }
+
+        /// <summary>
+        /// Gets or sets the drag drop service
+        /// </summary>
+        public ITabDragDropService DragDropService
+        {
+            get => _dragDropService;
+            set => _dragDropService = value;
+        }
+
+        /// <summary>
+        /// Handles mouse down on tab headers for drag initiation
+        /// </summary>
+        protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
+        {
+            base.OnPreviewMouseLeftButtonDown(e);
+
+            // Reset previous drag state
+            _dragStartPoint = null;
+            _draggedTab = null;
+
+            // Find if we clicked on a tab header
+            var tabItem = FindTabItemFromPoint(e.GetPosition(this));
+            if (tabItem != null && !IsAddNewTabButton(e.OriginalSource))
+            {
+                _dragStartPoint = e.GetPosition(this);
+                _draggedTab = tabItem;
+                _isDragging = false;
+                
+                // Capture mouse for drag detection
+                CaptureMouse();
+            }
+        }
+
+        /// <summary>
+        /// Handles mouse movement for drag operations
+        /// </summary>
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+
+            if (_dragStartPoint.HasValue && e.LeftButton == MouseButtonState.Pressed && !_isDragging)
+            {
+                var currentPoint = e.GetPosition(this);
+                var dragDistance = currentPoint - _dragStartPoint.Value;
+
+                // Check if we've moved enough to start dragging
+                if (Math.Abs(dragDistance.X) > DRAG_THRESHOLD ||
+                    Math.Abs(dragDistance.Y) > DRAG_THRESHOLD)
+                {
+                    StartDragOperation();
+                }
+            }
+            else if (_isDragging)
+            {
+                UpdateDragOperation(e.GetPosition(null));
+            }
+        }
+
+        /// <summary>
+        /// Handles mouse up to complete drag operations
+        /// </summary>
+        protected override void OnPreviewMouseLeftButtonUp(MouseButtonEventArgs e)
+        {
+            base.OnPreviewMouseLeftButtonUp(e);
+
+            if (_isDragging)
+            {
+                CompleteDragOperation(e.GetPosition(null));
+            }
+            else if (_draggedTab != null)
+            {
+                // Just a click, not a drag
+                SelectedItem = _draggedTab;
+            }
+
+            // Reset drag state
+            ResetDragState();
+            ReleaseMouseCapture();
+        }
+
+        /// <summary>
+        /// Handles escape key to cancel drag
+        /// </summary>
+        protected override void OnPreviewKeyDown(KeyEventArgs e)
+        {
+            base.OnPreviewKeyDown(e);
+
+            if (_isDragging && e.Key == Key.Escape)
+            {
+                CancelDragOperation();
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>
+        /// Starts the drag operation with visual feedback
+        /// </summary>
+        private void StartDragOperation()
+        {
+            if (_draggedTab?.Tag is TabItemModel tabModel)
+            {
+                _isDragging = true;
+                var window = Window.GetWindow(this);
+                
+                // Create drag operation state
+                _currentDragOperation = new DragOperation
+                {
+                    Tab = tabModel,
+                    SourceWindow = window,
+                    SourceTabControl = this,
+                    DraggedTabItem = _draggedTab,
+                    StartPoint = _dragStartPoint.Value,
+                    OriginalIndex = Items.IndexOf(_draggedTab),
+                    IsActive = true
+                };
+
+                // Start visual feedback
+                StartDragVisualFeedback();
+
+                // Use drag service if available
+                if (_dragDropService != null)
+                {
+                    _dragDropService.StartDrag(tabModel, _dragStartPoint.Value, window);
+                }
+                else
+                {
+                    // Local drag handling
+                    tabModel.IsDragging = true;
+                }
+
+                // Raise drag started event
+                TabDragStarted?.Invoke(this, new TabDragEventArgs(
+                    tabModel, 
+                    _dragStartPoint.Value, 
+                    Mouse.GetPosition(null)));
+
+                // Set cursor
+                Mouse.OverrideCursor = Cursors.Hand;
+            }
+        }
+
+        /// <summary>
+        /// Updates drag operation based on current position
+        /// </summary>
+        private void UpdateDragOperation(Point screenPoint)
+        {
+            if (_currentDragOperation == null || !_isDragging) return;
+
+            _currentDragOperation.CurrentPoint = screenPoint;
+            
+            // Determine operation type based on position
+            var operationType = DetermineOperationType(screenPoint);
+            
+            if (operationType != _currentDragOperation.CurrentOperationType)
+            {
+                _currentDragOperation.CurrentOperationType = operationType;
+                UpdateDragVisualFeedback(operationType);
+            }
+
+            // Update via service if available
+            if (_dragDropService != null)
+            {
+                _dragDropService.UpdateDrag(screenPoint);
+            }
+
+            // Raise dragging event
+            if (_draggedTab?.Tag is TabItemModel tabModel)
+            {
+                TabDragging?.Invoke(this, new TabDragEventArgs(
+                    tabModel,
+                    _dragStartPoint.Value,
+                    screenPoint));
+            }
+        }
+
+        /// <summary>
+        /// Completes the drag operation
+        /// </summary>
+        private void CompleteDragOperation(Point screenPoint)
+        {
+            if (_currentDragOperation == null || !_isDragging) return;
+
+            try
+            {
+                var operationType = _currentDragOperation.CurrentOperationType;
+                bool success = false;
+
+                switch (operationType)
+                {
+                    case DragOperationType.Reorder:
+                        success = HandleReorderDrop(screenPoint);
+                        break;
+                        
+                    case DragOperationType.Detach:
+                        success = HandleDetachDrop(screenPoint);
+                        break;
+                        
+                    case DragOperationType.Transfer:
+                        success = HandleTransferDrop(screenPoint);
+                        break;
+                }
+
+                // Complete via service if available
+                if (_dragDropService != null && !success)
+                {
+                    var targetWindow = FindWindowUnderPoint(screenPoint);
+                    success = _dragDropService.CompleteDrag(targetWindow, screenPoint);
+                }
+
+                // Raise completed event
+                if (_draggedTab?.Tag is TabItemModel tabModel)
+                {
+                    TabDragCompleted?.Invoke(this, new TabDragEventArgs(
+                        tabModel,
+                        _dragStartPoint.Value,
+                        screenPoint));
+                }
+            }
+            finally
+            {
+                EndDragVisualFeedback();
+                Mouse.OverrideCursor = null;
+            }
+        }
+
+        /// <summary>
+        /// Cancels the current drag operation
+        /// </summary>
+        private void CancelDragOperation()
+        {
+            if (!_isDragging) return;
+
+            // Cancel via service
+            _dragDropService?.CancelDrag();
+
+            // Reset visual state
+            EndDragVisualFeedback();
+            
+            // Reset tab to original position if needed
+            if (_currentDragOperation != null && _draggedTab != null)
+            {
+                var currentIndex = Items.IndexOf(_draggedTab);
+                if (currentIndex != _currentDragOperation.OriginalIndex)
+                {
+                    _tabOperationsManager?.ReorderTab(this, 
+                        _draggedTab.Tag as TabItemModel, 
+                        _currentDragOperation.OriginalIndex);
+                }
+            }
+
+            ResetDragState();
+        }
+
+        /// <summary>
+        /// Determines the type of drag operation based on position
+        /// </summary>
+        private DragOperationType DetermineOperationType(Point screenPoint)
+        {
+            // Check if we're over this tab control
+            var localPoint = PointFromScreen(screenPoint);
+            var bounds = new Rect(0, 0, ActualWidth, ActualHeight);
+            
+            if (bounds.Contains(localPoint))
+            {
+                // Still within the same tab control - reorder
+                return DragOperationType.Reorder;
+            }
+
+            // Check distance from original position
+            var distance = (screenPoint - _currentDragOperation.StartPoint).Length;
+            if (distance > TEAR_OFF_THRESHOLD)
+            {
+                // Check if over another window
+                var targetWindow = FindWindowUnderPoint(screenPoint);
+                if (targetWindow != null && targetWindow != _currentDragOperation.SourceWindow)
+                {
+                    return DragOperationType.Transfer;
+                }
+                
+                // Far from any window - detach
+                return DragOperationType.Detach;
+            }
+
+            return DragOperationType.None;
+        }
+
+        /// <summary>
+        /// Handles reordering within the same tab control
+        /// </summary>
+        private bool HandleReorderDrop(Point screenPoint)
+        {
+            if (_tabOperationsManager == null || _draggedTab == null) return false;
+
+            var dropIndex = _tabOperationsManager.CalculateDropIndex(this, screenPoint);
+            var tabModel = _draggedTab.Tag as TabItemModel;
+            
+            return _tabOperationsManager.ReorderTab(this, tabModel, dropIndex);
+        }
+
+        /// <summary>
+        /// Handles detaching to a new window
+        /// </summary>
+        private bool HandleDetachDrop(Point screenPoint)
+        {
+            if (_draggedTab == null) return false;
+
+            // Use existing detach method from Phase 1
+            var mainWindow = Window.GetWindow(this) as ExplorerPro.UI.MainWindow.MainWindow;
+            var tabs = mainWindow?.FindName("MainTabs") as ChromeStyleTabControl;
+            
+            if (tabs != null)
+            {
+                var detachedWindow = mainWindow.DetachTabToNewWindow(_draggedTab);
+                if (detachedWindow != null)
+                {
+                    // Position at drop point
+                    detachedWindow.Left = screenPoint.X - 100;
+                    detachedWindow.Top = screenPoint.Y - 20;
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        /// <summary>
+        /// Handles transferring to another window
+        /// </summary>
+        private bool HandleTransferDrop(Point screenPoint)
+        {
+            var targetWindow = FindWindowUnderPoint(screenPoint);
+            if (targetWindow == null || targetWindow == Window.GetWindow(this))
+                return false;
+
+            var targetTabControl = FindTabControlInWindow(targetWindow);
+            if (targetTabControl == null || _tabOperationsManager == null)
+                return false;
+
+            var dropIndex = _tabOperationsManager.CalculateDropIndex(targetTabControl, screenPoint);
+            var tabModel = _draggedTab.Tag as TabItemModel;
+            
+            return _tabOperationsManager.TransferTab(this, targetTabControl, tabModel, dropIndex);
+        }
+
+        #region Visual Feedback Methods
+
+        private void StartDragVisualFeedback()
+        {
+            if (_draggedTab != null)
+            {
+                _draggedTab.Opacity = 0.6;
+                _draggedTab.RenderTransform = new TranslateTransform();
+            }
+        }
+
+        private void UpdateDragVisualFeedback(DragOperationType operationType)
+        {
+            if (_draggedTab == null) return;
+
+            switch (operationType)
+            {
+                case DragOperationType.Reorder:
+                    _draggedTab.Opacity = 0.8;
+                    ShowReorderIndicator();
+                    break;
+                    
+                case DragOperationType.Detach:
+                    _draggedTab.Opacity = 0.4;
+                    ShowDetachIndicator();
+                    break;
+                    
+                case DragOperationType.Transfer:
+                    _draggedTab.Opacity = 0.6;
+                    ShowTransferIndicator();
+                    break;
+            }
+        }
+
+        private void EndDragVisualFeedback()
+        {
+            if (_draggedTab != null)
+            {
+                _draggedTab.Opacity = 1.0;
+                _draggedTab.RenderTransform = null;
+            }
+            
+            HideAllIndicators();
+        }
+
+        private void ShowReorderIndicator()
+        {
+            // Implementation for reorder visual indicator
+        }
+
+        private void ShowDetachIndicator()
+        {
+            // Implementation for detach visual indicator
+        }
+
+        private void ShowTransferIndicator()
+        {
+            // Implementation for transfer visual indicator
+        }
+
+        private void HideAllIndicators()
+        {
+            // Hide all visual indicators
+        }
+
+        #endregion
+
+        #region Helper Methods
+
+        private void ResetDragState()
+        {
+            _dragStartPoint = null;
+            _draggedTab = null;
+            _isDragging = false;
+            _currentDragOperation = null;
+        }
+
+        private TabItem FindTabItemFromPoint(Point point)
+        {
+            var hitTest = VisualTreeHelper.HitTest(this, point);
+            if (hitTest != null)
+            {
+                var element = hitTest.VisualHit;
+                while (element != null && !(element is TabItem))
+                {
+                    element = VisualTreeHelper.GetParent(element);
+                }
+                return element as TabItem;
+            }
+            return null;
+        }
+
+        private bool IsAddNewTabButton(object source)
+        {
+            var element = source as DependencyObject;
+            while (element != null)
+            {
+                if (element is Button button && button.Name == "AddNewTabButton")
+                    return true;
+                element = VisualTreeHelper.GetParent(element);
+            }
+            return false;
+        }
+
+        private Window FindWindowUnderPoint(Point screenPoint)
+        {
+            // This will be implemented properly in Phase 6
+            // For now, return null
+            return null;
+        }
+
+        private ChromeStyleTabControl FindTabControlInWindow(Window window)
+        {
+            if (window is ExplorerPro.UI.MainWindow.MainWindow mainWindow)
+            {
+                return mainWindow.MainTabs as ChromeStyleTabControl;
+            }
+            return null;
+        }
+
+        #endregion
 
         #endregion
 
