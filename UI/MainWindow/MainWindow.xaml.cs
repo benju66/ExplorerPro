@@ -3083,7 +3083,7 @@ namespace ExplorerPro.UI.MainWindow
             {
                 if (MainTabs.SelectedItem is TabItem selectedTab)
                 {
-                    DetachSimpleToNewWindow(selectedTab);
+                    DetachTabToNewWindow(selectedTab);
                     
                     // 4. Smart Memory Cleanup
                     PerformSmartCleanup();
@@ -3098,73 +3098,85 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Simple detach method based on working MainWindowTabs implementation
+        /// Detaches a tab to a new window with proper lifecycle management
         /// </summary>
-        private void DetachSimpleToNewWindow(TabItem tabToDetach)
+        /// <param name="tabItem">The tab to detach</param>
+        /// <returns>The new window containing the detached tab, or null on failure</returns>
+        public MainWindow DetachTabToNewWindow(TabItem tabItem)
         {
+            if (tabItem == null || MainTabs.Items.Count <= 1)
+            {
+                _instanceLogger?.LogWarning("Cannot detach: invalid tab or last remaining tab");
+                return null;
+            }
+
             try
             {
-                var container = tabToDetach.Content as MainWindowContainer;
-                if (container == null)
+                // Extract container and metadata
+                var container = tabItem.Content as MainWindowContainer;
+                var tabTitle = tabItem.Header?.ToString() ?? "Detached";
+                var tabModel = GetTabItemModel(tabItem);
+
+                // Remove from current window
+                MainTabs.Items.Remove(tabItem);
+
+                // Create and configure new window
+                var newWindow = new MainWindow
                 {
-                    MessageBox.Show("Cannot detach tab - no container found", "Error", 
-                        MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
+                    Title = $"ExplorerPro - {tabTitle}",
+                    Width = this.Width * 0.8,
+                    Height = this.Height * 0.8,
+                    Left = this.Left + 50,
+                    Top = this.Top + 50
+                };
 
-                if (MainTabs.Items.Count <= 1)
-                {
-                    MessageBox.Show("Cannot detach the only tab", "Error", 
-                        MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
-
-                string tabTitle = tabToDetach.Header?.ToString() ?? "Detached";
-
-                // Remove tab from current window
-                MainTabs.Items.Remove(tabToDetach);
-
-                // Create new window
-                MainWindow newWindow = new MainWindow();
-
-                // Clear existing tabs in new window and wait for it to be ready
-                newWindow.Show(); // Show first so the window is properly initialized
+                // Initialize new window
+                newWindow.Show();
                 
-                // Clear any default tabs
-                while (newWindow.MainTabs.Items.Count > 0)
-                {
-                    newWindow.MainTabs.Items.RemoveAt(0);
-                }
+                // Clear default tabs
+                newWindow.MainTabs.Items.Clear();
 
-                // Create new tab item for detached container
-                TabItem newTabItem = new TabItem
+                // Create new tab in target window
+                var newTabItem = new TabItem
                 {
                     Header = tabTitle,
-                    Content = container
+                    Content = container,
+                    Tag = tabModel
                 };
 
                 // Add to new window
                 newWindow.MainTabs.Items.Add(newTabItem);
                 newWindow.MainTabs.SelectedItem = newTabItem;
 
-                // Configure new window
-                newWindow.Title = $"ExplorerPro - {tabTitle}";
-                newWindow.Width = this.Width * 0.8;
-                newWindow.Height = this.Height * 0.8;
+                // Track detached window
+                var windowId = Guid.NewGuid();
+                _detachedWindows[windowId] = new WeakReference<MainWindow>(newWindow);
+                newWindow.Closed += (s, e) => _detachedWindows.TryRemove(windowId, out _);
 
-                // Position offset from parent
-                newWindow.Left = this.Left + 50;
-                newWindow.Top = this.Top + 50;
+                // Connect signals if needed
+                if (container?.PinnedPanel != null)
+                {
+                    newWindow.ConnectPinnedPanelSignals(container.PinnedPanel);
+                }
 
-                newWindow.Activate();
-
-                _instanceLogger?.LogInformation($"Successfully detached tab: {tabTitle}");
+                _instanceLogger?.LogInformation($"Successfully detached tab '{tabTitle}' to new window");
+                return newWindow;
             }
             catch (Exception ex)
             {
-                _instanceLogger?.LogError(ex, "Error in simple detach to new window");
-                MessageBox.Show($"Failed to detach tab: {ex.Message}", 
-                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                _instanceLogger?.LogError(ex, "Failed to detach tab to new window");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Detaches a tab by index
+        /// </summary>
+        public void DetachTabByIndex(int index)
+        {
+            if (index >= 0 && index < MainTabs.Items.Count)
+            {
+                DetachTabToNewWindow(MainTabs.Items[index] as TabItem);
             }
         }
 

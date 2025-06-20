@@ -12,6 +12,7 @@ using System.Windows.Threading;
 using System.Windows.Media.Animation;
 using ExplorerPro.UI.FileTree;
 using ExplorerPro.UI.Converters;
+using ExplorerPro.Models;
 using Microsoft.Extensions.Logging;
 
 namespace ExplorerPro.UI.MainWindow
@@ -1022,56 +1023,40 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
+        #endregion
+
+        #region Cross-Window Tab Movement
+
         /// <summary>
-        /// Detach tab to a new window
+        /// Detaches a tab to a new window with proper lifecycle management
         /// </summary>
-        /// <param name="tab">Tab to detach</param>
-        /// <returns>New MainWindow instance</returns>
-        public MainWindow? DetachTabToNewWindow(TabItem tab)
+        /// <param name="tabItem">The tab to detach</param>
+        /// <returns>The new window containing the detached tab, or null on failure</returns>
+        public MainWindow? DetachTabToNewWindow(TabItem tabItem)
         {
+            if (tabItem == null || TabControl.Items.Count <= 1)
+            {
+                _instanceLogger?.LogWarning("Cannot detach: invalid tab or last remaining tab");
+                return null;
+            }
+
             try
             {
-                var container = tab.Content as MainWindowContainer;
-                if (container == null) return null;
+                // Extract container and metadata
+                var container = tabItem.Content as MainWindowContainer;
+                var tabTitle = tabItem.Header?.ToString() ?? "Detached";
+                var tabModel = GetTabItemModel(tabItem);
 
-                string tabTitle = tab.Header?.ToString() ?? "Detached";
+                // Remove from current window
+                TabControl.Items.Remove(tabItem);
 
-                // Remove tab from current window
-                int index = TabControl.Items.IndexOf(tab);
-                if (index >= 0)
+                // Create and configure new window
+                var newWindow = new MainWindow
                 {
-                    TabControl.Items.RemoveAt(index);
-                }
-
-                // Create new window
-                MainWindow newWindow = new MainWindow();
-                _detachedWindows.Add(newWindow);
-
-                // Clear existing tabs in new window
-                while (newWindow.MainTabs.Items.Count > 0)
-                {
-                    newWindow.MainTabs.Items.RemoveAt(0);
-                }
-
-                // Create new tab item for detached container
-                TabItem newTabItem = new TabItem
-                {
-                    Header = tabTitle,
-                    Content = container,
-                    RenderTransform = new TransformGroup
-                    {
-                        Children = { new ScaleTransform(), new TranslateTransform() }
-                    }
+                    Title = $"ExplorerPro - {tabTitle}",
+                    Width = 1000,
+                    Height = 700
                 };
-
-                // Add to new window
-                newWindow.MainTabs.Items.Add(newTabItem);
-                newWindow.MainTabs.SelectedItem = newTabItem;
-
-                // Configure new window
-                newWindow.Title = $"ExplorerPro - {tabTitle}";
-                newWindow.Width = 1000;
-                newWindow.Height = 700;
 
                 // Position offset from parent
                 MainWindow? parentWindow = Window.GetWindow(this) as MainWindow;
@@ -1081,21 +1066,90 @@ namespace ExplorerPro.UI.MainWindow
                     newWindow.Top = parentWindow.Top + 50;
                 }
 
-                // Show the new window
+                // Initialize new window
                 newWindow.Show();
-                newWindow.Activate();
+                
+                // Clear default tabs
+                newWindow.MainTabs.Items.Clear();
 
-                // Connect pinned panel signals
-                if (container.PinnedPanel != null)
+                // Create new tab in target window
+                var newTabItem = new TabItem
+                {
+                    Header = tabTitle,
+                    Content = container,
+                    Tag = tabModel
+                };
+
+                // Add to new window
+                newWindow.MainTabs.Items.Add(newTabItem);
+                newWindow.MainTabs.SelectedItem = newTabItem;
+
+                // Track detached window
+                _detachedWindows.Add(newWindow);
+                newWindow.Closed += (s, e) => _detachedWindows.Remove(newWindow);
+
+                // Connect signals if needed
+                if (container?.PinnedPanel != null)
                 {
                     newWindow.ConnectPinnedPanelSignals(container.PinnedPanel);
                 }
 
+                _instanceLogger?.LogInformation($"Successfully detached tab '{tabTitle}' to new window");
                 return newWindow;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error detaching tab to new window: {ex.Message}");
+                _instanceLogger?.LogError(ex, "Failed to detach tab to new window");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Detaches a tab by index
+        /// </summary>
+        public void DetachTabByIndex(int index)
+        {
+            if (index >= 0 && index < TabControl.Items.Count)
+            {
+                DetachTabToNewWindow(TabControl.Items[index] as TabItem);
+            }
+        }
+
+        /// <summary>
+        /// Gets the TabItemModel corresponding to a TabItem
+        /// </summary>
+        /// <param name="tabItem">The TabItem to find the model for</param>
+        /// <returns>The corresponding TabItemModel or null if not found</returns>
+        private TabItemModel GetTabItemModel(TabItem tabItem)
+        {
+            if (tabItem == null) return null;
+
+            try
+            {
+                // First try to get existing model from Tag
+                if (tabItem.Tag is TabItemModel existingModel)
+                {
+                    return existingModel;
+                }
+
+                // Create a TabItemModel based on the TabItem's current state
+                var tabModel = new TabItemModel
+                {
+                    Title = tabItem.Header?.ToString() ?? "Untitled",
+                    Content = tabItem.Content,
+                    IsPinned = false, // Default value
+                    TabColor = System.Windows.Media.Colors.LightGray, // Default value
+                    HasUnsavedChanges = false // Default value
+                };
+
+                // Set the model as the Tag for future reference
+                tabItem.Tag = tabModel;
+
+                return tabModel;
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error creating TabItemModel for TabItem");
                 return null;
             }
         }
@@ -1109,7 +1163,7 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void DetachTabMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            DetachMainTab(TabControl.SelectedIndex);
+            DetachTabByIndex(TabControl.SelectedIndex);
         }
 
         /// <summary>
@@ -1121,7 +1175,6 @@ namespace ExplorerPro.UI.MainWindow
             {
                 if (TabControl.SelectedItem is TabItem selectedTab)
                 {
-                    // Remove the duplicate functionality, just use detach
                     DetachTabToNewWindow(selectedTab);
                     _instanceLogger?.LogInformation($"Moved tab to new window: {selectedTab.Header}");
                 }
@@ -1139,40 +1192,16 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         public void MoveTabToNewWindow()
         {
-            DetachMainTab(TabControl.SelectedIndex);
+            DetachTabByIndex(TabControl.SelectedIndex);
         }
 
         /// <summary>
-        /// Detach a tab into a new window
+        /// Legacy method for backward compatibility - use DetachTabByIndex instead
         /// </summary>
-        /// <param name="index">Index of tab to detach</param>
+        [Obsolete("Use DetachTabByIndex instead")]
         public void DetachMainTab(int index)
         {
-            if (index < 0 || index >= TabControl.Items.Count || TabControl.Items.Count <= 1)
-            {
-                // Don't detach invalid tab or last tab
-                return;
-            }
-
-            try
-            {
-                // Get the tab item to detach
-                TabItem? tabItem = TabControl.Items[index] as TabItem;
-                if (tabItem == null) return;
-
-                // Use the new DetachTabToNewWindow method
-                var newWindow = DetachTabToNewWindow(tabItem);
-                if (newWindow != null)
-                {
-                    // Trim detached windows list (remove closed windows)
-                    _detachedWindows.RemoveAll(w => !w.IsVisible);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error detaching tab: {ex.Message}",
-                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            DetachTabByIndex(index);
         }
 
         #endregion
