@@ -508,6 +508,11 @@ namespace ExplorerPro.UI.MainWindow
         /// Main window view model for Chrome-style tab system
         /// </summary>
         private MainWindowViewModel _viewModel;
+        
+        /// <summary>
+        /// Window manager for detached windows
+        /// </summary>
+        private ExplorerPro.Core.TabManagement.IDetachedWindowManager _windowManager;
 
         #endregion
 
@@ -1643,8 +1648,19 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         protected override void OnClosed(EventArgs e)
         {
-            _stateManager.TryTransitionTo(Core.WindowState.Disposed, out _);
-            base.OnClosed(e);
+            try
+            {
+                _windowManager?.UnregisterWindow(this);
+                _stateManager.TryTransitionTo(Core.WindowState.Disposed, out _);
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error during window close cleanup");
+            }
+            finally
+            {
+                base.OnClosed(e);
+            }
         }
 
         #endregion
@@ -1688,6 +1704,9 @@ namespace ExplorerPro.UI.MainWindow
             {
                 // Check UI elements first
                 EnsureUIElementsAvailable();
+                
+                // Register with window manager
+                RegisterWithWindowManager();
                 
                 // Restore window layout
                 RestoreWindowLayout();
@@ -5852,6 +5871,15 @@ namespace ExplorerPro.UI.MainWindow
                 _navigationHistory.Clear();
                 _currentHistoryNode = null;
             }
+        }
+
+        /// <summary>
+        /// Registers this window with the detached window manager
+        /// </summary>
+        private void RegisterWithWindowManager()
+        {
+            _windowManager = App.WindowManager;
+            _windowManager?.RegisterWindow(this);
         }
 
         internal void SetupDragDrop()

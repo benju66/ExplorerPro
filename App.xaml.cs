@@ -29,6 +29,10 @@ namespace ExplorerPro
         public static PinnedManager? PinnedManager { get; private set; }
         public static UndoManager? UndoManager { get; private set; }
         public static RecurringTaskManager? RecurringTaskManager { get; private set; }
+        
+        // Tab management services
+        public static ExplorerPro.Core.TabManagement.IDetachedWindowManager? WindowManager { get; private set; }
+        public static ExplorerPro.Core.TabManagement.TabOperationsManager? TabOperationsManager { get; private set; }
 
         // Logger factory for dependency injection
         private static ILoggerFactory? _loggerFactory;
@@ -466,12 +470,36 @@ namespace ExplorerPro
                 InitializePinnedManager();
                 InitializeRecurringTaskManager();
                 InitializeUndoManager();
+                InitializeTabManagementServices();
                 
                 Console.WriteLine("All services initialized successfully");
             }
             catch (Exception ex)
             {
                 HandleStartupError(ex, "Error initializing application services");
+            }
+        }
+
+        private void InitializeTabManagementServices()
+        {
+            try
+            {
+                // Initialize window manager
+                var windowManagerLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.DetachedWindowManager>();
+                WindowManager = new ExplorerPro.Core.TabManagement.DetachedWindowManager(windowManagerLogger);
+                
+                // Initialize tab operations manager
+                var tabOpsLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.TabOperationsManager>();
+                TabOperationsManager = new ExplorerPro.Core.TabManagement.TabOperationsManager(tabOpsLogger, WindowManager);
+                
+                Console.WriteLine("Tab management services initialized successfully");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error initializing tab management services: {ex.Message}");
+                // Set to null on failure
+                WindowManager = null;
+                TabOperationsManager = null;
             }
         }
         
@@ -679,6 +707,33 @@ namespace ExplorerPro
         private void DisposeServices()
         {
             Console.WriteLine("Disposing global services...");
+            
+            try
+            {
+                // Dispose tab management services first
+                if (TabOperationsManager != null)
+                {
+                    Console.WriteLine("TabOperationsManager reference cleared");
+                    TabOperationsManager = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error clearing TabOperationsManager: {ex.Message}");
+            }
+            
+            try
+            {
+                if (WindowManager != null)
+                {
+                    Console.WriteLine("WindowManager reference cleared");
+                    WindowManager = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error clearing WindowManager: {ex.Message}");
+            }
             
             try
             {
