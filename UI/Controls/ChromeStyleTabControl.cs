@@ -4,6 +4,8 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -1092,6 +1094,184 @@ namespace ExplorerPro.UI.Controls
                 SelectedItem = tabItem;
                 SelectedTabItem.UpdateLastAccessed();
             }
+        }
+
+        #endregion
+
+        #region Animation Support
+
+        /// <summary>
+        /// Animates tab reordering with smooth transitions
+        /// </summary>
+        private void AnimateTabReorder(TabItem tab, int fromIndex, int toIndex)
+        {
+            if (Math.Abs(fromIndex - toIndex) == 0) return;
+
+            // Calculate positions
+            double tabWidth = tab.ActualWidth;
+            double fromX = fromIndex * tabWidth;
+            double toX = toIndex * tabWidth;
+
+            // Create transform if needed
+            if (!(tab.RenderTransform is TranslateTransform transform))
+            {
+                transform = new TranslateTransform();
+                tab.RenderTransform = transform;
+            }
+
+            // Animate the movement
+            var animation = new DoubleAnimation
+            {
+                From = fromX - toX,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(200),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+            };
+
+            animation.Completed += (s, e) =>
+            {
+                tab.RenderTransform = null;
+            };
+
+            transform.BeginAnimation(TranslateTransform.XProperty, animation);
+        }
+
+        /// <summary>
+        /// Shows a visual glow effect at the drop point
+        /// </summary>
+        private void ShowDropGlow(Point dropPoint)
+        {
+            // Create glow effect at drop point
+            var glow = new Border
+            {
+                Width = 100,
+                Height = 40,
+                Background = new RadialGradientBrush(
+                    Color.FromArgb(100, 0, 120, 212),
+                    Colors.Transparent),
+                IsHitTestVisible = false
+            };
+
+            // Position and animate
+            Canvas.SetLeft(glow, dropPoint.X - 50);
+            Canvas.SetTop(glow, dropPoint.Y - 20);
+
+            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150));
+            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(300));
+            fadeOut.BeginTime = TimeSpan.FromMilliseconds(150);
+
+            glow.BeginAnimation(OpacityProperty, fadeIn);
+            glow.BeginAnimation(OpacityProperty, fadeOut);
+        }
+
+        #endregion
+
+        #region Accessibility
+
+        /// <summary>
+        /// Announces drag operations to screen readers
+        /// </summary>
+        private void AnnounceOperation(string message)
+        {
+            if (AutomationPeer.ListenerExists(AutomationEvents.LiveRegionChanged))
+            {
+                var peer = UIElementAutomationPeer.FromElement(this);
+                peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+            }
+        }
+
+        /// <summary>
+        /// Keyboard navigation for drag operations
+        /// </summary>
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+
+            if (SelectedItem is TabItem selectedTab && selectedTab.Tag is TabItemModel tabModel)
+            {
+                bool handled = false;
+
+                // Alt+Arrow keys for reordering
+                if (Keyboard.Modifiers == ModifierKeys.Alt)
+                {
+                    switch (e.Key)
+                    {
+                        case Key.Left:
+                            handled = MoveTabLeft(tabModel);
+                            break;
+                        case Key.Right:
+                            handled = MoveTabRight(tabModel);
+                            break;
+                    }
+                }
+                // Ctrl+Shift+N for detach
+                else if (e.Key == Key.N && 
+                         Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+                {
+                    handled = DetachSelectedTab();
+                }
+
+                if (handled)
+                {
+                    e.Handled = true;
+                    AnnounceOperation($"Tab {tabModel.Title} moved");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Moves the selected tab to the left
+        /// </summary>
+        private bool MoveTabLeft(TabItemModel tab)
+        {
+            var currentIndex = GetTabIndex(tab);
+            if (currentIndex > 0)
+            {
+                return _tabOperationsManager?.ReorderTab(this, tab, currentIndex - 1) ?? false;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Moves the selected tab to the right
+        /// </summary>
+        private bool MoveTabRight(TabItemModel tab)
+        {
+            var currentIndex = GetTabIndex(tab);
+            if (currentIndex < Items.Count - 1)
+            {
+                return _tabOperationsManager?.ReorderTab(this, tab, currentIndex + 1) ?? false;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Detaches the selected tab to a new window
+        /// </summary>
+        private bool DetachSelectedTab()
+        {
+            if (SelectedItem is TabItem tabItem && Items.Count > 1)
+            {
+                var window = Window.GetWindow(this);
+                var mainWindow = window as MainWindow.MainWindow;
+                return mainWindow?.DetachTabToNewWindow(tabItem) != null;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Gets the index of a tab by its model
+        /// </summary>
+        private int GetTabIndex(TabItemModel tab)
+        {
+            for (int i = 0; i < Items.Count; i++)
+            {
+                if (Items[i] is TabItem tabItem && tabItem.Tag == tab)
+                {
+                    return i;
+                }
+            }
+            return -1;
         }
 
         #endregion
