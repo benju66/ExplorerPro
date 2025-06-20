@@ -513,6 +513,8 @@ namespace ExplorerPro.UI.MainWindow
         /// Window manager for detached windows
         /// </summary>
         private ExplorerPro.Core.TabManagement.IDetachedWindowManager _windowManager;
+        private ExplorerPro.Core.TabManagement.TabOperationsManager _tabOperationsManager;
+        private ExplorerPro.Core.TabManagement.ITabDragDropService _dragDropService;
 
         #endregion
 
@@ -823,6 +825,9 @@ namespace ExplorerPro.UI.MainWindow
                 
                 // Phase 4: Setup Chrome-style tab events
                 SetupChromeStyleTabEvents();
+                
+                // Phase 7: Initialize tab management services
+                InitializeTabManagement();
                 
                 // Phase 5: Defer all other initialization
                 Loaded += OnWindowLoadedAsync;
@@ -3159,6 +3164,14 @@ namespace ExplorerPro.UI.MainWindow
         /// <returns>The new window containing the detached tab, or null on failure</returns>
         public MainWindow DetachTabToNewWindow(TabItem tabItem)
         {
+            // Try using service-based approach first
+            if (tabItem?.Tag is TabItemModel serviceTabModel && _windowManager != null)
+            {
+                var newWindow = _windowManager.DetachTab(serviceTabModel, this);
+                return newWindow as MainWindow;
+            }
+            
+            // Fallback to original implementation if services not available
             if (tabItem == null || MainTabs.Items.Count <= 1)
             {
                 _instanceLogger?.LogWarning("Cannot detach: invalid tab or last remaining tab");
@@ -6622,6 +6635,68 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         #endregion
+
+        /// <summary>
+        /// Initialize comprehensive tab management services and wire up all components
+        /// </summary>
+        private void InitializeTabManagement()
+        {
+            try
+            {
+                // Get services from App static properties
+                _windowManager = App.WindowManager;
+                _tabOperationsManager = App.TabOperationsManager;
+                _dragDropService = App.DragDropService;
+
+                // Register this window with the window manager
+                _windowManager?.RegisterWindow(this);
+
+                // Configure ChromeStyleTabControl if available
+                if (MainTabs is ChromeStyleTabControl chromeTabControl)
+                {
+                    chromeTabControl.TabOperationsManager = _tabOperationsManager;
+                    chromeTabControl.DragDropService = _dragDropService;
+                    
+                    // Wire up drag events to service using weak event pattern
+                    SubscribeToEventWeak<TabDragEventArgs>(chromeTabControl, nameof(ChromeStyleTabControl.TabDragStarted), OnTabDragStarted);
+                    SubscribeToEventWeak<TabDragEventArgs>(chromeTabControl, nameof(ChromeStyleTabControl.TabDragging), OnTabDragging);
+                    SubscribeToEventWeak<TabDragEventArgs>(chromeTabControl, nameof(ChromeStyleTabControl.TabDragCompleted), OnTabDragCompleted);
+                }
+
+                _instanceLogger?.LogInformation("Tab management initialized successfully");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Failed to initialize tab management");
+            }
+        }
+
+        /// <summary>
+        /// Handles tab drag start event
+        /// </summary>
+        private void OnTabDragStarted(object sender, TabDragEventArgs e)
+        {
+            // Service already handles most of this in ChromeStyleTabControl
+            _instanceLogger?.LogDebug($"Tab drag started: {e.TabItem.Title}");
+        }
+
+        /// <summary>
+        /// Handles tab dragging event
+        /// </summary>
+        private void OnTabDragging(object sender, TabDragEventArgs e)
+        {
+            // Service handles updates
+            _instanceLogger?.LogDebug($"Tab dragging: {e.TabItem.Title}");
+        }
+
+        /// <summary>
+        /// Handles tab drag completion event
+        /// </summary>
+        private void OnTabDragCompleted(object sender, TabDragEventArgs e)
+        {
+            // Service handles completion
+            _instanceLogger?.LogDebug($"Tab drag completed: {e.TabItem.Title}");
+        }
 
     }
 

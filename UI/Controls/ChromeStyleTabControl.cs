@@ -437,29 +437,33 @@ namespace ExplorerPro.UI.Controls
 
             try
             {
-                var operationType = _currentDragOperation.CurrentOperationType;
+                var targetWindow = WindowLocator.FindWindowUnderPoint(screenPoint);
                 bool success = false;
 
-                switch (operationType)
+                // Try service first
+                if (_dragDropService != null)
                 {
-                    case DragOperationType.Reorder:
-                        success = HandleReorderDrop(screenPoint);
-                        break;
-                        
-                    case DragOperationType.Detach:
-                        success = HandleDetachDrop(screenPoint);
-                        break;
-                        
-                    case DragOperationType.Transfer:
-                        success = HandleTransferDrop(screenPoint);
-                        break;
-                }
-
-                // Complete via service if available
-                if (_dragDropService != null && !success)
-                {
-                    var targetWindow = FindWindowUnderPoint(screenPoint);
                     success = _dragDropService.CompleteDrag(targetWindow, screenPoint);
+                }
+                else
+                {
+                    // Fallback to local handling
+                    var operationType = _currentDragOperation.CurrentOperationType;
+                    
+                    switch (operationType)
+                    {
+                        case DragOperationType.Reorder:
+                            success = HandleReorderDrop(screenPoint);
+                            break;
+                            
+                        case DragOperationType.Detach:
+                            success = HandleDetachDrop(screenPoint);
+                            break;
+                            
+                        case DragOperationType.Transfer:
+                            success = HandleTransferDrop(screenPoint);
+                            break;
+                    }
                 }
 
                 // Raise completed event
@@ -470,11 +474,17 @@ namespace ExplorerPro.UI.Controls
                         _dragStartPoint.Value,
                         screenPoint));
                 }
+
+                if (success)
+                {
+                    _logger?.LogInformation($"Drag operation completed successfully");
+                }
             }
             finally
             {
                 EndDragVisualFeedback();
                 Mouse.OverrideCursor = null;
+                ResetDragState();
             }
         }
 
