@@ -728,6 +728,17 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
+            // Initialize services from App static properties
+            if (_tabOperationsManager == null)
+            {
+                _tabOperationsManager = ExplorerPro.App.TabOperationsManager;
+            }
+            
+            if (_dragDropService == null)
+            {
+                _dragDropService = ExplorerPro.App.DragDropService;
+            }
+            
             // Ensure we have at least one tab if none exist
             if (TabItems?.Count == 0 && AllowAddNew)
             {

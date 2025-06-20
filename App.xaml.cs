@@ -33,6 +33,7 @@ namespace ExplorerPro
         // Tab management services
         public static ExplorerPro.Core.TabManagement.IDetachedWindowManager? WindowManager { get; private set; }
         public static ExplorerPro.Core.TabManagement.TabOperationsManager? TabOperationsManager { get; private set; }
+        public static ExplorerPro.Core.TabManagement.ITabDragDropService? DragDropService { get; private set; }
 
         // Logger factory for dependency injection
         private static ILoggerFactory? _loggerFactory;
@@ -492,6 +493,10 @@ namespace ExplorerPro
                 var tabOpsLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.TabOperationsManager>();
                 TabOperationsManager = new ExplorerPro.Core.TabManagement.TabOperationsManager(tabOpsLogger, WindowManager);
                 
+                // Initialize drag drop service
+                var dragDropLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.TabDragDropService>();
+                DragDropService = new ExplorerPro.Core.TabManagement.TabDragDropService(dragDropLogger, WindowManager, TabOperationsManager);
+                
                 Console.WriteLine("Tab management services initialized successfully");
             }
             catch (Exception ex)
@@ -500,6 +505,7 @@ namespace ExplorerPro
                 // Set to null on failure
                 WindowManager = null;
                 TabOperationsManager = null;
+                DragDropService = null;
             }
         }
         
@@ -711,6 +717,19 @@ namespace ExplorerPro
             try
             {
                 // Dispose tab management services first
+                if (DragDropService != null)
+                {
+                    Console.WriteLine("DragDropService reference cleared");
+                    DragDropService = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error clearing DragDropService: {ex.Message}");
+            }
+            
+            try
+            {
                 if (TabOperationsManager != null)
                 {
                     Console.WriteLine("TabOperationsManager reference cleared");
