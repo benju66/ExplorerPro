@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows;
 using System.Windows.Media;
 
 namespace ExplorerPro.Models
@@ -156,6 +157,61 @@ namespace ExplorerPro.Models
         {
             get => _isClosable;
             set => SetProperty(ref _isClosable, value);
+        }
+
+        #endregion
+
+        #region Drag and Drop Support
+
+        private bool _isDragging;
+        private Window _sourceWindow;
+        private int _originalIndex;
+        private Point _dragOffset;
+        private bool _isDropTarget;
+
+        /// <summary>
+        /// Indicates if this tab is currently being dragged
+        /// </summary>
+        public bool IsDragging
+        {
+            get => _isDragging;
+            set => SetProperty(ref _isDragging, value);
+        }
+
+        /// <summary>
+        /// The window this tab originated from during drag
+        /// </summary>
+        public Window SourceWindow
+        {
+            get => _sourceWindow;
+            set => SetProperty(ref _sourceWindow, value);
+        }
+
+        /// <summary>
+        /// Original index before drag operation
+        /// </summary>
+        public int OriginalIndex
+        {
+            get => _originalIndex;
+            set => SetProperty(ref _originalIndex, value);
+        }
+
+        /// <summary>
+        /// Offset from tab origin during drag
+        /// </summary>
+        public Point DragOffset
+        {
+            get => _dragOffset;
+            set => SetProperty(ref _dragOffset, value);
+        }
+
+        /// <summary>
+        /// Indicates if this tab position is a valid drop target
+        /// </summary>
+        public bool IsDropTarget
+        {
+            get => _isDropTarget;
+            set => SetProperty(ref _isDropTarget, value);
         }
 
         #endregion
