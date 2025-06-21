@@ -814,15 +814,22 @@ namespace ExplorerPro.UI.MainWindow
                     // Apply visual feedback - make tab slightly transparent
                     _draggedItem.Opacity = 0.7;
                     
-                    // Start drag-drop operation
-                    DataObject dragData = new DataObject("TabItem", _draggedItem);
-                    var result = DragDrop.DoDragDrop(_draggedItem, dragData, DragDropEffects.Move);
-                    
-                    // Restore opacity after drag
-                    _draggedItem.Opacity = 1.0;
-                    
-                    _isDragging = false;
-                    _draggedItem = null;
+                    try
+                    {
+                        // Start drag-drop operation
+                        DataObject dragData = new DataObject("TabItem", _draggedItem);
+                        var result = DragDrop.DoDragDrop(_draggedItem, dragData, DragDropEffects.Move);
+                    }
+                    finally
+                    {
+                        // ALWAYS restore state, even if drag operation fails
+                        if (_draggedItem != null)
+                        {
+                            _draggedItem.Opacity = 1.0;
+                        }
+                        _isDragging = false;
+                        _draggedItem = null;
+                    }
                 }
             }
         }

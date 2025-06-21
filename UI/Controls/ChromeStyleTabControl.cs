@@ -320,19 +320,23 @@ namespace ExplorerPro.UI.Controls
         {
             base.OnPreviewMouseLeftButtonUp(e);
 
-            if (_isDragging)
+            try
             {
-                CompleteDragOperation(e.GetPosition(null));
+                if (_isDragging)
+                {
+                    CompleteDragOperation(e.GetPosition(null));
+                }
+                else if (_draggedTab != null)
+                {
+                    // Just a click, not a drag
+                    SelectedItem = _draggedTab;
+                }
             }
-            else if (_draggedTab != null)
+            finally
             {
-                // Just a click, not a drag
-                SelectedItem = _draggedTab;
+                // ALWAYS reset state, even if operation fails
+                ResetDragState();
             }
-
-            // Reset drag state
-            ResetDragState();
-            ReleaseMouseCapture();
         }
 
         /// <summary>
@@ -497,25 +501,31 @@ namespace ExplorerPro.UI.Controls
         {
             if (!_isDragging) return;
 
-            // Cancel via service
-            _dragDropService?.CancelDrag();
-
-            // Reset visual state
-            EndDragVisualFeedback();
-            
-            // Reset tab to original position if needed
-            if (_currentDragOperation != null && _draggedTab != null)
+            try
             {
-                var currentIndex = Items.IndexOf(_draggedTab);
-                if (currentIndex != _currentDragOperation.OriginalIndex)
+                // Cancel via service
+                _dragDropService?.CancelDrag();
+
+                // Reset visual state
+                EndDragVisualFeedback();
+                
+                // Reset tab to original position if needed
+                if (_currentDragOperation != null && _draggedTab != null)
                 {
-                    _tabOperationsManager?.ReorderTab(this, 
-                        _draggedTab.Tag as TabItemModel, 
-                        _currentDragOperation.OriginalIndex);
+                    var currentIndex = Items.IndexOf(_draggedTab);
+                    if (currentIndex != _currentDragOperation.OriginalIndex)
+                    {
+                        _tabOperationsManager?.ReorderTab(this, 
+                            _draggedTab.Tag as TabItemModel, 
+                            _currentDragOperation.OriginalIndex);
+                    }
                 }
             }
-
-            ResetDragState();
+            finally
+            {
+                // ALWAYS ensure cleanup happens
+                ResetDragState();
+            }
         }
 
         /// <summary>
@@ -680,6 +690,23 @@ namespace ExplorerPro.UI.Controls
 
         private void ResetDragState()
         {
+            // Reset visual states before nulling references
+            if (_draggedTab != null)
+            {
+                _draggedTab.Opacity = 1.0;
+                _draggedTab.RenderTransform = null;
+            }
+            
+            // Reset cursor
+            Mouse.OverrideCursor = null;
+            
+            // CRITICAL: Release mouse capture to allow future drags
+            if (IsMouseCaptured)
+            {
+                ReleaseMouseCapture();
+            }
+            
+            // Clear state variables
             _dragStartPoint = null;
             _draggedTab = null;
             _isDragging = false;
