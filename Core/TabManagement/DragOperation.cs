@@ -31,6 +31,11 @@ namespace ExplorerPro.Core.TabManagement
         public Point CurrentPoint { get; set; }
         
         /// <summary>
+        /// Current screen coordinates for operation detection
+        /// </summary>
+        public Point CurrentScreenPoint { get; set; }
+        
+        /// <summary>
         /// Whether the tab has been torn off
         /// </summary>
         public bool IsTornOff { get; set; }

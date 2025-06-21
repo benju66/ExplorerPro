@@ -3,6 +3,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using ExplorerPro.UI.MainWindow;
+using ExplorerPro.UI.Controls;
+using ExplorerPro.Core.TabManagement;
+using ExplorerPro.Models;
 
 namespace ExplorerPro.Tests
 {
@@ -26,6 +29,9 @@ namespace ExplorerPro.Tests
                 Console.WriteLine();
                 
                 TestContainerCollection();
+                Console.WriteLine();
+                
+                await RunPhase2OperationDetectionTests();
                 Console.WriteLine();
                 
                 Console.WriteLine("✅ Phase 2 Validation Complete - All tests passed!");
@@ -189,6 +195,176 @@ namespace ExplorerPro.Tests
             {
                 Console.WriteLine($"⚠️  Warning: {finalCount - initialCount} containers may still be referenced");
             }
+        }
+
+        /// <summary>
+        /// Tests Phase 2 operation detection and coordinate system improvements
+        /// </summary>
+        public static async Task RunPhase2OperationDetectionTests()
+        {
+            Console.WriteLine("🔍 Testing Phase 2 Operation Detection & Coordinate Systems...");
+            
+            try
+            {
+                TestTabStripHeightConstant();
+                TestTearOffThresholdConstant();
+                TestDragOperationProperties();
+                TestDragOperationTypes();
+                TestChromeStyleTabControlInitialization();
+                
+                Console.WriteLine("✅ Phase 2 Operation Detection tests passed");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Phase 2 Operation Detection test failed: {ex.Message}");
+                throw;
+            }
+        }
+
+        private static void TestTabStripHeightConstant()
+        {
+            Console.WriteLine("  🔍 Testing TAB_STRIP_HEIGHT constant...");
+            
+            var tabStripHeightField = typeof(ChromeStyleTabControl)
+                .GetField("TAB_STRIP_HEIGHT", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            
+            if (tabStripHeightField == null)
+            {
+                throw new Exception("TAB_STRIP_HEIGHT constant not found");
+            }
+            
+            var value = (double)tabStripHeightField.GetValue(null);
+            if (value != 35.0)
+            {
+                throw new Exception($"TAB_STRIP_HEIGHT should be 35.0, but got {value}");
+            }
+            
+            if (value <= 0 || value >= 100)
+            {
+                throw new Exception($"TAB_STRIP_HEIGHT value {value} is outside reasonable bounds");
+            }
+            
+            Console.WriteLine($"    ✅ TAB_STRIP_HEIGHT correctly set to {value}px");
+        }
+
+        private static void TestTearOffThresholdConstant()
+        {
+            Console.WriteLine("  🔍 Testing TEAR_OFF_THRESHOLD constant...");
+            
+            var tearOffThresholdField = typeof(ChromeStyleTabControl)
+                .GetField("TEAR_OFF_THRESHOLD", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            
+            if (tearOffThresholdField == null)
+            {
+                throw new Exception("TEAR_OFF_THRESHOLD constant not found");
+            }
+            
+            var value = (double)tearOffThresholdField.GetValue(null);
+            if (value != 40.0)
+            {
+                throw new Exception($"TEAR_OFF_THRESHOLD should be 40.0, but got {value}");
+            }
+            
+            Console.WriteLine($"    ✅ TEAR_OFF_THRESHOLD correctly set to {value}px");
+        }
+
+        private static void TestDragOperationProperties()
+        {
+            Console.WriteLine("  🔍 Testing DragOperation properties...");
+            
+            var dragOperation = new DragOperation();
+            var testPoint = new Point(100, 50);
+            
+            // Test CurrentScreenPoint property
+            dragOperation.CurrentScreenPoint = testPoint;
+            if (!dragOperation.CurrentScreenPoint.Equals(testPoint))
+            {
+                throw new Exception("CurrentScreenPoint property not working correctly");
+            }
+            
+            // Test state tracking
+            dragOperation.CurrentOperationType = DragOperationType.Reorder;
+            dragOperation.IsActive = true;
+            
+            if (dragOperation.CurrentOperationType != DragOperationType.Reorder)
+            {
+                throw new Exception("CurrentOperationType property not working correctly");
+            }
+            
+            if (!dragOperation.IsActive)
+            {
+                throw new Exception("IsActive property not working correctly");
+            }
+            
+            Console.WriteLine("    ✅ DragOperation properties working correctly");
+        }
+
+        private static void TestDragOperationTypes()
+        {
+            Console.WriteLine("  🔍 Testing DragOperationType enumeration...");
+            
+            // Verify all operation types exist
+            if (!System.Enum.IsDefined(typeof(DragOperationType), DragOperationType.None))
+            {
+                throw new Exception("DragOperationType.None not defined");
+            }
+            
+            if (!System.Enum.IsDefined(typeof(DragOperationType), DragOperationType.Reorder))
+            {
+                throw new Exception("DragOperationType.Reorder not defined");
+            }
+            
+            if (!System.Enum.IsDefined(typeof(DragOperationType), DragOperationType.Detach))
+            {
+                throw new Exception("DragOperationType.Detach not defined");
+            }
+            
+            if (!System.Enum.IsDefined(typeof(DragOperationType), DragOperationType.Transfer))
+            {
+                throw new Exception("DragOperationType.Transfer not defined");
+            }
+            
+            Console.WriteLine("    ✅ All DragOperationType values are defined");
+        }
+
+        private static void TestChromeStyleTabControlInitialization()
+        {
+            Console.WriteLine("  🔍 Testing ChromeStyleTabControl initialization...");
+            
+            var tabControl = new ChromeStyleTabControl();
+            
+            if (tabControl == null)
+            {
+                throw new Exception("ChromeStyleTabControl failed to initialize");
+            }
+            
+            if (tabControl.TabItems == null)
+            {
+                throw new Exception("TabItems collection not initialized");
+            }
+            
+            if (!tabControl.AllowAddNew)
+            {
+                throw new Exception("AllowAddNew should default to true");
+            }
+            
+            if (!tabControl.AllowDelete)
+            {
+                throw new Exception("AllowDelete should default to true");
+            }
+            
+            // Test that drag-related properties can be set without exceptions
+            try
+            {
+                tabControl.TabOperationsManager = null;
+                tabControl.DragDropService = null;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to set drag-related properties: {ex.Message}");
+            }
+            
+            Console.WriteLine("    ✅ ChromeStyleTabControl initialization successful");
         }
     }
 } 

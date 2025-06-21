@@ -241,10 +241,15 @@ namespace ExplorerPro.UI.Controls
         private TabOperationsManager _tabOperationsManager;
         private ITabDragDropService _dragDropService;
         private DragOperation _currentDragOperation;
+        
+        // Visual indicator fields
+        private TabDropInsertionIndicator _insertionIndicator;
+        private Window _detachPreviewWindow;
 
         // Thresholds for drag operations
         private const double DRAG_THRESHOLD = 5.0;
         private const double TEAR_OFF_THRESHOLD = 40.0;
+        private const double TAB_STRIP_HEIGHT = 35.0;
 
         /// <summary>
         /// Gets or sets the tab operations manager
@@ -405,17 +410,25 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         private void UpdateDragOperation(Point screenPoint)
         {
-            if (_currentDragOperation == null || !_isDragging) return;
+            if (!_isDragging || _currentDragOperation == null)
+                return;
 
-            _currentDragOperation.CurrentPoint = screenPoint;
-            
-            // Determine operation type based on position
+            // Store previous operation type to detect changes
+            var previousType = _currentDragOperation.CurrentOperationType;
             var operationType = DetermineOperationType(screenPoint);
             
-            if (operationType != _currentDragOperation.CurrentOperationType)
+            // Update operation state
+            _currentDragOperation.CurrentOperationType = operationType;
+            _currentDragOperation.CurrentPoint = screenPoint;
+            _currentDragOperation.CurrentScreenPoint = screenPoint;
+            
+            // Only update visuals if operation type changed
+            if (previousType != operationType)
             {
-                _currentDragOperation.CurrentOperationType = operationType;
                 UpdateDragVisualFeedback(operationType);
+                
+                // Log operation type change for debugging
+                _logger?.LogDebug($"Drag operation changed from {previousType} to {operationType}");
             }
 
             // Update via service if available
@@ -533,31 +546,51 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         private DragOperationType DetermineOperationType(Point screenPoint)
         {
-            // Check if we're over this tab control
-            var localPoint = PointFromScreen(screenPoint);
-            var bounds = new Rect(0, 0, ActualWidth, ActualHeight);
+            // CRITICAL: Get the actual tab strip bounds, not the entire control
+            var tabStripHeight = TAB_STRIP_HEIGHT; // Height of tab headers
             
-            if (bounds.Contains(localPoint))
+            // Convert to local coordinates relative to this control
+            Point localPoint;
+            try 
             {
-                // Still within the same tab control - reorder
+                localPoint = PointFromScreen(screenPoint);
+            }
+            catch
+            {
+                // If coordinate conversion fails, default to no operation
+                return DragOperationType.None;
+            }
+            
+            // Define the bounds for tab reordering (just the tab strip area)
+            var tabStripBounds = new Rect(0, 0, ActualWidth, tabStripHeight);
+            
+            if (tabStripBounds.Contains(localPoint))
+            {
+                // Cursor is within tab strip - this is a reorder operation
                 return DragOperationType.Reorder;
             }
-
-            // Check distance from original position
-            var distance = (screenPoint - _currentDragOperation.StartPoint).Length;
-            if (distance > TEAR_OFF_THRESHOLD)
+            
+            // Check vertical distance for detach
+            var verticalDistance = Math.Abs(localPoint.Y - tabStripHeight / 2);
+            if (verticalDistance > TEAR_OFF_THRESHOLD)
             {
                 // Check if over another window
                 var targetWindow = FindWindowUnderPoint(screenPoint);
-                if (targetWindow != null && targetWindow != _currentDragOperation.SourceWindow)
+                if (targetWindow != null && targetWindow != Window.GetWindow(this))
                 {
-                    return DragOperationType.Transfer;
+                    // Over another window - transfer operation
+                    var targetTabControl = FindTabControlInWindow(targetWindow);
+                    if (targetTabControl != null)
+                    {
+                        return DragOperationType.Transfer;
+                    }
                 }
                 
-                // Far from any window - detach
+                // Not over another valid window - detach operation
                 return DragOperationType.Detach;
             }
-
+            
+            // Close to tab strip but not quite inside - no operation yet
             return DragOperationType.None;
         }
 
