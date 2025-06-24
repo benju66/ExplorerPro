@@ -310,60 +310,109 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         protected override void OnMouseMove(MouseEventArgs e)
         {
-            base.OnMouseMove(e);
-
-            if (_dragStartPoint.HasValue && e.LeftButton == MouseButtonState.Pressed && !_isDragging)
+            try
             {
-                var currentPoint = e.GetPosition(this);
-                var dragDistance = currentPoint - _dragStartPoint.Value;
+                base.OnMouseMove(e);
 
-                // Check if we've moved enough to start dragging
-                if (Math.Abs(dragDistance.X) > DRAG_THRESHOLD ||
-                    Math.Abs(dragDistance.Y) > DRAG_THRESHOLD)
+                if (_dragStartPoint.HasValue && e.LeftButton == MouseButtonState.Pressed && !_isDragging)
                 {
-                    // Release mouse capture before starting drag operation
-                    if (IsMouseCaptured)
-                    {
-                        ReleaseMouseCapture();
-                    }
-
                     try
                     {
-                        StartDragOperation();
+                        var currentPoint = e.GetPosition(this);
+                        var dragDistance = currentPoint - _dragStartPoint.Value;
+
+                        // Check if we've moved enough to start dragging
+                        if (Math.Abs(dragDistance.X) > DRAG_THRESHOLD ||
+                            Math.Abs(dragDistance.Y) > DRAG_THRESHOLD)
+                        {
+                            // Release mouse capture before starting drag operation
+                            if (IsMouseCaptured)
+                            {
+                                try
+                                {
+                                    ReleaseMouseCapture();
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger?.LogWarning(ex, "Error releasing mouse capture before drag start");
+                                }
+                            }
+
+                            try
+                            {
+                                StartDragOperation();
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger?.LogError(ex, "Error starting drag operation from mouse move");
+                                // Cancel drag operation on error
+                                CancelDrag();
+                            }
+                        }
                     }
-                    finally
+                    catch (Exception ex)
                     {
-                        // Ensure cleanup happens even if drag operation fails
-                        if (_draggedTab != null)
+                        _logger?.LogError(ex, "Error processing mouse move for drag initiation");
+                        CancelDrag();
+                    }
+                }
+                else if (_isDragging)
+                {
+                    try
+                    {
+                        var screenPoint = e.GetPosition(null);
+                        
+                        try
                         {
-                            _draggedTab.Opacity = 1.0;
+                            UpdateDragOperation(screenPoint);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning(ex, "Error updating drag operation during mouse move");
                         }
                         
-                        if (IsMouseCaptured)
+                        // Update drag visual position to follow cursor
+                        try
                         {
-                            ReleaseMouseCapture();
+                            if (_dragVisualWindow != null && _dragVisualWindow.IsVisible)
+                            {
+                                UpdateDragVisualPosition(screenPoint);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning(ex, "Error updating drag visual position during mouse move");
                         }
                         
-                        // Reset drag state
-                        _dragStartPoint = null;
-                        _draggedTab = null;
-                        _isDragging = false;
+                        // Update insertion indicator based on drop validity
+                        try
+                        {
+                            UpdateInsertionIndicatorVisibility(screenPoint);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning(ex, "Error updating insertion indicator during mouse move");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogError(ex, "Error processing mouse move during drag operation");
+                        CancelDrag();
                     }
                 }
             }
-            else if (_isDragging)
+            catch (Exception ex)
             {
-                var screenPoint = e.GetPosition(null);
-                UpdateDragOperation(screenPoint);
-                
-                // Update drag visual position to follow cursor
-                if (_dragVisualWindow != null && _dragVisualWindow.IsVisible)
+                _logger?.LogError(ex, "Critical error in OnMouseMove");
+                // Emergency cleanup
+                try
                 {
-                    UpdateDragVisualPosition(screenPoint);
+                    CancelDrag();
                 }
-                
-                // Update insertion indicator based on drop validity
-                UpdateInsertionIndicatorVisibility(screenPoint);
+                catch (Exception cancelEx)
+                {
+                    _logger?.LogError(cancelEx, "Critical error during emergency cleanup in OnMouseMove");
+                }
             }
         }
 
@@ -372,25 +421,68 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
         {
-            base.OnMouseLeftButtonUp(e);
-
             try
             {
-                // Complete any ongoing drag operation
-                if (_isDragging)
+                base.OnMouseLeftButtonUp(e);
+
+                try
                 {
-                    CompleteDragOperation(e.GetPosition(null));
+                    // Complete any ongoing drag operation
+                    if (_isDragging)
+                    {
+                        try
+                        {
+                            CompleteDragOperation(e.GetPosition(null));
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogError(ex, "Error completing drag operation in OnMouseLeftButtonUp");
+                            CancelDrag();
+                        }
+                    }
+                    else if (_draggedTab != null)
+                    {
+                        try
+                        {
+                            // Just a click, not a drag - select the tab
+                            SelectedItem = _draggedTab;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning(ex, "Error selecting tab in OnMouseLeftButtonUp");
+                        }
+                    }
                 }
-                else if (_draggedTab != null)
+                finally
                 {
-                    // Just a click, not a drag - select the tab
-                    SelectedItem = _draggedTab;
+                    // ALWAYS ensure mouse capture is released and state is reset
+                    try
+                    {
+                        ResetDragState();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogError(ex, "Error resetting drag state in OnMouseLeftButtonUp");
+                        // Force reset critical state
+                        _isDragging = false;
+                        _dragStartPoint = null;
+                        _draggedTab = null;
+                        _currentDragOperation = null;
+                    }
                 }
             }
-            finally
+            catch (Exception ex)
             {
-                // ALWAYS ensure mouse capture is released and state is reset
-                ResetDragState();
+                _logger?.LogError(ex, "Critical error in OnMouseLeftButtonUp");
+                // Emergency cleanup
+                try
+                {
+                    CancelDrag();
+                }
+                catch (Exception cancelEx)
+                {
+                    _logger?.LogError(cancelEx, "Critical error during emergency cleanup in OnMouseLeftButtonUp");
+                }
             }
         }
 
@@ -462,56 +554,105 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         private void StartDragOperation()
         {
-            if (_draggedTab?.Tag is TabItemModel tabModel)
+            try
             {
-                _isDragging = true;
-                var window = Window.GetWindow(this);
-                
-                // Create drag operation state
-                _currentDragOperation = new DragOperation
+                if (_draggedTab?.Tag is TabItemModel tabModel)
                 {
-                    Tab = tabModel,
-                    SourceWindow = window,
-                    SourceTabControl = this,
-                    DraggedTabItem = _draggedTab,
-                    StartPoint = _dragStartPoint.Value,
-                    OriginalIndex = Items.IndexOf(_draggedTab),
-                    IsActive = true
-                };
+                    _isDragging = true;
+                    var window = Window.GetWindow(this);
+                    
+                    // Create drag operation state
+                    _currentDragOperation = new DragOperation
+                    {
+                        Tab = tabModel,
+                        SourceWindow = window,
+                        SourceTabControl = this,
+                        DraggedTabItem = _draggedTab,
+                        StartPoint = _dragStartPoint.Value,
+                        OriginalIndex = Items.IndexOf(_draggedTab),
+                        IsActive = true
+                    };
 
-                // Start visual feedback
-                StartDragVisualFeedback();
-                
-                // Create and show enhanced drag visual
-                _dragVisualWindow = CreateDragVisual(_draggedTab);
-                if (_dragVisualWindow != null)
-                {
-                    // Position at current cursor location
-                    var cursorPos = Mouse.GetPosition(null);
-                    _dragVisualWindow.Left = cursorPos.X - (_dragVisualWindow.Width / 2);
-                    _dragVisualWindow.Top = cursorPos.Y - 20;
-                    _dragVisualWindow.Show();
+                    // Start visual feedback
+                    try
+                    {
+                        StartDragVisualFeedback();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Error starting visual feedback during drag start");
+                    }
+                    
+                    // Create and show enhanced drag visual
+                    try
+                    {
+                        _dragVisualWindow = CreateDragVisual(_draggedTab);
+                        if (_dragVisualWindow != null)
+                        {
+                            // Position at current cursor location
+                            var cursorPos = Mouse.GetPosition(null);
+                            _dragVisualWindow.Left = cursorPos.X - (_dragVisualWindow.Width / 2);
+                            _dragVisualWindow.Top = cursorPos.Y - 20;
+                            _dragVisualWindow.Show();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Error creating drag visual during drag start");
+                        // Continue without visual - drag can still work
+                    }
+
+                    // Use drag service if available
+                    try
+                    {
+                        if (_dragDropService != null)
+                        {
+                            _dragDropService.StartDrag(tabModel, _dragStartPoint.Value, window);
+                        }
+                        else
+                        {
+                            // Local drag handling
+                            tabModel.IsDragging = true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Error starting drag service during drag start");
+                        // Fallback to local handling
+                        tabModel.IsDragging = true;
+                    }
+
+                    // Raise drag started event
+                    try
+                    {
+                        TabDragStarted?.Invoke(this, new TabDragEventArgs(
+                            tabModel, 
+                            _dragStartPoint.Value, 
+                            Mouse.GetPosition(null)));
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Error raising TabDragStarted event");
+                    }
+
+                    // Set cursor
+                    try
+                    {
+                        Mouse.OverrideCursor = Cursors.Hand;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Error setting cursor during drag start");
+                    }
+
+                    _logger?.LogDebug($"Drag operation started for tab '{tabModel.Title}'");
                 }
-
-                // Use drag service if available
-                if (_dragDropService != null)
-                {
-                    _dragDropService.StartDrag(tabModel, _dragStartPoint.Value, window);
-                }
-                else
-                {
-                    // Local drag handling
-                    tabModel.IsDragging = true;
-                }
-
-                // Raise drag started event
-                TabDragStarted?.Invoke(this, new TabDragEventArgs(
-                    tabModel, 
-                    _dragStartPoint.Value, 
-                    Mouse.GetPosition(null)));
-
-                // Set cursor
-                Mouse.OverrideCursor = Cursors.Hand;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Critical error during drag operation start");
+                // Cancel the drag operation on any critical error
+                CancelDrag();
             }
         }
 
@@ -520,40 +661,80 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         private void UpdateDragOperation(Point screenPoint)
         {
-            if (!_isDragging || _currentDragOperation == null)
-                return;
-
-            // Store previous operation type to detect changes
-            var previousType = _currentDragOperation.CurrentOperationType;
-            var operationType = DetermineOperationType(screenPoint);
-            
-            // Update operation state
-            _currentDragOperation.CurrentOperationType = operationType;
-            _currentDragOperation.CurrentPoint = screenPoint;
-            _currentDragOperation.CurrentScreenPoint = screenPoint;
-            
-            // Only update visuals if operation type changed
-            if (previousType != operationType)
+            try
             {
-                UpdateDragVisualFeedback(operationType);
+                if (!_isDragging || _currentDragOperation == null)
+                    return;
+
+                // Store previous operation type to detect changes
+                var previousType = _currentDragOperation.CurrentOperationType;
+                DragOperationType operationType;
                 
-                // Log operation type change for debugging
-                _logger?.LogDebug($"Drag operation changed from {previousType} to {operationType}");
-            }
+                try
+                {
+                    operationType = DetermineOperationType(screenPoint);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Error determining operation type during drag update");
+                    operationType = DragOperationType.Reorder; // Safe fallback
+                }
+                
+                // Update operation state
+                _currentDragOperation.CurrentOperationType = operationType;
+                _currentDragOperation.CurrentPoint = screenPoint;
+                _currentDragOperation.CurrentScreenPoint = screenPoint;
+                
+                // Only update visuals if operation type changed
+                if (previousType != operationType)
+                {
+                    try
+                    {
+                        UpdateDragVisualFeedback(operationType);
+                        
+                        // Log operation type change for debugging
+                        _logger?.LogDebug($"Drag operation changed from {previousType} to {operationType}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Error updating visual feedback during drag update");
+                    }
+                }
 
-            // Update via service if available
-            if (_dragDropService != null)
-            {
-                _dragDropService.UpdateDrag(screenPoint);
-            }
+                // Update via service if available
+                try
+                {
+                    if (_dragDropService != null)
+                    {
+                        _dragDropService.UpdateDrag(screenPoint);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Error updating drag service during drag update");
+                }
 
-            // Raise dragging event
-            if (_draggedTab?.Tag is TabItemModel tabModel)
+                // Raise dragging event
+                try
+                {
+                    if (_draggedTab?.Tag is TabItemModel tabModel)
+                    {
+                        TabDragging?.Invoke(this, new TabDragEventArgs(
+                            tabModel,
+                            _dragStartPoint.Value,
+                            screenPoint));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Error raising TabDragging event");
+                }
+            }
+            catch (Exception ex)
             {
-                TabDragging?.Invoke(this, new TabDragEventArgs(
-                    tabModel,
-                    _dragStartPoint.Value,
-                    screenPoint));
+                _logger?.LogError(ex, "Critical error during drag operation update");
+                // Cancel the drag operation on any critical error
+                CancelDrag();
             }
         }
 
@@ -564,56 +745,138 @@ namespace ExplorerPro.UI.Controls
         {
             if (_currentDragOperation == null || !_isDragging) return;
 
+            bool success = false;
+            
             try
             {
-                var targetWindow = WindowLocator.FindWindowUnderPoint(screenPoint);
-                bool success = false;
+                Window targetWindow = null;
+                
+                try
+                {
+                    targetWindow = WindowLocator.FindWindowUnderPoint(screenPoint);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Error finding target window during drag completion");
+                }
 
                 // Try service first
-                if (_dragDropService != null)
+                try
                 {
-                    success = _dragDropService.CompleteDrag(targetWindow, screenPoint);
-                }
-                else
-                {
-                    // Fallback to local handling
-                    var operationType = _currentDragOperation.CurrentOperationType;
-                    
-                    switch (operationType)
+                    if (_dragDropService != null)
                     {
-                        case DragOperationType.Reorder:
-                            success = HandleReorderDrop(screenPoint);
-                            break;
-                            
-                        case DragOperationType.Detach:
-                            success = HandleDetachDrop(screenPoint);
-                            break;
-                            
-                        case DragOperationType.Transfer:
-                            success = HandleTransferDrop(screenPoint);
-                            break;
+                        success = _dragDropService.CompleteDrag(targetWindow, screenPoint);
                     }
+                    else
+                    {
+                        // Fallback to local handling
+                        var operationType = _currentDragOperation.CurrentOperationType;
+                        
+                        switch (operationType)
+                        {
+                            case DragOperationType.Reorder:
+                                try
+                                {
+                                    success = HandleReorderDrop(screenPoint);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger?.LogError(ex, "Error handling reorder drop");
+                                }
+                                break;
+                                
+                            case DragOperationType.Detach:
+                                try
+                                {
+                                    success = HandleDetachDrop(screenPoint);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger?.LogError(ex, "Error handling detach drop");
+                                }
+                                break;
+                                
+                            case DragOperationType.Transfer:
+                                try
+                                {
+                                    success = HandleTransferDrop(screenPoint);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger?.LogError(ex, "Error handling transfer drop");
+                                }
+                                break;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Error executing drag completion logic");
                 }
 
                 // Raise completed event
-                if (_draggedTab?.Tag is TabItemModel tabModel)
+                try
                 {
-                    TabDragCompleted?.Invoke(this, new TabDragEventArgs(
-                        tabModel,
-                        _dragStartPoint.Value,
-                        screenPoint));
+                    if (_draggedTab?.Tag is TabItemModel tabModel)
+                    {
+                        TabDragCompleted?.Invoke(this, new TabDragEventArgs(
+                            tabModel,
+                            _dragStartPoint.Value,
+                            screenPoint));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Error raising TabDragCompleted event");
                 }
 
                 if (success)
                 {
                     _logger?.LogInformation($"Drag operation completed successfully");
                 }
+                else
+                {
+                    _logger?.LogWarning("Drag operation completed but was not successful");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Critical error during drag operation completion");
             }
             finally
             {
-                EndDragVisualFeedback();
-                Mouse.OverrideCursor = null;
-                ResetDragState();
+                // ALWAYS ensure cleanup happens, even if there are errors
+                try
+                {
+                    EndDragVisualFeedback();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Error ending visual feedback during cleanup");
+                }
+                
+                try
+                {
+                    Mouse.OverrideCursor = null;
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Error resetting cursor during cleanup");
+                }
+                
+                try
+                {
+                    ResetDragState();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Error resetting drag state during cleanup");
+                    // Force reset critical state even if ResetDragState fails
+                    _isDragging = false;
+                    _dragStartPoint = null;
+                    _draggedTab = null;
+                    _currentDragOperation = null;
+                }
             }
         }
 
@@ -648,6 +911,133 @@ namespace ExplorerPro.UI.Controls
             {
                 // ALWAYS ensure cleanup happens
                 ResetDragState();
+            }
+        }
+
+        /// <summary>
+        /// Public method to cancel drag operation with comprehensive cleanup
+        /// Used for error recovery and external cancellation
+        /// </summary>
+        public void CancelDrag()
+        {
+            if (!_isDragging) return;
+
+            try
+            {
+                _logger?.LogInformation("Drag operation cancelled via CancelDrag method");
+
+                // Hide drag visual window immediately
+                if (_dragVisualWindow != null)
+                {
+                    try
+                    {
+                        _dragVisualWindow.Hide();
+                        _dragVisualWindow.Close();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Error hiding drag visual window during cancel");
+                    }
+                    finally
+                    {
+                        _dragVisualWindow = null;
+                    }
+                }
+
+                // Release mouse capture
+                if (IsMouseCaptured)
+                {
+                    try
+                    {
+                        ReleaseMouseCapture();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Error releasing mouse capture during cancel");
+                    }
+                }
+
+                // Reset all drag state
+                ResetDragState();
+
+                // Return tab to original position if needed
+                if (_currentDragOperation != null && _draggedTab != null)
+                {
+                    try
+                    {
+                        var currentIndex = Items.IndexOf(_draggedTab);
+                        if (currentIndex != _currentDragOperation.OriginalIndex && 
+                            _currentDragOperation.OriginalIndex >= 0 && 
+                            _currentDragOperation.OriginalIndex < Items.Count)
+                        {
+                            _tabOperationsManager?.ReorderTab(this, 
+                                _draggedTab.Tag as TabItemModel, 
+                                _currentDragOperation.OriginalIndex);
+                            
+                            _logger?.LogDebug($"Restored tab to original position {_currentDragOperation.OriginalIndex}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogError(ex, "Error restoring tab to original position during cancel");
+                    }
+                }
+
+                // Cancel via service if available
+                try
+                {
+                    _dragDropService?.CancelDrag();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Error calling service CancelDrag during cancel");
+                }
+
+                // Hide all visual indicators
+                try
+                {
+                    HideAllIndicators();
+                    EndDragVisualFeedback();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Error hiding visual indicators during cancel");
+                }
+
+                // Reset cursor
+                try
+                {
+                    Mouse.OverrideCursor = null;
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Error resetting cursor during cancel");
+                }
+
+                // Clear drag operation state
+                if (_draggedTab?.Tag is TabItemModel tabModel)
+                {
+                    try
+                    {
+                        tabModel.IsDragging = false;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Error clearing tab model drag state during cancel");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Critical error during drag cancellation");
+            }
+            finally
+            {
+                // Ensure cleanup always happens
+                _isDragging = false;
+                _dragStartPoint = null;
+                _draggedTab = null;
+                _currentDragOperation = null;
             }
         }
 
@@ -2113,34 +2503,70 @@ namespace ExplorerPro.UI.Controls
         {
             base.OnKeyDown(e);
 
+            // Check for Escape key during drag operations first
+            if (e.Key == Key.Escape && _isDragging)
+            {
+                try
+                {
+                    _logger?.LogInformation("Escape key pressed during drag operation - canceling drag");
+                    CancelDrag();
+                    e.Handled = true;
+                    AnnounceOperation("Drag operation cancelled");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Error handling Escape key during drag operation");
+                    // Still try to clean up even if there's an error
+                    try
+                    {
+                        CancelDrag();
+                    }
+                    catch (Exception cancelEx)
+                    {
+                        _logger?.LogError(cancelEx, "Critical error during emergency drag cancellation");
+                    }
+                    e.Handled = true;
+                    return;
+                }
+            }
+
             if (SelectedItem is TabItem selectedTab && selectedTab.Tag is TabItemModel tabModel)
             {
                 bool handled = false;
 
-                // Alt+Arrow keys for reordering
-                if (Keyboard.Modifiers == ModifierKeys.Alt)
+                try
                 {
-                    switch (e.Key)
+                    // Alt+Arrow keys for reordering
+                    if (Keyboard.Modifiers == ModifierKeys.Alt)
                     {
-                        case Key.Left:
-                            handled = MoveTabLeft(tabModel);
-                            break;
-                        case Key.Right:
-                            handled = MoveTabRight(tabModel);
-                            break;
+                        switch (e.Key)
+                        {
+                            case Key.Left:
+                                handled = MoveTabLeft(tabModel);
+                                break;
+                            case Key.Right:
+                                handled = MoveTabRight(tabModel);
+                                break;
+                        }
+                    }
+                    // Ctrl+Shift+N for detach
+                    else if (e.Key == Key.N && 
+                             Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+                    {
+                        handled = DetachSelectedTab();
+                    }
+
+                    if (handled)
+                    {
+                        e.Handled = true;
+                        AnnounceOperation($"Tab {tabModel.Title} moved");
                     }
                 }
-                // Ctrl+Shift+N for detach
-                else if (e.Key == Key.N && 
-                         Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+                catch (Exception ex)
                 {
-                    handled = DetachSelectedTab();
-                }
-
-                if (handled)
-                {
-                    e.Handled = true;
-                    AnnounceOperation($"Tab {tabModel.Title} moved");
+                    _logger?.LogError(ex, $"Error handling keyboard navigation for tab '{tabModel?.Title}'");
+                    e.Handled = true; // Prevent further propagation of potentially problematic input
                 }
             }
         }
