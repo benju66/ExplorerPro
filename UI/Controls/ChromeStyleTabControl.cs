@@ -11,6 +11,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using ExplorerPro.Core.TabManagement;
 using ExplorerPro.Models;
@@ -254,6 +255,20 @@ namespace ExplorerPro.UI.Controls
         private const double DRAG_THRESHOLD = 5.0;
         private const double TEAR_OFF_THRESHOLD = 40.0;
         private const double TAB_STRIP_HEIGHT = 35.0;
+        
+        // Animation timing constants
+        private const double ANIMATION_DURATION = 200.0; // milliseconds
+        private const double FADE_DURATION = 150.0; // milliseconds
+        private const double SNAP_DURATION = 100.0; // milliseconds
+        private const double BOUNCE_DURATION = 300.0; // milliseconds
+        private const double SHAKE_DURATION = 400.0; // milliseconds
+        
+        // Animation state fields
+        private Storyboard _currentAnimation;
+        private bool _isAnimating;
+        private DragOperationType _lastOperationType = DragOperationType.None;
+        private bool _isHoveringValidDropZone;
+        private DateTime _lastHoverChange = DateTime.Now;
 
         /// <summary>
         /// Gets or sets the tab operations manager
@@ -833,10 +848,12 @@ namespace ExplorerPro.UI.Controls
                 if (success)
                 {
                     _logger?.LogInformation($"Drag operation completed successfully");
+                    PlaySuccessBounceAnimation();
                 }
                 else
                 {
                     _logger?.LogWarning("Drag operation completed but was not successful");
+                    PlayErrorShakeAnimation();
                 }
             }
             catch (Exception ex)
@@ -1154,58 +1171,574 @@ namespace ExplorerPro.UI.Controls
 
         #region Visual Feedback Methods
 
+        /// <summary>
+        /// Stops any currently running animation
+        /// </summary>
+        private void StopCurrentAnimation()
+        {
+            try
+            {
+                if (_currentAnimation != null && _isAnimating)
+                {
+                    _currentAnimation.Stop();
+                    _currentAnimation = null;
+                    _isAnimating = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error stopping current animation");
+            }
+        }
+
         private void StartDragVisualFeedback()
         {
-            if (_draggedTab != null)
+            try
             {
-                _draggedTab.Opacity = 0.6;
-                _draggedTab.RenderTransform = new TranslateTransform();
+                if (_draggedTab != null)
+                {
+                    // Stop any existing animations
+                    StopCurrentAnimation();
+                    
+                    // Create smooth fade-out animation for drag start
+                    var fadeStoryboard = new Storyboard();
+                    
+                    // Opacity animation
+                    var opacityAnimation = new DoubleAnimation
+                    {
+                        From = 1.0,
+                        To = 0.6,
+                        Duration = TimeSpan.FromMilliseconds(FADE_DURATION),
+                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                    };
+                    
+                    Storyboard.SetTarget(opacityAnimation, _draggedTab);
+                    Storyboard.SetTargetProperty(opacityAnimation, new PropertyPath("Opacity"));
+                    fadeStoryboard.Children.Add(opacityAnimation);
+                    
+                    // Scale animation for visual feedback
+                    var scaleTransform = new ScaleTransform(1.0, 1.0);
+                    var transformGroup = new TransformGroup();
+                    transformGroup.Children.Add(scaleTransform);
+                    transformGroup.Children.Add(new TranslateTransform());
+                    _draggedTab.RenderTransform = transformGroup;
+                    
+                    var scaleXAnimation = new DoubleAnimation
+                    {
+                        From = 1.0,
+                        To = 0.95,
+                        Duration = TimeSpan.FromMilliseconds(FADE_DURATION),
+                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                    };
+                    
+                    var scaleYAnimation = new DoubleAnimation
+                    {
+                        From = 1.0,
+                        To = 0.95,
+                        Duration = TimeSpan.FromMilliseconds(FADE_DURATION),
+                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                    };
+                    
+                    Storyboard.SetTarget(scaleXAnimation, scaleTransform);
+                    Storyboard.SetTargetProperty(scaleXAnimation, new PropertyPath("ScaleX"));
+                    fadeStoryboard.Children.Add(scaleXAnimation);
+                    
+                    Storyboard.SetTarget(scaleYAnimation, scaleTransform);
+                    Storyboard.SetTargetProperty(scaleYAnimation, new PropertyPath("ScaleY"));
+                    fadeStoryboard.Children.Add(scaleYAnimation);
+                    
+                    _currentAnimation = fadeStoryboard;
+                    _isAnimating = true;
+                    
+                    fadeStoryboard.Completed += (s, e) => _isAnimating = false;
+                    fadeStoryboard.Begin();
+                    
+                    _logger?.LogDebug("Started drag visual feedback with smooth animation");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error starting drag visual feedback animation");
+                // Fallback to simple opacity change
+                if (_draggedTab != null)
+                {
+                    _draggedTab.Opacity = 0.6;
+                    _draggedTab.RenderTransform = new TranslateTransform();
+                }
             }
         }
 
         private void UpdateDragVisualFeedback(DragOperationType operationType)
         {
-            if (_draggedTab == null) return;
-
-            switch (operationType)
+            try
             {
-                case DragOperationType.Reorder:
-                    _draggedTab.Opacity = 0.8;
-                    ShowReorderIndicator();
-                    break;
+                if (_draggedTab == null) return;
+
+                // Check if operation type changed for hover effects
+                var operationChanged = _lastOperationType != operationType;
+                _lastOperationType = operationType;
+
+                // Update hover state
+                var isValidDropZone = operationType != DragOperationType.None;
+                if (_isHoveringValidDropZone != isValidDropZone)
+                {
+                    _isHoveringValidDropZone = isValidDropZone;
+                    _lastHoverChange = DateTime.Now;
                     
-                case DragOperationType.Detach:
-                    _draggedTab.Opacity = 0.4;
-                    ShowDetachIndicator();
-                    break;
+                    if (isValidDropZone)
+                    {
+                        PlaySnapFeedback();
+                    }
+                }
+
+                // Animate operation type changes with smooth transitions
+                if (operationChanged)
+                {
+                    AnimateOperationTypeChange(operationType);
+                }
+
+                // Update cursor based on operation type
+                UpdateCursorForOperation(operationType);
+
+                // Show appropriate indicators with hover effects
+                switch (operationType)
+                {
+                    case DragOperationType.Reorder:
+                        ShowReorderIndicatorWithHover();
+                        break;
+                        
+                    case DragOperationType.Detach:
+                        ShowDetachIndicatorWithHover();
+                        break;
+                        
+                    case DragOperationType.Transfer:
+                        ShowTransferIndicatorWithHover();
+                        break;
+                        
+                    case DragOperationType.None:
+                        HideAllIndicators();
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error updating drag visual feedback");
+                // Fallback to basic feedback
+                if (_draggedTab != null)
+                {
+                    switch (operationType)
+                    {
+                        case DragOperationType.Reorder:
+                            _draggedTab.Opacity = 0.8;
+                            ShowReorderIndicator();
+                            break;
+                            
+                        case DragOperationType.Detach:
+                            _draggedTab.Opacity = 0.4;
+                            ShowDetachIndicator();
+                            break;
+                            
+                        case DragOperationType.Transfer:
+                            _draggedTab.Opacity = 0.6;
+                            ShowTransferIndicator();
+                            break;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Plays visual snap feedback when hovering over valid drop zone
+        /// </summary>
+        private void PlaySnapFeedback()
+        {
+            try
+            {
+                if (_draggedTab == null) return;
+
+                // Create snap animation - brief scale pulse
+                var snapStoryboard = new Storyboard();
+                
+                var transformGroup = _draggedTab.RenderTransform as TransformGroup;
+                var scaleTransform = transformGroup?.Children.OfType<ScaleTransform>().FirstOrDefault();
                     
-                case DragOperationType.Transfer:
-                    _draggedTab.Opacity = 0.6;
-                    ShowTransferIndicator();
-                    break;
+                if (scaleTransform != null)
+                {
+                    var snapAnimation = new DoubleAnimation
+                    {
+                        From = scaleTransform.ScaleX,
+                        To = 1.05,
+                        Duration = TimeSpan.FromMilliseconds(SNAP_DURATION / 2),
+                        AutoReverse = true,
+                        EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 }
+                    };
+                    
+                    Storyboard.SetTarget(snapAnimation, scaleTransform);
+                    Storyboard.SetTargetProperty(snapAnimation, new PropertyPath("ScaleX"));
+                    snapStoryboard.Children.Add(snapAnimation);
+                    
+                    var snapAnimationY = snapAnimation.Clone();
+                    Storyboard.SetTargetProperty(snapAnimationY, new PropertyPath("ScaleY"));
+                    snapStoryboard.Children.Add(snapAnimationY);
+                    
+                    snapStoryboard.Begin();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error playing snap feedback");
+            }
+        }
+
+        /// <summary>
+        /// Animates operation type changes with smooth transitions
+        /// </summary>
+        private void AnimateOperationTypeChange(DragOperationType operationType)
+        {
+            try
+            {
+                if (_draggedTab == null) return;
+
+                StopCurrentAnimation();
+                
+                var storyboard = new Storyboard();
+                double targetOpacity = operationType switch
+                {
+                    DragOperationType.Reorder => 0.8,
+                    DragOperationType.Detach => 0.4,
+                    DragOperationType.Transfer => 0.6,
+                    _ => 0.6
+                };
+
+                var opacityAnimation = new DoubleAnimation
+                {
+                    To = targetOpacity,
+                    Duration = TimeSpan.FromMilliseconds(ANIMATION_DURATION),
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
+                };
+                
+                Storyboard.SetTarget(opacityAnimation, _draggedTab);
+                Storyboard.SetTargetProperty(opacityAnimation, new PropertyPath("Opacity"));
+                storyboard.Children.Add(opacityAnimation);
+                
+                _currentAnimation = storyboard;
+                _isAnimating = true;
+                storyboard.Completed += (s, e) => _isAnimating = false;
+                storyboard.Begin();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error animating operation type change");
+            }
+        }
+
+        /// <summary>
+        /// Updates cursor based on current operation type
+        /// </summary>
+        private void UpdateCursorForOperation(DragOperationType operationType)
+        {
+            try
+            {
+                var cursor = operationType switch
+                {
+                    DragOperationType.Reorder => Cursors.Hand,
+                    DragOperationType.Detach => Cursors.SizeAll,
+                    DragOperationType.Transfer => Cursors.Cross,
+                    _ => Cursors.No
+                };
+                
+                Mouse.OverrideCursor = cursor;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error updating cursor for operation");
+            }
+        }
+
+        /// <summary>
+        /// Shows reorder indicator with hover effects
+        /// </summary>
+        private void ShowReorderIndicatorWithHover()
+        {
+            try
+            {
+                ShowReorderIndicator();
+                HighlightDropZone(DragOperationType.Reorder);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error showing reorder indicator with hover");
+                ShowReorderIndicator(); // Fallback
+            }
+        }
+
+        /// <summary>
+        /// Shows detach indicator with hover effects
+        /// </summary>
+        private void ShowDetachIndicatorWithHover()
+        {
+            try
+            {
+                ShowDetachIndicator();
+                HighlightDropZone(DragOperationType.Detach);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error showing detach indicator with hover");
+                ShowDetachIndicator(); // Fallback
+            }
+        }
+
+        /// <summary>
+        /// Shows transfer indicator with hover effects
+        /// </summary>
+        private void ShowTransferIndicatorWithHover()
+        {
+            try
+            {
+                ShowTransferIndicator();
+                HighlightDropZone(DragOperationType.Transfer);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error showing transfer indicator with hover");
+                ShowTransferIndicator(); // Fallback
+            }
+        }
+
+        /// <summary>
+        /// Highlights drop zone based on operation type
+        /// </summary>
+        private void HighlightDropZone(DragOperationType operationType)
+        {
+            try
+            {
+                // Add subtle glow effect to the tab control based on operation type
+                var color = operationType switch
+                {
+                    DragOperationType.Reorder => Color.FromRgb(0, 120, 215), // Blue
+                    DragOperationType.Detach => Color.FromRgb(255, 140, 0),  // Orange
+                    DragOperationType.Transfer => Color.FromRgb(34, 139, 34), // Green
+                    _ => Colors.Transparent
+                };
+
+                if (color != Colors.Transparent)
+                {
+                    var dropShadow = new DropShadowEffect
+                    {
+                        Color = color,
+                        BlurRadius = 10,
+                        Opacity = 0.3,
+                        ShadowDepth = 0
+                    };
+                    
+                    // Animate the glow effect
+                    var glowStoryboard = new Storyboard();
+                    var opacityAnimation = new DoubleAnimation
+                    {
+                        From = 0,
+                        To = 0.3,
+                        Duration = TimeSpan.FromMilliseconds(ANIMATION_DURATION),
+                        AutoReverse = true,
+                        EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+                    };
+                    
+                    Storyboard.SetTarget(opacityAnimation, dropShadow);
+                    Storyboard.SetTargetProperty(opacityAnimation, new PropertyPath("Opacity"));
+                    glowStoryboard.Children.Add(opacityAnimation);
+                    
+                    Effect = dropShadow;
+                    glowStoryboard.Begin();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error highlighting drop zone");
+            }
+        }
+
+        /// <summary>
+        /// Plays success bounce animation for successful drops
+        /// </summary>
+        private void PlaySuccessBounceAnimation()
+        {
+            try
+            {
+                if (_draggedTab == null) return;
+
+                var bounceStoryboard = new Storyboard();
+                var transformGroup = _draggedTab.RenderTransform as TransformGroup;
+                var scaleTransform = transformGroup?.Children.OfType<ScaleTransform>().FirstOrDefault();
+                
+                if (scaleTransform != null)
+                {
+                    // Create bounce effect using elastic ease
+                    var bounceAnimationX = new DoubleAnimation
+                    {
+                        From = scaleTransform.ScaleX,
+                        To = 1.2,
+                        Duration = TimeSpan.FromMilliseconds(BOUNCE_DURATION / 3),
+                        AutoReverse = true,
+                        EasingFunction = new ElasticEase 
+                        { 
+                            EasingMode = EasingMode.EaseOut,
+                            Oscillations = 2,
+                            Springiness = 8
+                        }
+                    };
+                    
+                    var bounceAnimationY = bounceAnimationX.Clone();
+                    
+                    Storyboard.SetTarget(bounceAnimationX, scaleTransform);
+                    Storyboard.SetTargetProperty(bounceAnimationX, new PropertyPath("ScaleX"));
+                    bounceStoryboard.Children.Add(bounceAnimationX);
+                    
+                    Storyboard.SetTarget(bounceAnimationY, scaleTransform);
+                    Storyboard.SetTargetProperty(bounceAnimationY, new PropertyPath("ScaleY"));
+                    bounceStoryboard.Children.Add(bounceAnimationY);
+                    
+                    // Reset to normal after animation
+                    bounceStoryboard.Completed += (s, e) =>
+                    {
+                        scaleTransform.ScaleX = 1.0;
+                        scaleTransform.ScaleY = 1.0;
+                    };
+                    
+                    bounceStoryboard.Begin();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error playing success bounce animation");
+            }
+        }
+
+        /// <summary>
+        /// Plays error shake animation for invalid drops
+        /// </summary>
+        private void PlayErrorShakeAnimation()
+        {
+            try
+            {
+                if (_draggedTab == null) return;
+
+                var shakeStoryboard = new Storyboard();
+                var transformGroup = _draggedTab.RenderTransform as TransformGroup;
+                var translateTransform = transformGroup?.Children.OfType<TranslateTransform>().FirstOrDefault();
+                
+                if (translateTransform != null)
+                {
+                    // Create shake effect
+                    var shakeAnimation = new DoubleAnimation
+                    {
+                        From = 0,
+                        To = 5,
+                        Duration = TimeSpan.FromMilliseconds(SHAKE_DURATION / 8),
+                        AutoReverse = true,
+                        RepeatBehavior = new RepeatBehavior(4), // 4 shakes
+                        EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+                    };
+                    
+                    Storyboard.SetTarget(shakeAnimation, translateTransform);
+                    Storyboard.SetTargetProperty(shakeAnimation, new PropertyPath("X"));
+                    shakeStoryboard.Children.Add(shakeAnimation);
+                    
+                    // Reset position after shake
+                    shakeStoryboard.Completed += (s, e) =>
+                    {
+                        translateTransform.X = 0;
+                    };
+                    
+                    shakeStoryboard.Begin();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error playing error shake animation");
             }
         }
 
         private void EndDragVisualFeedback()
         {
-            if (_draggedTab != null)
+            try
             {
-                _draggedTab.Opacity = 1.0;
-                _draggedTab.RenderTransform = null;
+                StopCurrentAnimation();
+                
+                if (_draggedTab != null)
+                {
+                    // Animate fade back to normal with smooth transition
+                    var endStoryboard = new Storyboard();
+                    
+                    var opacityAnimation = new DoubleAnimation
+                    {
+                        To = 1.0,
+                        Duration = TimeSpan.FromMilliseconds(FADE_DURATION),
+                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+                    };
+                    
+                    Storyboard.SetTarget(opacityAnimation, _draggedTab);
+                    Storyboard.SetTargetProperty(opacityAnimation, new PropertyPath("Opacity"));
+                    endStoryboard.Children.Add(opacityAnimation);
+                    
+                    endStoryboard.Completed += (s, e) =>
+                    {
+                        _draggedTab.RenderTransform = null;
+                        Effect = null; // Remove any glow effects
+                    };
+                    
+                    endStoryboard.Begin();
+                }
+                
+                // Hide and cleanup drag visual window with fade
+                if (_dragVisualWindow != null)
+                {
+                    var fadeOutStoryboard = new Storyboard();
+                    var fadeAnimation = new DoubleAnimation
+                    {
+                        From = _dragVisualWindow.Opacity,
+                        To = 0,
+                        Duration = TimeSpan.FromMilliseconds(FADE_DURATION)
+                    };
+                    
+                    Storyboard.SetTarget(fadeAnimation, _dragVisualWindow);
+                    Storyboard.SetTargetProperty(fadeAnimation, new PropertyPath("Opacity"));
+                    fadeOutStoryboard.Children.Add(fadeAnimation);
+                    
+                    fadeOutStoryboard.Completed += (s, e) =>
+                    {
+                        _dragVisualWindow.Hide();
+                        _dragVisualWindow.Close();
+                        _dragVisualWindow = null;
+                    };
+                    
+                    fadeOutStoryboard.Begin();
+                }
+                
+                // Hide enhanced insertion indicators
+                HideEnhancedInsertionIndicator();
+                
+                HideAllIndicators();
             }
-            
-            // Hide and cleanup drag visual window
-            if (_dragVisualWindow != null)
+            catch (Exception ex)
             {
-                _dragVisualWindow.Hide();
-                _dragVisualWindow.Close();
-                _dragVisualWindow = null;
+                _logger?.LogWarning(ex, "Error ending drag visual feedback");
+                // Fallback cleanup
+                if (_draggedTab != null)
+                {
+                    _draggedTab.Opacity = 1.0;
+                    _draggedTab.RenderTransform = null;
+                }
+                
+                if (_dragVisualWindow != null)
+                {
+                    _dragVisualWindow.Hide();
+                    _dragVisualWindow.Close();
+                    _dragVisualWindow = null;
+                }
+                
+                HideAllIndicators();
+                Effect = null;
             }
-            
-            // Hide enhanced insertion indicators
-            HideEnhancedInsertionIndicator();
-            
-            HideAllIndicators();
         }
 
         private void ShowReorderIndicator()
