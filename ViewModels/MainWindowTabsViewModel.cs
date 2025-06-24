@@ -53,16 +53,28 @@ namespace ExplorerPro.ViewModels
         /// <summary>
         /// Collection of all tabs
         /// </summary>
-        public ObservableCollection<TabModel> Tabs => _tabManager.Tabs;
+        public ObservableCollection<TabModel> Tabs
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return _tabManager.Tabs;
+            }
+        }
         
         /// <summary>
         /// Currently active tab
         /// </summary>
         public TabModel ActiveTab
         {
-            get => _tabManager.ActiveTab;
+            get
+            {
+                ThrowIfDisposed();
+                return _tabManager.ActiveTab;
+            }
             set
             {
+                ThrowIfDisposed();
                 if (_tabManager.ActiveTab != value)
                 {
                     _tabManager.ActiveTab = value;
@@ -164,6 +176,8 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         public async Task<TabModel> CreateTabAsync(string title, string path = null, TabCreationOptions options = null)
         {
+            ThrowIfDisposed();
+            
             try
             {
                 var tab = await _tabManager.CreateTabAsync(title, path, options);
@@ -182,6 +196,8 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         public async Task<bool> CloseTabAsync(TabModel tab, bool force = false)
         {
+            ThrowIfDisposed();
+            
             try
             {
                 var result = await _tabManager.CloseTabAsync(tab, force);
@@ -200,6 +216,8 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         public async Task<TabModel> DuplicateTabAsync(TabModel tab)
         {
+            ThrowIfDisposed();
+            
             try
             {
                 var newTab = await _tabManager.DuplicateTabAsync(tab);
@@ -218,6 +236,8 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         public async Task SetTabColorAsync(TabModel tab, Color color)
         {
+            ThrowIfDisposed();
+            
             try
             {
                 await _tabManager.SetTabColorAsync(tab, color);
@@ -235,6 +255,8 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         public async Task ClearTabColorAsync(TabModel tab)
         {
+            ThrowIfDisposed();
+            
             try
             {
                 await _tabManager.ClearTabColorAsync(tab);
@@ -252,6 +274,8 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         public async Task ToggleTabPinnedAsync(TabModel tab)
         {
+            ThrowIfDisposed();
+            
             try
             {
                 await _tabManager.SetTabPinnedAsync(tab, !tab.IsPinned);
@@ -269,6 +293,8 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         public async Task RenameTabAsync(TabModel tab, string newTitle)
         {
+            ThrowIfDisposed();
+            
             try
             {
                 await _tabManager.RenameTabAsync(tab, newTitle);
@@ -286,6 +312,8 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         public async Task MoveTabAsync(TabModel tab, int newIndex)
         {
+            ThrowIfDisposed();
+            
             try
             {
                 await _tabManager.MoveTabAsync(tab, newIndex);
@@ -303,6 +331,8 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         public async Task NavigateToNextTabAsync()
         {
+            ThrowIfDisposed();
+            
             try
             {
                 await _tabManager.NavigateToNextTabAsync();
@@ -320,6 +350,8 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         public async Task NavigateToPreviousTabAsync()
         {
+            ThrowIfDisposed();
+            
             try
             {
                 await _tabManager.NavigateToPreviousTabAsync();
@@ -335,6 +367,17 @@ namespace ExplorerPro.ViewModels
         #endregion
 
         #region Private Methods
+
+        /// <summary>
+        /// Throws ObjectDisposedException if the view model has been disposed
+        /// </summary>
+        private void ThrowIfDisposed()
+        {
+            if (_isDisposed)
+            {
+                throw new ObjectDisposedException(nameof(MainWindowTabsViewModel), "Cannot perform operation on disposed MainWindowTabsViewModel");
+            }
+        }
         
         /// <summary>
         /// Initializes all commands
@@ -480,18 +523,100 @@ namespace ExplorerPro.ViewModels
         {
             if (!_isDisposed && disposing)
             {
-                // Unwire service events
+                _logger?.LogInformation("Disposing MainWindowTabsViewModel - starting cleanup");
+                
+                // Set disposed flag first to prevent operations during cleanup
+                _isDisposed = true;
+                
+                // Unsubscribe from TabManagerService events
+                _logger?.LogDebug("Unsubscribing from TabManagerService events");
+                UnsubscribeFromTabManagerEvents();
+                
+                // Clear command references
+                _logger?.LogDebug("Clearing command references");
+                ClearCommandReferences();
+                
+                // Set all properties to null
+                _logger?.LogDebug("Clearing property references");
+                ClearPropertyReferences();
+                
+                _logger?.LogInformation("MainWindowTabsViewModel disposal completed successfully");
+            }
+        }
+        
+        /// <summary>
+        /// Unsubscribes from all TabManagerService events
+        /// </summary>
+        private void UnsubscribeFromTabManagerEvents()
+        {
+            try
+            {
                 if (_tabManager != null)
                 {
                     _tabManager.TabCreated -= OnTabCreated;
+                    _logger?.LogDebug("Unsubscribed from TabCreated event");
+                    
                     _tabManager.TabClosed -= OnTabClosed;
+                    _logger?.LogDebug("Unsubscribed from TabClosed event");
+                    
                     _tabManager.ActiveTabChanged -= OnActiveTabChanged;
+                    _logger?.LogDebug("Unsubscribed from ActiveTabChanged event");
+                    
                     _tabManager.TabModified -= OnTabModified;
+                    _logger?.LogDebug("Unsubscribed from TabModified event");
+                    
                     _tabManager.TabsReordered -= OnTabsReordered;
+                    _logger?.LogDebug("Unsubscribed from TabsReordered event");
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error unsubscribing from TabManagerService events");
+            }
+        }
+        
+        /// <summary>
+        /// Clears all command references to prevent memory leaks
+        /// </summary>
+        private void ClearCommandReferences()
+        {
+            try
+            {
+                NewTabCommand = null;
+                CloseTabCommand = null;
+                DuplicateTabCommand = null;
+                RenameTabCommand = null;
+                ChangeTabColorCommand = null;
+                ClearTabColorCommand = null;
+                TogglePinTabCommand = null;
+                NextTabCommand = null;
+                PreviousTabCommand = null;
+                MoveTabCommand = null;
+                ActivateTabCommand = null;
                 
-                _isDisposed = true;
-                _logger?.LogInformation("MainWindowTabsViewModel disposed");
+                _logger?.LogDebug("All command references cleared");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error clearing command references");
+            }
+        }
+        
+        /// <summary>
+        /// Clears all property references
+        /// </summary>
+        private void ClearPropertyReferences()
+        {
+            try
+            {
+                // Clear PropertyChanged event subscribers
+                PropertyChanged = null;
+                
+                _logger?.LogDebug("All property references cleared");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error clearing property references");
             }
         }
         

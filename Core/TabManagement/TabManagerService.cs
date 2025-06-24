@@ -419,6 +419,17 @@ namespace ExplorerPro.Core.TabManagement
         #endregion
 
         #region Private Methods
+
+        /// <summary>
+        /// Throws ObjectDisposedException if the service has been disposed
+        /// </summary>
+        private void ThrowIfDisposed()
+        {
+            if (_isDisposed)
+            {
+                throw new ObjectDisposedException(nameof(TabManagerService), "Cannot perform operation on disposed TabManagerService");
+            }
+        }
         
         private void Tab_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
@@ -462,25 +473,113 @@ namespace ExplorerPro.Core.TabManagement
         {
             if (!_isDisposed && disposing)
             {
-                _logger?.LogInformation("Disposing TabManagerService");
+                _logger?.LogInformation("Disposing TabManagerService - starting cleanup");
                 
-                // Clear events
+                lock (_lockObject)
+                {
+                    // Set disposed flag first to prevent new operations
+                    _isDisposed = true;
+                    
+                    // Unsubscribe all event handlers systematically
+                    _logger?.LogDebug("Unsubscribing event handlers");
+                    UnsubscribeAllEventHandlers();
+                    
+                    // Clear all collections
+                    _logger?.LogDebug("Clearing collections");
+                    ClearAllCollections();
+                    
+                    // Clear references
+                    _logger?.LogDebug("Clearing references");
+                    ClearAllReferences();
+                    
+                    _logger?.LogInformation("TabManagerService disposal completed successfully");
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Unsubscribes all event handlers to prevent memory leaks
+        /// </summary>
+        private void UnsubscribeAllEventHandlers()
+        {
+            try
+            {
+                // Unsubscribe from all tab PropertyChanged events
+                foreach (var tab in _tabs.ToList())
+                {
+                    try
+                    {
+                        tab.PropertyChanged -= Tab_PropertyChanged;
+                        _logger?.LogDebug($"Unsubscribed from PropertyChanged for tab: {tab.Title}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, $"Error unsubscribing from tab PropertyChanged: {tab.Title}");
+                    }
+                }
+                
+                // Clear all public events by setting to null
                 TabCreated = null;
                 TabClosed = null;
                 ActiveTabChanged = null;
                 TabModified = null;
                 TabsReordered = null;
                 
-                // Dispose all tabs
-                foreach (var tab in _tabs.ToList())
+                _logger?.LogDebug("All event handlers unsubscribed");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error during event handler cleanup");
+            }
+        }
+        
+        /// <summary>
+        /// Clears all collections and disposes contained items
+        /// </summary>
+        private void ClearAllCollections()
+        {
+            try
+            {
+                // Dispose all tabs individually
+                var tabsCopy = _tabs.ToList();
+                foreach (var tab in tabsCopy)
                 {
-                    tab.PropertyChanged -= Tab_PropertyChanged;
-                    tab.Dispose();
+                    try
+                    {
+                        tab.Dispose();
+                        _logger?.LogDebug($"Disposed tab: {tab.Title}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, $"Error disposing tab: {tab.Title}");
+                    }
                 }
                 
+                // Clear the observable collection
                 _tabs.Clear();
+                _logger?.LogDebug($"Cleared {tabsCopy.Count} tabs from collection");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error during collection cleanup");
+            }
+        }
+        
+        /// <summary>
+        /// Clears all object references
+        /// </summary>
+        private void ClearAllReferences()
+        {
+            try
+            {
+                // Clear active tab reference
                 _activeTab = null;
-                _isDisposed = true;
+                
+                _logger?.LogDebug("All references cleared");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error during reference cleanup");
             }
         }
         
