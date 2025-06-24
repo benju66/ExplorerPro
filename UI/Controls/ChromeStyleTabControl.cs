@@ -21,7 +21,7 @@ namespace ExplorerPro.UI.Controls
     /// Chrome-style tab control with advanced features
     /// Supports custom rendering, add/delete operations, drag-drop, and metadata storage
     /// </summary>
-    public class ChromeStyleTabControl : TabControl
+    public class ChromeStyleTabControl : TabControl, IDisposable
     {
         #region Fields
         
@@ -699,22 +699,205 @@ namespace ExplorerPro.UI.Controls
 
         private void ShowReorderIndicator()
         {
-            // Implementation for reorder visual indicator
+            if (_currentDragOperation == null || _draggedTab == null)
+                return;
+                
+            // Calculate drop index based on current mouse position
+            var dropIndex = _tabOperationsManager?.CalculateDropIndex(
+                this, 
+                _currentDragOperation.CurrentScreenPoint) ?? -1;
+                
+            if (dropIndex < 0)
+                return;
+                
+            // Create or update insertion indicator
+            if (_insertionIndicator == null)
+            {
+                _insertionIndicator = new TabDropInsertionIndicator(this);
+            }
+            
+            // Calculate position for indicator
+            double indicatorX = 0;
+            for (int i = 0; i < dropIndex && i < Items.Count; i++)
+            {
+                if (Items[i] is TabItem tab)
+                {
+                    indicatorX += tab.ActualWidth;
+                }
+            }
+            
+            // Show indicator at calculated position
+            _insertionIndicator.UpdatePosition(indicatorX, TAB_STRIP_HEIGHT);
+            _insertionIndicator.ShowIndicator();
         }
 
         private void ShowDetachIndicator()
         {
-            // Implementation for detach visual indicator
+            if (_draggedTab == null || _currentDragOperation == null)
+                return;
+                
+            // Create a semi-transparent preview window at cursor position
+            if (_detachPreviewWindow == null)
+            {
+                _detachPreviewWindow = new Window
+                {
+                    WindowStyle = WindowStyle.None,
+                    AllowsTransparency = true,
+                    Background = new SolidColorBrush(Color.FromArgb(100, 0, 120, 215)),
+                    Width = 300,
+                    Height = 200,
+                    ShowInTaskbar = false,
+                    Topmost = true,
+                    IsHitTestVisible = false
+                };
+                
+                // Add visual content
+                var border = new Border
+                {
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(0, 120, 215)),
+                    BorderThickness = new Thickness(2),
+                    CornerRadius = new CornerRadius(4),
+                    Margin = new Thickness(10)
+                };
+                
+                var textBlock = new TextBlock
+                {
+                    Text = _draggedTab.Header?.ToString() ?? "Tab",
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Foreground = Brushes.White,
+                    FontSize = 16
+                };
+                
+                border.Child = textBlock;
+                _detachPreviewWindow.Content = border;
+            }
+            
+            // Position preview at cursor
+            var cursorPos = _currentDragOperation.CurrentScreenPoint;
+            _detachPreviewWindow.Left = cursorPos.X - 150;
+            _detachPreviewWindow.Top = cursorPos.Y - 20;
+            
+            if (!_detachPreviewWindow.IsVisible)
+            {
+                _detachPreviewWindow.Show();
+            }
         }
 
         private void ShowTransferIndicator()
         {
-            // Implementation for transfer visual indicator
+            if (_currentDragOperation == null)
+                return;
+                
+            // Find target window under cursor
+            var targetWindow = FindWindowUnderPoint(_currentDragOperation.CurrentScreenPoint);
+            if (targetWindow == null || targetWindow == Window.GetWindow(this))
+                return;
+                
+            // Find tab control in target window
+            var targetTabControl = FindTabControlInWindow(targetWindow);
+            if (targetTabControl == null)
+                return;
+                
+            // Highlight the target window border
+            HighlightWindow(targetWindow);
+            
+            // Show insertion indicator in target tab control if it has one
+            if (targetTabControl._insertionIndicator == null)
+            {
+                targetTabControl._insertionIndicator = new TabDropInsertionIndicator(targetTabControl);
+            }
+            
+            var dropIndex = _tabOperationsManager?.CalculateDropIndex(
+                targetTabControl, 
+                _currentDragOperation.CurrentScreenPoint) ?? -1;
+                
+            if (dropIndex >= 0)
+            {
+                // Calculate position for indicator in target control
+                double indicatorX = 0;
+                for (int i = 0; i < dropIndex && i < targetTabControl.Items.Count; i++)
+                {
+                    if (targetTabControl.Items[i] is TabItem tab)
+                    {
+                        indicatorX += tab.ActualWidth;
+                    }
+                }
+                
+                targetTabControl._insertionIndicator.UpdatePosition(indicatorX, TAB_STRIP_HEIGHT);
+                targetTabControl._insertionIndicator.CurrentState = TabDropInsertionIndicator.DropIndicatorState.ValidDrop;
+                targetTabControl._insertionIndicator.ShowIndicator();
+            }
         }
 
         private void HideAllIndicators()
         {
-            // Hide all visual indicators
+            // Hide insertion indicator
+            _insertionIndicator?.HideIndicator();
+            
+            // Hide detach preview
+            if (_detachPreviewWindow != null)
+            {
+                _detachPreviewWindow.Hide();
+            }
+            
+            // Hide transfer highlights
+            RemoveAllWindowHighlights();
+            
+            // Reset cursor
+            Mouse.OverrideCursor = null;
+        }
+        
+        private void HighlightWindow(Window targetWindow)
+        {
+            if (targetWindow == null) return;
+            
+            // Add a subtle glow effect to the target window
+            try
+            {
+                var originalEffect = targetWindow.Effect;
+                var glowEffect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = Color.FromRgb(0, 120, 215),
+                    BlurRadius = 15,
+                    ShadowDepth = 0,
+                    Opacity = 0.6
+                };
+                
+                targetWindow.Effect = glowEffect;
+                
+                // Store the original effect to restore later
+                targetWindow.Tag = originalEffect;
+            }
+            catch
+            {
+                // Ignore errors with window highlighting
+            }
+        }
+        
+        private void RemoveAllWindowHighlights()
+        {
+            // Find all windows and remove highlights
+            try
+            {
+                foreach (Window window in Application.Current.Windows)
+                {
+                    if (window.Tag is System.Windows.Media.Effects.Effect originalEffect)
+                    {
+                        window.Effect = originalEffect;
+                        window.Tag = null;
+                    }
+                    else if (window.Effect is System.Windows.Media.Effects.DropShadowEffect shadowEffect &&
+                             shadowEffect.Color == Color.FromRgb(0, 120, 215))
+                    {
+                        window.Effect = null;
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore errors with window highlighting cleanup
+            }
         }
 
         #endregion
@@ -730,8 +913,8 @@ namespace ExplorerPro.UI.Controls
                 _draggedTab.RenderTransform = null;
             }
             
-            // Reset cursor
-            Mouse.OverrideCursor = null;
+            // Hide all visual indicators
+            HideAllIndicators();
             
             // CRITICAL: Release mouse capture to allow future drags
             if (IsMouseCaptured)
@@ -1351,6 +1534,48 @@ namespace ExplorerPro.UI.Controls
             {
                 SelectedTabItem = model;
                 model.UpdateLastAccessed();
+            }
+        }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        private bool _disposed = false;
+
+        /// <summary>
+        /// Disposes the control and its resources
+        /// </summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Protected disposal method
+        /// </summary>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    // Dispose managed resources
+                    _insertionIndicator?.Dispose();
+                    _insertionIndicator = null;
+                    
+                    if (_detachPreviewWindow != null)
+                    {
+                        _detachPreviewWindow.Close();
+                        _detachPreviewWindow = null;
+                    }
+                    
+                    // Clean up window highlights
+                    RemoveAllWindowHighlights();
+                }
+
+                _disposed = true;
             }
         }
 
