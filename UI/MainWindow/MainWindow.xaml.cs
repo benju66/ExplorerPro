@@ -700,7 +700,18 @@ namespace ExplorerPro.UI.MainWindow
                     var newTab = new TabItem
                     {
                         Header = header,
-                        Content = content
+                        Content = content,
+                        Tag = new TabItemModel
+                        {
+                            Id = Guid.NewGuid().ToString(),
+                            Title = header,
+                            Content = content,
+                            IsPinned = false,
+                            IsClosable = true,
+                            TabColor = Colors.LightGray,
+                            CreatedAt = DateTime.Now,
+                            LastAccessed = DateTime.Now
+                        }
                     };
                     
                     tabs.Items.Add(newTab);
@@ -1735,6 +1746,9 @@ namespace ExplorerPro.UI.MainWindow
                 
                 // Initialize tab operations
                 InitializeTabOperations();
+                
+                // Initialize tab management services
+                InitializeTabManagement();
             }
             catch (Exception ex)
             {
@@ -2312,8 +2326,18 @@ namespace ExplorerPro.UI.MainWindow
                 {
                     Header = tabTitle,
                     Content = container,
-                    // Ensure new tabs are not pinned by default
-                    Tag = new Dictionary<string, object> { ["IsPinned"] = false }
+                    // Create proper TabItemModel instead of Dictionary
+                    Tag = new TabItemModel
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Title = tabTitle,
+                        Content = container,
+                        IsPinned = false,
+                        IsClosable = true,
+                        TabColor = Colors.LightGray,
+                        CreatedAt = DateTime.Now,
+                        LastAccessed = DateTime.Now
+                    }
                 };
                 
                 // Add the tab to the control using proper positioning
@@ -2375,7 +2399,18 @@ namespace ExplorerPro.UI.MainWindow
                 string tabHeader = $"Tab {MainTabs.Items.Count + 1}";
                 var newTabItem = new TabItem
                 {
-                    Header = tabHeader
+                    Header = tabHeader,
+                    Tag = new TabItemModel
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Title = tabHeader,
+                        Content = null,
+                        IsPinned = false,
+                        IsClosable = true,
+                        TabColor = Colors.LightGray,
+                        CreatedAt = DateTime.Now,
+                        LastAccessed = DateTime.Now
+                    }
                 };
                 
                 // Create loading content
@@ -2407,6 +2442,13 @@ namespace ExplorerPro.UI.MainWindow
                     
                     // Update the tab content with the container
                     newTabItem.Content = container;
+                    
+                    // Update the TabItemModel with the container content
+                    if (newTabItem.Tag is TabItemModel tabModel)
+                    {
+                        tabModel.Content = container;
+                        tabModel.Title = !string.IsNullOrEmpty(Path.GetFileName(safePath)) ? Path.GetFileName(safePath) : "Home";
+                    }
                     
                     // Connect signals if needed
                     if (container.PinnedPanel != null)
@@ -3440,7 +3482,18 @@ namespace ExplorerPro.UI.MainWindow
                 TabItem newTabItem = new TabItem
                 {
                     Header = tabTitle,
-                    Content = container
+                    Content = container,
+                    Tag = new TabItemModel
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        Title = tabTitle,
+                        Content = container,
+                        IsPinned = false,
+                        IsClosable = true,
+                        TabColor = Colors.LightGray,
+                        CreatedAt = DateTime.Now,
+                        LastAccessed = DateTime.Now
+                    }
                 };
                 
                 // Add to new window
