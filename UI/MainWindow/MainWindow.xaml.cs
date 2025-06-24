@@ -1592,27 +1592,38 @@ namespace ExplorerPro.UI.MainWindow
                 {
                     try
                     {
+                        // Add logging to track disposal
+                        _instanceLogger?.LogInformation("Beginning MainWindow disposal process");
+                        
                         _stateManager.TryTransitionTo(Core.WindowState.Disposed, out _);
                         
-                        // Cleanup event subscriptions
-                        _eventSubscriptions?.Dispose();
-                        
-                        // PHASE 3 OPTIMIZATION: Clear cached toolbar reference
-                        InvalidateEmbeddedToolbarCache();
-                        
-                        // Cleanup logger reference
-                        DecrementLoggerRef();
-                        
-                        // Clear navigation history
-                        ClearNavigationHistory();
-                        
-                        // Unregister from lifecycle manager
+                        // Unregister from lifecycle manager first
+                        _instanceLogger?.LogDebug("Unregistering from WindowLifecycleManager");
                         UnregisterFromLifecycleManager();
                         
-                        _instanceLogger?.LogInformation("MainWindow disposed successfully");
+                        // Cleanup event subscriptions
+                        _instanceLogger?.LogDebug("Disposing event subscriptions");
+                        _eventSubscriptions?.Dispose();
+                        
+                        // Clear all strong references
+                        _instanceLogger?.LogDebug("Clearing strong references");
+                        ClearAllStrongReferences();
+                        
+                        // PHASE 3 OPTIMIZATION: Clear cached toolbar reference
+                        _instanceLogger?.LogDebug("Invalidating embedded toolbar cache");
+                        InvalidateEmbeddedToolbarCache();
+                        
+                        // Clear navigation history
+                        _instanceLogger?.LogDebug("Clearing navigation history");
+                        ClearNavigationHistory();
+                        
+                        // Cleanup logger reference last
+                        _instanceLogger?.LogInformation("MainWindow disposal completed successfully");
+                        DecrementLoggerRef();
                     }
                     catch (Exception ex)
                     {
+                        _instanceLogger?.LogError(ex, "Error during MainWindow disposal");
                         System.Diagnostics.Debug.WriteLine($"Error during MainWindow disposal: {ex.Message}");
                     }
                 }
@@ -5874,7 +5885,31 @@ namespace ExplorerPro.UI.MainWindow
 
         internal void UnregisterFromLifecycleManager()
         {
-            WindowLifecycleManager.Instance.UnregisterWindow(this);
+            try
+            {
+                // Ensure window is unregistered from WindowLifecycleManager
+                var lifecycleManager = ExplorerPro.Core.WindowLifecycleManager.Instance;
+                if (lifecycleManager != null)
+                {
+                    bool unregistered = lifecycleManager.UnregisterWindow(this);
+                    if (unregistered)
+                    {
+                        _instanceLogger?.LogInformation("Window successfully unregistered from WindowLifecycleManager");
+                    }
+                    else
+                    {
+                        _instanceLogger?.LogWarning("Window was not found in WindowLifecycleManager during unregistration");
+                    }
+                }
+                else
+                {
+                    _instanceLogger?.LogWarning("WindowLifecycleManager instance not available during unregistration");
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error during WindowLifecycleManager unregistration");
+            }
         }
 
         internal void ClearNavigationHistory()
@@ -5883,6 +5918,68 @@ namespace ExplorerPro.UI.MainWindow
             {
                 _navigationHistory.Clear();
                 _currentHistoryNode = null;
+            }
+        }
+
+        /// <summary>
+        /// Clear all strong references to prevent memory leaks
+        /// </summary>
+        private void ClearAllStrongReferences()
+        {
+            try
+            {
+                // Clear manager references
+                if (_windowManager != null)
+                {
+                    _instanceLogger?.LogDebug("Clearing WindowManager reference");
+                    _windowManager = null;
+                }
+
+                if (_tabOperationsManager != null)
+                {
+                    _instanceLogger?.LogDebug("Clearing TabOperationsManager reference");
+                    _tabOperationsManager = null;
+                }
+
+                if (_dragDropService != null)
+                {
+                    _instanceLogger?.LogDebug("Clearing DragDropService reference");
+                    _dragDropService = null;
+                }
+
+                if (_metadataManager != null)
+                {
+                    _instanceLogger?.LogDebug("Clearing MetadataManager reference");
+                    _metadataManager = null;
+                }
+
+                // Clear view model references
+                if (_viewModel != null)
+                {
+                    _instanceLogger?.LogDebug("Clearing ViewModel reference");
+                    _viewModel = null;
+                }
+
+                // Clear detached windows collection
+                if (_detachedWindows != null)
+                {
+                    _instanceLogger?.LogDebug("Clearing detached windows collection");
+                    _detachedWindows.Clear();
+                }
+
+                // Clear cached UI element references
+                _cachedEmbeddedToolbar = null;
+                _toolbarCacheInitialized = false;
+
+                // Clear context menu state
+                _rightClickedTab = null;
+                _contextMenuStateValid = false;
+
+                _instanceLogger?.LogDebug("All strong references cleared successfully");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error clearing strong references");
             }
         }
 

@@ -196,6 +196,126 @@ namespace ExplorerPro.Core
                 return count;
             }
         }
+
+        /// <summary>
+        /// Force close all tracked windows and clear collections
+        /// Used during application shutdown
+        /// </summary>
+        public void ForceCloseAllWindows()
+        {
+            try
+            {
+                _logger?.LogInformation("ForceCloseAllWindows initiated - forcing closure of all tracked windows");
+                
+                var windowsToClose = new List<ExplorerPro.UI.MainWindow.MainWindow>();
+                var registrationsToRemove = new List<Guid>();
+
+                // Collect all windows and their IDs for cleanup
+                foreach (var kvp in _windows)
+                {
+                    try
+                    {
+                        var window = kvp.Value.GetWindow();
+                        if (window != null)
+                        {
+                            windowsToClose.Add(window);
+                        }
+                        registrationsToRemove.Add(kvp.Key);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogError(ex, $"Error collecting window for force close: {kvp.Key}");
+                        registrationsToRemove.Add(kvp.Key);
+                    }
+                }
+
+                // Force close all collected windows
+                foreach (var window in windowsToClose)
+                {
+                    try
+                    {
+                        if (window != null && !window.IsDisposed)
+                        {
+                            _logger?.LogDebug($"Force closing window: {window.GetType().Name}");
+                            
+                            // Try graceful close first
+                            window.Close();
+                            
+                            // If that doesn't work, try disposing
+                            if (!window.IsDisposed)
+                            {
+                                window.Dispose();
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogError(ex, $"Error force closing window {window?.GetType().Name}");
+                        
+                        // Last resort - try to hide the window
+                        try
+                        {
+                            window?.Hide();
+                        }
+                        catch
+                        {
+                            // Ignore final cleanup failures
+                        }
+                    }
+                }
+
+                // Clear all tracking collections with exception handling
+                ClearTrackingCollections(registrationsToRemove);
+
+                _logger?.LogInformation($"ForceCloseAllWindows completed - closed {windowsToClose.Count} windows, cleared {registrationsToRemove.Count} registrations");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Critical error during ForceCloseAllWindows");
+            }
+        }
+
+        /// <summary>
+        /// Clear all tracking collections gracefully
+        /// </summary>
+        private void ClearTrackingCollections(List<Guid> registrationIds)
+        {
+            try
+            {
+                // Remove all registrations
+                foreach (var id in registrationIds)
+                {
+                    try
+                    {
+                        if (_windows.TryRemove(id, out var registration))
+                        {
+                            registration.Dispose();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogError(ex, $"Error removing registration {id}");
+                    }
+                }
+
+                // Force clear any remaining items (should be empty at this point)
+                var remainingCount = _windows.Count;
+                if (remainingCount > 0)
+                {
+                    _logger?.LogWarning($"Forcing clear of {remainingCount} remaining window registrations");
+                    _windows.Clear();
+                }
+
+                // Reset operation counter
+                Interlocked.Exchange(ref _operationCounter, 0);
+
+                _logger?.LogDebug("Tracking collections cleared successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error during tracking collection cleanup");
+            }
+        }
         
         /// <summary>
         /// Find window by ID

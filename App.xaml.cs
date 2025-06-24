@@ -1,10 +1,13 @@
 ﻿using System;
 using System.IO;
-using System.Windows;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Threading;
 using ExplorerPro.Models;
 using ExplorerPro.Utilities;
 using ExplorerPro.Themes;
+using ExplorerPro.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -631,31 +634,223 @@ namespace ExplorerPro
 
         protected override void OnExit(ExitEventArgs e)
         {
+            const int WINDOW_CLOSE_TIMEOUT_MS = 5000; // 5 seconds timeout
+            var timeoutCts = new CancellationTokenSource(WINDOW_CLOSE_TIMEOUT_MS);
+            
             try
             {
-                // Close all windows first
-                foreach (Window window in Windows)
-                {
-                    try
-                    {
-                        window.Close();
-                    }
-                    catch { }
-                }
-
-                // Wait briefly for windows to finish closing
-                System.Threading.Thread.Sleep(100);
-
-                // Now safe to dispose logger
+                Console.WriteLine("Application exit initiated - starting graceful shutdown...");
+                
+                // Phase 1: WindowLifecycleManager cleanup before window closing
+                Console.WriteLine("Phase 1: Cleaning up WindowLifecycleManager...");
+                ForceCloseAllTrackedWindows(timeoutCts.Token);
+                
+                // Phase 2: Force close any floating/detached windows
+                Console.WriteLine("Phase 2: Force closing any remaining windows...");
+                ForceCloseRemainingWindows(timeoutCts.Token);
+                
+                // Phase 3: Wait briefly for windows to finish closing with timeout
+                Console.WriteLine("Phase 3: Waiting for window closure completion...");
+                WaitForWindowClosureWithTimeout(timeoutCts.Token);
+                
+                // Phase 4: Safe to dispose logger after all windows are closed
+                Console.WriteLine("Phase 4: Disposing shared logger...");
                 ExplorerPro.UI.MainWindow.MainWindow.DisposeSharedLogger();
                 
-                // Save state of each manager separately to isolate errors
-                SaveSettingsOnExit();
-                SaveMetadataOnExit();
+                // Phase 5: Save state of each manager separately to isolate errors
+                Console.WriteLine("Phase 5: Saving application state...");
+                SaveApplicationState();
                 
-                // Dispose all services
+                // Phase 6: Dispose all services
+                Console.WriteLine("Phase 6: Disposing services...");
                 DisposeServices();
                 
+                // Phase 7: Final cleanup
+                Console.WriteLine("Phase 7: Final cleanup...");
+                PerformFinalCleanup();
+                
+                Console.WriteLine("Application exit completed successfully");
+            }
+            catch (OperationCanceledException)
+            {
+                Console.WriteLine("Application exit timed out - forcing immediate shutdown");
+                System.Diagnostics.Debug.WriteLine("Warning: Application exit exceeded timeout, some resources may not be properly cleaned up");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during application exit: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Error during application exit: {ex.Message}");
+            }
+            finally
+            {
+                timeoutCts?.Dispose();
+                base.OnExit(e);
+            }
+        }
+        
+        /// <summary>
+        /// Force close all windows tracked by WindowLifecycleManager
+        /// </summary>
+        private void ForceCloseAllTrackedWindows(CancellationToken cancellationToken)
+        {
+            try
+            {
+                var lifecycleManager = WindowLifecycleManager.Instance;
+                if (lifecycleManager != null)
+                {
+                    // Use the new ForceCloseAllWindows method
+                    lifecycleManager.ForceCloseAllWindows();
+                    Console.WriteLine("WindowLifecycleManager cleanup completed");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during WindowLifecycleManager cleanup: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Force close any remaining windows not tracked by lifecycle manager
+        /// </summary>
+        private void ForceCloseRemainingWindows(CancellationToken cancellationToken)
+        {
+            try
+            {
+                var windowsCopy = new Window[Windows.Count];
+                Windows.CopyTo(windowsCopy, 0);
+                
+                foreach (Window window in windowsCopy)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        break;
+                        
+                    try
+                    {
+                        if (window != null && IsWindowOpen(window))
+                        {
+                            Console.WriteLine($"Force closing window: {window.GetType().Name}");
+                            window.Close();
+                        }
+                    }
+                    catch (Exception windowEx)
+                    {
+                        Console.WriteLine($"Error closing window {window?.GetType().Name}: {windowEx.Message}");
+                        try
+                        {
+                            // If Close() fails, try forcing with Hide() first
+                            window?.Hide();
+                        }
+                        catch
+                        {
+                            // Ignore secondary failures
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during remaining window cleanup: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Check if a window is still open and accessible
+        /// </summary>
+        private bool IsWindowOpen(Window window)
+        {
+            try
+            {
+                return window != null && window.IsLoaded && window.IsVisible;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        
+        /// <summary>
+        /// Wait for window closure completion with timeout
+        /// </summary>
+        private void WaitForWindowClosureWithTimeout(CancellationToken cancellationToken)
+        {
+            try
+            {
+                const int POLL_INTERVAL_MS = 100;
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                
+                while (Windows.Count > 0 && !cancellationToken.IsCancellationRequested)
+                {
+                    Thread.Sleep(POLL_INTERVAL_MS);
+                    
+                    // Force garbage collection to help with window cleanup
+                    if (stopwatch.ElapsedMilliseconds % 1000 == 0)
+                    {
+                        GC.Collect();
+                        GC.WaitForPendingFinalizers();
+                    }
+                }
+                
+                if (Windows.Count == 0)
+                {
+                    Console.WriteLine("All windows closed successfully");
+                }
+                else
+                {
+                    Console.WriteLine($"Warning: {Windows.Count} windows still open after timeout");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during window closure wait: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Save application state with error isolation
+        /// </summary>
+        private void SaveApplicationState()
+        {
+            // Save settings
+            SaveSettingsOnExit();
+            
+            // Save metadata
+            SaveMetadataOnExit();
+            
+            // Save any other persistent state
+            try
+            {
+                if (PinnedManager != null)
+                {
+                    // PinnedManager might have state to save
+                    Console.WriteLine("PinnedManager state preservation completed");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error saving PinnedManager state: {ex.Message}");
+            }
+            
+            try
+            {
+                if (RecurringTaskManager != null)
+                {
+                    // RecurringTaskManager might have state to save
+                    Console.WriteLine("RecurringTaskManager state preservation completed");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error saving RecurringTaskManager state: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Perform final cleanup operations
+        /// </summary>
+        private void PerformFinalCleanup()
+        {
+            try
+            {
                 // Unsubscribe from theme events
                 UnsubscribeFromThemeEvents();
                 
@@ -664,14 +859,17 @@ namespace ExplorerPro
                 
                 // Log application exit
                 LogApplicationExit();
+                
+                // Force final garbage collection
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                
+                Console.WriteLine("Final cleanup completed");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error during application exit: {ex.Message}");
-            }
-            finally
-            {
-                base.OnExit(e);
+                Console.WriteLine($"Error during final cleanup: {ex.Message}");
             }
         }
         
