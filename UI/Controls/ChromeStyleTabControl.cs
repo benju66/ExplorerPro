@@ -2268,18 +2268,93 @@ namespace ExplorerPro.UI.Controls
 
         private Window FindWindowUnderPoint(Point screenPoint)
         {
-            // This will be implemented properly in Phase 6
-            // For now, return null
-            return null;
+            try
+            {
+                // Use App.WindowManager to iterate through GetDropTargetWindows()
+                if (ExplorerPro.App.WindowManager == null)
+                {
+                    _logger?.LogWarning("WindowManager is null, cannot find window under point");
+                    return null;
+                }
+
+                var dropTargetWindows = ExplorerPro.App.WindowManager.GetDropTargetWindows();
+                if (dropTargetWindows == null)
+                {
+                    _logger?.LogWarning("GetDropTargetWindows returned null");
+                    return null;
+                }
+
+                foreach (var window in dropTargetWindows)
+                {
+                    if (window == null || !window.IsVisible)
+                        continue;
+
+                    try
+                    {
+                        // Convert window bounds to screen coordinates
+                        var windowBounds = new Rect(
+                            window.Left,
+                            window.Top,
+                            window.ActualWidth,
+                            window.ActualHeight
+                        );
+
+                        // Check if the screen point is within the window bounds
+                        if (windowBounds.Contains(screenPoint))
+                        {
+                            _logger?.LogDebug($"Found window under point {screenPoint}: {window.GetType().Name}");
+                            return window;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, $"Error checking window bounds for {window.GetType().Name}");
+                        continue;
+                    }
+                }
+
+                _logger?.LogDebug($"No window found under point {screenPoint}");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error in FindWindowUnderPoint");
+                return null;
+            }
         }
 
         private ChromeStyleTabControl FindTabControlInWindow(Window window)
         {
-            if (window is ExplorerPro.UI.MainWindow.MainWindow mainWindow)
+            try
             {
-                return mainWindow.MainTabs as ChromeStyleTabControl;
+                if (window == null)
+                {
+                    _logger?.LogDebug("Window is null, cannot find tab control");
+                    return null;
+                }
+
+                if (window is ExplorerPro.UI.MainWindow.MainWindow mainWindow)
+                {
+                    var tabControl = mainWindow.MainTabs as ChromeStyleTabControl;
+                    if (tabControl != null)
+                    {
+                        _logger?.LogDebug($"Found ChromeStyleTabControl in MainWindow: {mainWindow.GetHashCode()}");
+                    }
+                    else
+                    {
+                        _logger?.LogDebug($"MainTabs is not ChromeStyleTabControl in MainWindow: {mainWindow.GetHashCode()}");
+                    }
+                    return tabControl;
+                }
+
+                _logger?.LogDebug($"Window is not a MainWindow, type: {window.GetType().Name}");
+                return null;
             }
-            return null;
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error in FindTabControlInWindow");
+                return null;
+            }
         }
 
         #endregion
