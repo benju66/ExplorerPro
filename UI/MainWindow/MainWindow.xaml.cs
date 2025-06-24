@@ -5293,22 +5293,34 @@ namespace ExplorerPro.UI.MainWindow
             {
                 if (MainTabs is ChromeStyleTabControl chromeTabControl)
                 {
-                    // Handle new tab requests
-                    chromeTabControl.NewTabRequested += OnNewTabRequested;
+                    // Handle new tab requests using weak event pattern
+                    SubscribeToEventWeak<NewTabRequestedEventArgs>(
+                        chromeTabControl, 
+                        nameof(chromeTabControl.NewTabRequested), 
+                        OnNewTabRequested);
                     
-                    // Handle tab close requests
-                    chromeTabControl.TabCloseRequested += OnTabCloseRequested;
+                    // Handle tab close requests using weak event pattern
+                    SubscribeToEventWeak<TabCloseRequestedEventArgs>(
+                        chromeTabControl, 
+                        nameof(chromeTabControl.TabCloseRequested), 
+                        OnTabCloseRequested);
                     
-                    // Handle tab drag events
-                    chromeTabControl.TabDragged += OnTabDragged;
+                    // Handle tab drag events using weak event pattern
+                    SubscribeToEventWeak<TabDragEventArgs>(
+                        chromeTabControl, 
+                        nameof(chromeTabControl.TabDragged), 
+                        OnTabDragged);
                     
-                    // Handle tab metadata changes
-                    chromeTabControl.TabMetadataChanged += OnTabMetadataChanged;
+                    // Handle tab metadata changes using weak event pattern
+                    SubscribeToEventWeak<TabMetadataChangedEventArgs>(
+                        chromeTabControl, 
+                        nameof(chromeTabControl.TabMetadataChanged), 
+                        OnTabMetadataChanged);
                     
-                    // Add middle-click support to close tabs
-                    chromeTabControl.MouseDown += OnTabControlMouseDown;
+                    // Add middle-click support to close tabs using weak routed event pattern
+                    SubscribeToRoutedEventWeak(chromeTabControl, UIElement.MouseDownEvent, OnTabControlMouseDown);
                     
-                    _instanceLogger?.LogInformation("Chrome-style tab events configured");
+                    _instanceLogger?.LogInformation("Chrome-style tab events configured with weak event pattern");
                 }
             };
         }
@@ -5316,9 +5328,9 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Handles middle-click on tabs to close them
         /// </summary>
-        private void OnTabControlMouseDown(object sender, MouseButtonEventArgs e)
+        private void OnTabControlMouseDown(object sender, RoutedEventArgs e)
         {
-            if (e.ChangedButton == MouseButton.Middle && e.ButtonState == MouseButtonState.Pressed)
+            if (e is MouseButtonEventArgs mouseArgs && mouseArgs.ChangedButton == MouseButton.Middle && mouseArgs.ButtonState == MouseButtonState.Pressed)
             {
                 try
                 {
