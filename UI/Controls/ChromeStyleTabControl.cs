@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -1109,11 +1110,107 @@ namespace ExplorerPro.UI.Controls
                 _dragDropService = ExplorerPro.App.DragDropService;
             }
             
+            // Wire up event handlers for dynamically created buttons
+            WireUpTabControlEvents();
+            
             // Ensure we have at least one tab if none exist
             if (TabItems?.Count == 0 && AllowAddNew)
             {
                 AddNewTab();
             }
+        }
+
+        /// <summary>
+        /// Wires up event handlers for tab control buttons
+        /// </summary>
+        private void WireUpTabControlEvents()
+        {
+            try
+            {
+                // Find and wire up the AddTabButton in the template
+                var addTabButton = FindNameInTemplate("AddTabButton") as Button;
+                if (addTabButton != null)
+                {
+                    addTabButton.Click -= OnAddTabButtonClick; // Remove any existing handler
+                    addTabButton.Click += OnAddTabButtonClick;
+                }
+
+                // Wire up close button clicks for existing tabs
+                foreach (TabItem tabItem in Items)
+                {
+                    WireUpTabItemEvents(tabItem);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to wire up tab control events");
+            }
+        }
+
+        /// <summary>
+        /// Wires up events for a specific tab item
+        /// </summary>
+        private void WireUpTabItemEvents(TabItem tabItem)
+        {
+            try
+            {
+                // Find close button in the tab item template
+                var closeButton = FindChildOfType<Button>(tabItem, "CloseButton");
+                if (closeButton != null)
+                {
+                    closeButton.Click -= OnTabCloseButtonClick; // Remove any existing handler
+                    closeButton.Click += OnTabCloseButtonClick;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to wire up tab item events");
+            }
+        }
+
+        /// <summary>
+        /// Finds a child control of specific type and name in the visual tree
+        /// </summary>
+        private T FindChildOfType<T>(DependencyObject parent, string name = null) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+
+                if (child is T typedChild && (name == null || (child as FrameworkElement)?.Name == name))
+                {
+                    return typedChild;
+                }
+
+                var result = FindChildOfType<T>(child, name);
+                if (result != null)
+                {
+                    return result;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Finds a named element in the control template
+        /// </summary>
+        private object FindNameInTemplate(string name)
+        {
+            try
+            {
+                var template = this.Template;
+                if (template != null)
+                {
+                    return template.FindName(name, this);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to find '{name}' in template");
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -1156,6 +1253,163 @@ namespace ExplorerPro.UI.Controls
                 AddNewTab();
                 e.Handled = true;
             }
+        }
+
+        /// <summary>
+        /// Handles tab close button clicks
+        /// </summary>
+        private void OnTabCloseButtonClick(object sender, RoutedEventArgs e)
+        {
+            var closeButton = sender as Button;
+            if (closeButton != null)
+            {
+                // Find parent TabItem
+                var tabItem = FindParent<TabItem>(closeButton);
+                if (tabItem?.Tag is TabItemModel tabModel)
+                {
+                    CloseTab(tabModel);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Handles add tab button clicks
+        /// </summary>
+        private void OnAddTabButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (AllowAddNew)
+            {
+                AddNewTab();
+            }
+        }
+
+        /// <summary>
+        /// Handles right-click context menu on tabs
+        /// </summary>
+        protected override void OnPreviewMouseRightButtonDown(MouseButtonEventArgs e)
+        {
+            base.OnPreviewMouseRightButtonDown(e);
+
+            // Find which tab was right-clicked
+            var tabItem = FindTabItemFromPoint(e.GetPosition(this));
+            if (tabItem?.Tag is TabItemModel tabModel)
+            {
+                // Select the tab that was right-clicked
+                SelectedItem = tabItem;
+
+                // Show context menu
+                ShowTabContextMenu(tabItem, tabModel, e.GetPosition(this));
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>
+        /// Shows the context menu for a tab
+        /// </summary>
+        private void ShowTabContextMenu(TabItem tabItem, TabItemModel tabModel, Point position)
+        {
+            var contextMenu = new ContextMenu();
+
+            // New Tab
+            var newTabItem = new MenuItem 
+            { 
+                Header = "New Tab", 
+                Icon = new TextBlock { Text = "＋", FontSize = 12 }
+            };
+            newTabItem.Click += (s, e) => AddNewTab();
+            contextMenu.Items.Add(newTabItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            // Duplicate Tab
+            var duplicateItem = new MenuItem 
+            { 
+                Header = "Duplicate Tab",
+                Icon = new TextBlock { Text = "⧉", FontSize = 12 }
+            };
+            duplicateItem.Click += (s, e) => DuplicateTab(tabModel);
+            contextMenu.Items.Add(duplicateItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            // Pin/Unpin Tab
+            var pinItem = new MenuItem 
+            { 
+                Header = tabModel.IsPinned ? "Unpin Tab" : "Pin Tab",
+                Icon = new TextBlock { Text = tabModel.IsPinned ? "📌" : "📍", FontSize = 12 }
+            };
+            pinItem.Click += (s, e) => ToggleTabPin(tabModel);
+            contextMenu.Items.Add(pinItem);
+
+            // Change Color (if not pinned)
+            if (!tabModel.IsPinned)
+            {
+                var colorItem = new MenuItem 
+                { 
+                    Header = "Change Color",
+                    Icon = new TextBlock { Text = "🎨", FontSize = 12 }
+                };
+                colorItem.Click += (s, e) => ChangeTabColor(tabModel);
+                contextMenu.Items.Add(colorItem);
+            }
+
+            contextMenu.Items.Add(new Separator());
+
+            // Detach to New Window
+            if (Items.Count > 1)
+            {
+                var detachItem = new MenuItem 
+                { 
+                    Header = "Move to New Window",
+                    Icon = new TextBlock { Text = "🗗", FontSize = 12 }
+                };
+                detachItem.Click += (s, e) => DetachTab(tabModel);
+                contextMenu.Items.Add(detachItem);
+
+                contextMenu.Items.Add(new Separator());
+            }
+
+            // Close Tab
+            if (tabModel.IsClosable && Items.Count > 1)
+            {
+                var closeItem = new MenuItem 
+                { 
+                    Header = "Close Tab",
+                    Icon = new TextBlock { Text = "✕", FontSize = 12 }
+                };
+                closeItem.Click += (s, e) => CloseTab(tabModel);
+                contextMenu.Items.Add(closeItem);
+
+                // Close Other Tabs
+                if (Items.Count > 2)
+                {
+                    var closeOthersItem = new MenuItem 
+                    { 
+                        Header = "Close Other Tabs",
+                        Icon = new TextBlock { Text = "⧈", FontSize = 12 }
+                    };
+                    closeOthersItem.Click += (s, e) => CloseOtherTabs(tabModel);
+                    contextMenu.Items.Add(closeOthersItem);
+                }
+
+                // Close Tabs to the Right
+                var tabIndex = GetTabIndex(tabModel);
+                if (tabIndex < Items.Count - 1)
+                {
+                    var closeRightItem = new MenuItem 
+                    { 
+                        Header = "Close Tabs to the Right",
+                        Icon = new TextBlock { Text = "→✕", FontSize = 12 }
+                    };
+                    closeRightItem.Click += (s, e) => CloseTabsToTheRight(tabModel);
+                    contextMenu.Items.Add(closeRightItem);
+                }
+            }
+
+            // Show the context menu
+            contextMenu.PlacementTarget = tabItem;
+            contextMenu.Placement = PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
         }
 
         /// <summary>
@@ -1390,6 +1644,9 @@ namespace ExplorerPro.UI.Controls
             {
                 var tabItem = CreateTabItemFromModel(tabModel);
                 Items.Add(tabItem);
+                
+                // Wire up events for the new tab item
+                WireUpTabItemEvents(tabItem);
             }
         }
 
@@ -1649,6 +1906,179 @@ namespace ExplorerPro.UI.Controls
             {
                 SelectedTabItem = model;
                 model.UpdateLastAccessed();
+            }
+        }
+
+        #endregion
+
+        #region Tab Context Menu Methods
+
+        /// <summary>
+        /// Finds a parent of specified type in the visual tree
+        /// </summary>
+        private T FindParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            DependencyObject parentObject = VisualTreeHelper.GetParent(child);
+
+            if (parentObject == null) return null;
+
+            T parent = parentObject as T;
+            if (parent != null)
+                return parent;
+            else
+                return FindParent<T>(parentObject);
+        }
+
+        /// <summary>
+        /// Duplicates a tab
+        /// </summary>
+        private void DuplicateTab(TabItemModel tabModel)
+        {
+            try
+            {
+                // Create a new tab with the same content type
+                var newTab = new TabItemModel(Guid.NewGuid().ToString(), $"{tabModel.Title} - Copy", tabModel.Content);
+                newTab.Tooltip = tabModel.Tooltip;
+                
+                TabItems ??= new ObservableCollection<TabItemModel>();
+                TabItems.Add(newTab);
+                SelectedTabItem = newTab;
+
+                _logger?.LogInformation($"Duplicated tab '{tabModel.Title}'");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to duplicate tab '{tabModel.Title}'");
+            }
+        }
+
+        /// <summary>
+        /// Toggles the pin state of a tab
+        /// </summary>
+        private void ToggleTabPin(TabItemModel tabModel)
+        {
+            try
+            {
+                tabModel.IsPinned = !tabModel.IsPinned;
+                
+                // Update visual representation
+                var tabItem = Items.Cast<TabItem>().FirstOrDefault(t => t.Tag == tabModel);
+                if (tabItem != null)
+                {
+                    UpdateTabItemFromModel(tabItem, tabModel);
+                }
+
+                _logger?.LogInformation($"Tab '{tabModel.Title}' {(tabModel.IsPinned ? "pinned" : "unpinned")}");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to toggle pin for tab '{tabModel.Title}'");
+            }
+        }
+
+        /// <summary>
+        /// Changes the color of a tab
+        /// </summary>
+        private void ChangeTabColor(TabItemModel tabModel)
+        {
+            try
+            {
+                // Show color picker dialog
+                var colorDialog = new System.Windows.Forms.ColorDialog();
+                if (colorDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                {
+                    // For now, just update the background of the tab item directly
+                    var tabItem = Items.Cast<TabItem>().FirstOrDefault(t => t.Tag == tabModel);
+                    if (tabItem != null)
+                    {
+                        var color = Color.FromArgb(colorDialog.Color.A, colorDialog.Color.R, colorDialog.Color.G, colorDialog.Color.B);
+                        tabItem.Background = new SolidColorBrush(color);
+                    }
+
+                    _logger?.LogInformation($"Changed color for tab '{tabModel.Title}'");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to change color for tab '{tabModel.Title}'");
+            }
+        }
+
+        /// <summary>
+        /// Detaches a tab to a new window
+        /// </summary>
+        private void DetachTab(TabItemModel tabModel)
+        {
+            try
+            {
+                var mainWindow = Window.GetWindow(this) as ExplorerPro.UI.MainWindow.MainWindow;
+                if (mainWindow != null)
+                {
+                    var tabItem = Items.Cast<TabItem>().FirstOrDefault(t => t.Tag == tabModel);
+                    if (tabItem != null)
+                    {
+                        var detachedWindow = mainWindow.DetachTabToNewWindow(tabItem);
+                        if (detachedWindow != null)
+                        {
+                            _logger?.LogInformation($"Detached tab '{tabModel.Title}' to new window");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to detach tab '{tabModel.Title}'");
+            }
+        }
+
+        /// <summary>
+        /// Closes all tabs except the specified one
+        /// </summary>
+        private void CloseOtherTabs(TabItemModel keepTab)
+        {
+            try
+            {
+                var tabsToClose = TabItems?.Where(t => t != keepTab && t.IsClosable).ToList();
+                if (tabsToClose != null)
+                {
+                    foreach (var tab in tabsToClose)
+                    {
+                        CloseTab(tab);
+                    }
+                }
+
+                _logger?.LogInformation($"Closed other tabs, kept '{keepTab.Title}'");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to close other tabs");
+            }
+        }
+
+        /// <summary>
+        /// Closes all tabs to the right of the specified tab
+        /// </summary>
+        private void CloseTabsToTheRight(TabItemModel fromTab)
+        {
+            try
+            {
+                if (TabItems == null) return;
+
+                var fromIndex = TabItems.IndexOf(fromTab);
+                if (fromIndex >= 0)
+                {
+                    var tabsToClose = TabItems.Skip(fromIndex + 1).Where(t => t.IsClosable).ToList();
+                    foreach (var tab in tabsToClose)
+                    {
+                        CloseTab(tab);
+                    }
+                }
+
+                _logger?.LogInformation($"Closed tabs to the right of '{fromTab.Title}'");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to close tabs to the right");
             }
         }
 

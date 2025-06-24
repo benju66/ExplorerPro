@@ -541,9 +541,7 @@ All dependencies mapped and validation tests established.
             <controls:ChromeStyleTabControl x:Name="MainTabs" 
                                           Background="#FFFFFF"
                                           BorderThickness="0"
-                                          TabStripPlacement="Top"
-                                          MouseDown="OnTabControlMouseDown"
-                                          PreviewMouseRightButtonDown="TabControl_PreviewMouseRightButtonDown">
+                                          TabStripPlacement="Top">
                 <TabControl.Resources>
                     <!-- Ultra-Modern Chrome-style TabItem - Override global style -->
                     <Style TargetType="{x:Type TabItem}" x:Key="MainWindowTabStyle">
@@ -649,7 +647,6 @@ All dependencies mapped and validation tests established.
                                         x:Name="CloseButton"
                                         Content="×" 
                                         Width="20" Height="20"
-                                        Click="TabCloseButton_Click"
                                         Style="{StaticResource ChromeCloseButtonStyle}"/>
                             </Grid>
                             
@@ -719,7 +716,6 @@ All dependencies mapped and validation tests established.
                                                HorizontalAlignment="Center"
                                                FontSize="16"
                                                FontWeight="Normal"
-                                               Click="AddTabButton_Click"
                                                ToolTip="Add new window tab"
                                                Style="{x:Null}">
                                             <Button.Template>
