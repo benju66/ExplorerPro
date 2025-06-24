@@ -1562,55 +1562,7 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         private void PlaySuccessBounceAnimation()
         {
-            try
-            {
-                if (_draggedTab == null) return;
-
-                var bounceStoryboard = new Storyboard();
-                var transformGroup = _draggedTab.RenderTransform as TransformGroup;
-                var scaleTransform = transformGroup?.Children.OfType<ScaleTransform>().FirstOrDefault();
-                
-                if (scaleTransform != null)
-                {
-                    // Create bounce effect using elastic ease
-                    var bounceAnimationX = new DoubleAnimation
-                    {
-                        From = scaleTransform.ScaleX,
-                        To = 1.2,
-                        Duration = TimeSpan.FromMilliseconds(BOUNCE_DURATION / 3),
-                        AutoReverse = true,
-                        EasingFunction = new ElasticEase 
-                        { 
-                            EasingMode = EasingMode.EaseOut,
-                            Oscillations = 2,
-                            Springiness = 8
-                        }
-                    };
-                    
-                    var bounceAnimationY = bounceAnimationX.Clone();
-                    
-                    Storyboard.SetTarget(bounceAnimationX, scaleTransform);
-                    Storyboard.SetTargetProperty(bounceAnimationX, new PropertyPath("ScaleX"));
-                    bounceStoryboard.Children.Add(bounceAnimationX);
-                    
-                    Storyboard.SetTarget(bounceAnimationY, scaleTransform);
-                    Storyboard.SetTargetProperty(bounceAnimationY, new PropertyPath("ScaleY"));
-                    bounceStoryboard.Children.Add(bounceAnimationY);
-                    
-                    // Reset to normal after animation
-                    bounceStoryboard.Completed += (s, e) =>
-                    {
-                        scaleTransform.ScaleX = 1.0;
-                        scaleTransform.ScaleY = 1.0;
-                    };
-                    
-                    bounceStoryboard.Begin();
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "Error playing success bounce animation");
-            }
+            _logger?.LogDebug("PlaySuccessBounceAnimation called");
         }
 
         /// <summary>
@@ -1618,43 +1570,51 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         private void PlayErrorShakeAnimation()
         {
+            _logger?.LogDebug("PlayErrorShakeAnimation called");
+        }
+
+        /// <summary>
+        /// Creates enhanced insertion indicator that initializes _insertionIndicator as a new TabDropInsertionIndicator
+        /// </summary>
+        private void CreateEnhancedInsertionIndicator()
+        {
             try
             {
-                if (_draggedTab == null) return;
+                if (_insertionIndicator != null)
+                    return;
 
-                var shakeStoryboard = new Storyboard();
-                var transformGroup = _draggedTab.RenderTransform as TransformGroup;
-                var translateTransform = transformGroup?.Children.OfType<TranslateTransform>().FirstOrDefault();
+                _insertionIndicator = new TabDropInsertionIndicator(this, null);
+                _logger?.LogDebug("Created enhanced insertion indicator");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error creating enhanced insertion indicator");
+            }
+        }
+
+        /// <summary>
+        /// Shows enhanced insertion indicator that positions and shows the indicator at specified position and drop index
+        /// </summary>
+        /// <param name="position">Position to show the indicator</param>
+        /// <param name="dropIndex">Drop index for positioning</param>
+        private void ShowEnhancedInsertionIndicator(Point position, int dropIndex)
+        {
+            try
+            {
+                CreateEnhancedInsertionIndicator();
                 
-                if (translateTransform != null)
+                if (_insertionIndicator != null)
                 {
-                    // Create shake effect
-                    var shakeAnimation = new DoubleAnimation
-                    {
-                        From = 0,
-                        To = 5,
-                        Duration = TimeSpan.FromMilliseconds(SHAKE_DURATION / 8),
-                        AutoReverse = true,
-                        RepeatBehavior = new RepeatBehavior(4), // 4 shakes
-                        EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
-                    };
-                    
-                    Storyboard.SetTarget(shakeAnimation, translateTransform);
-                    Storyboard.SetTargetProperty(shakeAnimation, new PropertyPath("X"));
-                    shakeStoryboard.Children.Add(shakeAnimation);
-                    
-                    // Reset position after shake
-                    shakeStoryboard.Completed += (s, e) =>
-                    {
-                        translateTransform.X = 0;
-                    };
-                    
-                    shakeStoryboard.Begin();
+                    // Calculate insertion position based on drop index
+                    var insertionX = CalculateInsertionPosition(dropIndex);
+                    _insertionIndicator.UpdatePosition(insertionX, TAB_STRIP_HEIGHT);
+                    _insertionIndicator.ShowIndicator();
+                    _logger?.LogDebug($"Showing enhanced insertion indicator at position {position} with drop index {dropIndex}");
                 }
             }
             catch (Exception ex)
             {
-                _logger?.LogWarning(ex, "Error playing error shake animation");
+                _logger?.LogWarning(ex, "Error showing enhanced insertion indicator");
             }
         }
 
