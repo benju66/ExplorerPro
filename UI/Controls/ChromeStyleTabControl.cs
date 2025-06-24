@@ -11,6 +11,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Shapes;
 using ExplorerPro.Core.TabManagement;
 using ExplorerPro.Models;
 using ExplorerPro.UI.MainWindow;
@@ -246,6 +247,8 @@ namespace ExplorerPro.UI.Controls
         // Visual indicator fields
         private TabDropInsertionIndicator _insertionIndicator;
         private Window _detachPreviewWindow;
+        private Window _dragVisualWindow;
+        private Rectangle _insertionLine;
 
         // Thresholds for drag operations
         private const double DRAG_THRESHOLD = 5.0;
@@ -350,7 +353,17 @@ namespace ExplorerPro.UI.Controls
             }
             else if (_isDragging)
             {
-                UpdateDragOperation(e.GetPosition(null));
+                var screenPoint = e.GetPosition(null);
+                UpdateDragOperation(screenPoint);
+                
+                // Update drag visual position to follow cursor
+                if (_dragVisualWindow != null && _dragVisualWindow.IsVisible)
+                {
+                    UpdateDragVisualPosition(screenPoint);
+                }
+                
+                // Update insertion indicator based on drop validity
+                UpdateInsertionIndicatorVisibility(screenPoint);
             }
         }
 
@@ -468,6 +481,17 @@ namespace ExplorerPro.UI.Controls
 
                 // Start visual feedback
                 StartDragVisualFeedback();
+                
+                // Create and show enhanced drag visual
+                _dragVisualWindow = CreateDragVisual(_draggedTab);
+                if (_dragVisualWindow != null)
+                {
+                    // Position at current cursor location
+                    var cursorPos = Mouse.GetPosition(null);
+                    _dragVisualWindow.Left = cursorPos.X - (_dragVisualWindow.Width / 2);
+                    _dragVisualWindow.Top = cursorPos.Y - 20;
+                    _dragVisualWindow.Show();
+                }
 
                 // Use drag service if available
                 if (_dragDropService != null)
@@ -780,6 +804,17 @@ namespace ExplorerPro.UI.Controls
                 _draggedTab.RenderTransform = null;
             }
             
+            // Hide and cleanup drag visual window
+            if (_dragVisualWindow != null)
+            {
+                _dragVisualWindow.Hide();
+                _dragVisualWindow.Close();
+                _dragVisualWindow = null;
+            }
+            
+            // Hide enhanced insertion indicators
+            HideEnhancedInsertionIndicator();
+            
             HideAllIndicators();
         }
 
@@ -986,6 +1021,271 @@ namespace ExplorerPro.UI.Controls
             }
         }
 
+        #region Phase 5 Enhanced Visual Indicators
+
+        /// <summary>
+        /// Creates a floating window with tab preview that follows the cursor
+        /// </summary>
+        private Window CreateDragVisual(TabItem tabItem)
+        {
+            if (tabItem?.Tag is not TabItemModel tabModel)
+                return null;
+
+            // Create floating window with no chrome
+            var dragWindow = new Window
+            {
+                WindowStyle = WindowStyle.None,
+                AllowsTransparency = true,
+                Background = Brushes.Transparent,
+                ShowInTaskbar = false,
+                Topmost = true,
+                IsHitTestVisible = false,
+                Width = Math.Max(tabItem.ActualWidth, 150),
+                Height = 40,
+                Opacity = 0.8
+            };
+
+            // Create visual content - tab preview
+            var border = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(200, 240, 248, 255)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0, 120, 215)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4, 4, 0, 0),
+                Margin = new Thickness(2)
+            };
+
+            // Add drop shadow effect
+            border.Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = Colors.Black,
+                BlurRadius = 8,
+                ShadowDepth = 3,
+                Opacity = 0.3
+            };
+
+            // Create content grid
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            // Add tab icon placeholder (folder icon for now)
+            var iconPath = new System.Windows.Shapes.Path
+            {
+                Data = Geometry.Parse("M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"),
+                Fill = new SolidColorBrush(Color.FromRgb(100, 149, 237)),
+                Width = 14,
+                Height = 14,
+                Stretch = Stretch.Uniform,
+                Margin = new Thickness(8, 0, 4, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(iconPath, 0);
+            grid.Children.Add(iconPath);
+
+            // Add tab title
+            var titleText = new TextBlock
+            {
+                Text = tabModel.Title ?? "Tab",
+                FontSize = 12,
+                FontWeight = FontWeights.Normal,
+                Foreground = new SolidColorBrush(Color.FromRgb(68, 68, 68)),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(4, 0, 8, 0),
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            Grid.SetColumn(titleText, 1);
+            grid.Children.Add(titleText);
+
+            border.Child = grid;
+            dragWindow.Content = border;
+
+            return dragWindow;
+        }
+
+        /// <summary>
+        /// Creates or updates a vertical line indicator between tabs
+        /// </summary>
+        private void CreateInsertionIndicator()
+        {
+            if (_insertionLine != null)
+                return;
+
+            _insertionLine = new Rectangle
+            {
+                Width = 2,
+                Height = TAB_STRIP_HEIGHT - 4,
+                Fill = new SolidColorBrush(Color.FromRgb(0, 120, 215)),
+                Opacity = 0,
+                IsHitTestVisible = false,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 2, 0, 0)
+            };
+
+            // Add glow effect
+            _insertionLine.Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = Color.FromRgb(0, 120, 215),
+                BlurRadius = 6,
+                ShadowDepth = 0,
+                Opacity = 0.8
+            };
+
+            // Add to panel if available
+            var panel = FindChildOfType<Panel>(this);
+            panel?.Children.Add(_insertionLine);
+        }
+
+        /// <summary>
+        /// Updates drag visual position to follow cursor
+        /// </summary>
+        private void UpdateDragVisualPosition(Point screenPoint)
+        {
+            if (_dragVisualWindow == null)
+                return;
+
+            // Position window slightly offset from cursor
+            _dragVisualWindow.Left = screenPoint.X - (_dragVisualWindow.Width / 2);
+            _dragVisualWindow.Top = screenPoint.Y - 20;
+
+            // Keep window on screen
+            var screen = SystemParameters.PrimaryScreenWidth;
+            var screenHeight = SystemParameters.PrimaryScreenHeight;
+
+            if (_dragVisualWindow.Left < 0)
+                _dragVisualWindow.Left = 0;
+            if (_dragVisualWindow.Left + _dragVisualWindow.Width > screen)
+                _dragVisualWindow.Left = screen - _dragVisualWindow.Width;
+            if (_dragVisualWindow.Top < 0)
+                _dragVisualWindow.Top = 0;
+            if (_dragVisualWindow.Top + _dragVisualWindow.Height > screenHeight)
+                _dragVisualWindow.Top = screenPoint.Y + 20;
+        }
+
+        /// <summary>
+        /// Updates insertion indicator visibility based on drop validity
+        /// </summary>
+        private void UpdateInsertionIndicatorVisibility(Point screenPoint)
+        {
+            if (_currentDragOperation == null)
+                return;
+
+            var operationType = DetermineOperationType(screenPoint);
+            
+            switch (operationType)
+            {
+                case DragOperationType.Reorder:
+                    ShowEnhancedInsertionIndicator(screenPoint);
+                    break;
+                    
+                case DragOperationType.Transfer:
+                    // Show indicator in target tab control
+                    var targetWindow = FindWindowUnderPoint(screenPoint);
+                    var targetTabControl = targetWindow != null ? FindTabControlInWindow(targetWindow) : null;
+                    if (targetTabControl != null)
+                    {
+                        targetTabControl.ShowEnhancedInsertionIndicator(screenPoint);
+                    }
+                    break;
+                    
+                default:
+                    HideEnhancedInsertionIndicator();
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Shows enhanced insertion indicator with smooth animation
+        /// </summary>
+        private void ShowEnhancedInsertionIndicator(Point screenPoint)
+        {
+            CreateInsertionIndicator();
+            
+            if (_insertionLine == null)
+                return;
+
+            // Calculate insertion position
+            var localPoint = this.PointFromScreen(screenPoint);
+            var insertionIndex = CalculateInsertionIndex(localPoint);
+            var insertionX = CalculateInsertionPosition(insertionIndex);
+
+            // Position the indicator
+            Canvas.SetLeft(_insertionLine, insertionX);
+            
+            // Animate indicator appearance
+            var fadeIn = new DoubleAnimation
+            {
+                From = _insertionLine.Opacity,
+                To = 1.0,
+                Duration = TimeSpan.FromMilliseconds(150),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+
+            _insertionLine.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+        }
+
+        /// <summary>
+        /// Hides enhanced insertion indicator with smooth animation
+        /// </summary>
+        private void HideEnhancedInsertionIndicator()
+        {
+            if (_insertionLine == null)
+                return;
+
+            var fadeOut = new DoubleAnimation
+            {
+                From = _insertionLine.Opacity,
+                To = 0.0,
+                Duration = TimeSpan.FromMilliseconds(100),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+            };
+
+            _insertionLine.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+        }
+
+        /// <summary>
+        /// Calculates insertion index based on mouse position
+        /// </summary>
+        private int CalculateInsertionIndex(Point localPoint)
+        {
+            var insertionIndex = 0;
+            var accumulatedWidth = 0.0;
+
+            for (int i = 0; i < Items.Count; i++)
+            {
+                if (Items[i] is TabItem tab && tab != _draggedTab)
+                {
+                    var tabCenter = accumulatedWidth + (tab.ActualWidth / 2);
+                    if (localPoint.X <= tabCenter)
+                        break;
+                    insertionIndex = i + 1;
+                }
+                
+                if (Items[i] is TabItem tabItem)
+                    accumulatedWidth += tabItem.ActualWidth;
+            }
+
+            return Math.Min(insertionIndex, Items.Count);
+        }
+
+        /// <summary>
+        /// Calculates insertion position in pixels
+        /// </summary>
+        private double CalculateInsertionPosition(int insertionIndex)
+        {
+            var position = 0.0;
+            
+            for (int i = 0; i < insertionIndex && i < Items.Count; i++)
+            {
+                if (Items[i] is TabItem tab)
+                    position += tab.ActualWidth;
+            }
+
+            return position;
+        }
+
+        #endregion
+
         #endregion
 
         #region Helper Methods
@@ -998,6 +1298,17 @@ namespace ExplorerPro.UI.Controls
                 _draggedTab.Opacity = 1.0;
                 _draggedTab.RenderTransform = null;
             }
+            
+            // Hide and cleanup drag visual window
+            if (_dragVisualWindow != null)
+            {
+                _dragVisualWindow.Hide();
+                _dragVisualWindow.Close();
+                _dragVisualWindow = null;
+            }
+            
+            // Hide enhanced insertion indicators
+            HideEnhancedInsertionIndicator();
             
             // Hide all visual indicators
             HideAllIndicators();
