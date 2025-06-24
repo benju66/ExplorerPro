@@ -65,14 +65,21 @@ namespace ExplorerPro.Core.TabManagement
                     return;
                 }
 
-                // Don't drag the last tab
+                // VALIDATION: Don't drag the last tab
                 if (sourceTabControl.Items.Count <= 1)
                 {
                     _logger.LogWarning("Cannot drag the last remaining tab");
                     return;
                 }
 
-                // Find the tab item
+                // VALIDATION: Check if tab is draggable
+                if (!tab.IsClosable)
+                {
+                    _logger.LogWarning($"Tab '{tab.Title}' is not draggable");
+                    return;
+                }
+
+                // Find the actual TabItem reference
                 var tabItem = sourceTabControl.Items
                     .OfType<TabItem>()
                     .FirstOrDefault(ti => ti.Tag == tab);
@@ -83,6 +90,13 @@ namespace ExplorerPro.Core.TabManagement
                     return;
                 }
 
+                // VALIDATION: Ensure tab is not already being dragged
+                if (tab.IsDragging)
+                {
+                    _logger.LogWarning($"Tab '{tab.Title}' is already being dragged");
+                    return;
+                }
+
                 _currentDrag = new DragOperation
                 {
                     Tab = tab,
@@ -90,7 +104,7 @@ namespace ExplorerPro.Core.TabManagement
                     SourceTabControl = sourceTabControl,
                     StartPoint = startPoint,
                     Offset = Mouse.GetPosition(tabItem),
-                    DraggedTabItem = tabItem,
+                    DraggedTabItem = tabItem, // Store actual TabItem reference
                     OriginalIndex = sourceTabControl.Items.IndexOf(tabItem),
                     IsActive = true
                 };
@@ -100,12 +114,42 @@ namespace ExplorerPro.Core.TabManagement
                 tab.SourceWindow = sourceWindow;
                 tab.OriginalIndex = _currentDrag.OriginalIndex;
 
-                _logger.LogInformation($"Started dragging tab '{tab.Title}'");
+                // Set up visual drag indicator
+                SetupVisualDragIndicator(tabItem);
+
+                _logger.LogInformation($"Started dragging tab '{tab.Title}' from index {_currentDrag.OriginalIndex}");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to start drag operation");
                 CancelDrag();
+            }
+        }
+
+        /// <summary>
+        /// Sets up visual indicators for the dragged tab
+        /// </summary>
+        private void SetupVisualDragIndicator(TabItem tabItem)
+        {
+            if (tabItem == null) return;
+
+            try
+            {
+                // Set dragging visual state
+                tabItem.Opacity = 0.6;
+                
+                // Add transform for potential animations
+                if (tabItem.RenderTransform == null)
+                {
+                    tabItem.RenderTransform = new TranslateTransform();
+                }
+
+                // Update cursor to indicate dragging
+                Mouse.OverrideCursor = Cursors.Hand;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to set up visual drag indicator");
             }
         }
 
@@ -165,23 +209,45 @@ namespace ExplorerPro.Core.TabManagement
             if (_currentDrag?.IsActive != true)
                 return false;
 
+            bool success = false;
+            DragOperationType operationType = DragOperationType.None;
+
             try
             {
-                var operationType = _currentDrag.CurrentOperationType;
-                bool success = false;
+                // Determine operation type safely
+                operationType = _currentDrag.CurrentOperationType;
+                if (operationType == DragOperationType.None)
+                {
+                    operationType = GetOperationType(dropPoint);
+                }
 
+                _logger.LogInformation($"Attempting to complete {operationType} operation for tab '{_currentDrag.Tab.Title}'");
+
+                // Validate operation before proceeding
+                if (!ValidateDropOperation(operationType, targetWindow, dropPoint))
+                {
+                    _logger.LogWarning($"Invalid {operationType} operation - cancelling");
+                    return false;
+                }
+
+                // Execute the operation with proper error handling
                 switch (operationType)
                 {
                     case DragOperationType.Reorder:
-                        success = CompleteReorder(dropPoint);
+                        success = ExecuteReorderOperation(dropPoint);
                         break;
 
                     case DragOperationType.Detach:
-                        success = CompleteDetach(dropPoint);
+                        success = ExecuteDetachOperation(dropPoint);
                         break;
 
                     case DragOperationType.Transfer:
-                        success = CompleteTransfer(targetWindow, dropPoint);
+                        success = ExecuteTransferOperation(targetWindow, dropPoint);
+                        break;
+
+                    default:
+                        _logger.LogWarning($"Unsupported operation type: {operationType}");
+                        success = false;
                         break;
                 }
 
@@ -189,17 +255,129 @@ namespace ExplorerPro.Core.TabManagement
                 {
                     _logger.LogInformation($"Successfully completed {operationType} operation for tab '{_currentDrag.Tab.Title}'");
                 }
+                else
+                {
+                    _logger.LogWarning($"Failed to complete {operationType} operation for tab '{_currentDrag.Tab.Title}'");
+                }
 
                 return success;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to complete drag operation");
+                _logger.LogError(ex, $"Failed to complete drag operation ({operationType}) for tab '{_currentDrag?.Tab?.Title ?? "unknown"}'");
                 return false;
             }
             finally
             {
-                CleanupDrag();
+                // Ensure cleanup always happens in finally block
+                try
+                {
+                    CleanupDrag();
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogError(cleanupEx, "Error during drag cleanup");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Validates if the drop operation is allowed
+        /// </summary>
+        private bool ValidateDropOperation(DragOperationType operationType, Window targetWindow, Point dropPoint)
+        {
+            try
+            {
+                switch (operationType)
+                {
+                    case DragOperationType.Reorder:
+                        return _currentDrag.SourceTabControl != null;
+
+                    case DragOperationType.Detach:
+                        return _currentDrag.SourceTabControl?.Items.Count > 1;
+
+                    case DragOperationType.Transfer:
+                        return targetWindow != null && 
+                               targetWindow != _currentDrag.SourceWindow &&
+                               FindTabControl(targetWindow) != null;
+
+                    default:
+                        return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating drop operation");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Executes reorder operation with error handling
+        /// </summary>
+        private bool ExecuteReorderOperation(Point dropPoint)
+        {
+            try
+            {
+                if (_currentDrag.SourceTabControl == null) return false;
+
+                var dropIndex = _operationsManager.CalculateDropIndex(_currentDrag.SourceTabControl, dropPoint);
+                return _operationsManager.ReorderTab(_currentDrag.SourceTabControl, _currentDrag.Tab, dropIndex);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error executing reorder operation");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Executes detach operation with error handling
+        /// </summary>
+        private bool ExecuteDetachOperation(Point dropPoint)
+        {
+            try
+            {
+                var newWindow = _windowManager.DetachTab(_currentDrag.Tab, _currentDrag.SourceWindow);
+                if (newWindow != null)
+                {
+                    // Position at drop point with safe bounds checking
+                    newWindow.Left = Math.Max(0, dropPoint.X - 100);
+                    newWindow.Top = Math.Max(0, dropPoint.Y - 20);
+                    return true;
+                }
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error executing detach operation");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Executes transfer operation with error handling
+        /// </summary>
+        private bool ExecuteTransferOperation(Window targetWindow, Point dropPoint)
+        {
+            try
+            {
+                if (targetWindow == null) return false;
+
+                var targetTabControl = FindTabControl(targetWindow);
+                if (targetTabControl == null) return false;
+
+                var dropIndex = _operationsManager.CalculateDropIndex(targetTabControl, dropPoint);
+                return _operationsManager.TransferTab(
+                    _currentDrag.SourceTabControl,
+                    targetTabControl,
+                    _currentDrag.Tab,
+                    dropIndex);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error executing transfer operation");
+                return false;
             }
         }
 
@@ -269,40 +447,103 @@ namespace ExplorerPro.Core.TabManagement
         {
             if (_currentDrag == null) return DragOperationType.None;
 
-            // Check if still over source tab control
-            var localPoint = _currentDrag.SourceTabControl.PointFromScreen(currentPoint);
-            var bounds = new Rect(0, 0, _currentDrag.SourceTabControl.ActualWidth, _currentDrag.SourceTabControl.ActualHeight);
-            
-            if (bounds.Contains(localPoint))
+            try
             {
-                return DragOperationType.Reorder;
-            }
+                // Calculate distance from original tab strip properly
+                var sourceTabControl = _currentDrag.SourceTabControl;
+                if (sourceTabControl == null) return DragOperationType.None;
 
-            // Check if over another window's tab control
-            var targetWindow = WindowLocator.FindWindowUnderPoint(currentPoint);
-            if (targetWindow != null && targetWindow != _currentDrag.SourceWindow)
-            {
-                var targetTabControl = FindTabControl(targetWindow);
-                if (targetTabControl != null)
+                Point localPoint;
+                try
                 {
-                    var targetLocalPoint = targetTabControl.PointFromScreen(currentPoint);
-                    var targetBounds = new Rect(0, 0, targetTabControl.ActualWidth, 50); // Tab strip height
-                    
-                    if (targetBounds.Contains(targetLocalPoint))
+                    localPoint = sourceTabControl.PointFromScreen(currentPoint);
+                }
+                catch
+                {
+                    // If coordinate conversion fails, assume we're outside
+                    localPoint = new Point(-1000, -1000);
+                }
+
+                // Define tab strip bounds (just the header area, not the entire control)
+                const double TAB_STRIP_HEIGHT = 35.0;
+                var tabStripBounds = new Rect(0, 0, sourceTabControl.ActualWidth, TAB_STRIP_HEIGHT);
+                
+                // Return Reorder if within same tab strip bounds
+                if (tabStripBounds.Contains(localPoint))
+                {
+                    return DragOperationType.Reorder;
+                }
+
+                // Use Window.GetWindow to find current window under cursor
+                var targetWindow = FindWindowUnderCursor(currentPoint);
+                
+                // Return Transfer if over another window's tab strip
+                if (targetWindow != null && targetWindow != _currentDrag.SourceWindow)
+                {
+                    var targetTabControl = FindTabControl(targetWindow);
+                    if (targetTabControl != null)
                     {
-                        return DragOperationType.Transfer;
+                        Point targetLocalPoint;
+                        try
+                        {
+                            targetLocalPoint = targetTabControl.PointFromScreen(currentPoint);
+                        }
+                        catch
+                        {
+                            targetLocalPoint = new Point(-1000, -1000);
+                        }
+
+                        var targetTabStripBounds = new Rect(0, 0, targetTabControl.ActualWidth, TAB_STRIP_HEIGHT);
+                        
+                        if (targetTabStripBounds.Contains(targetLocalPoint))
+                        {
+                            return DragOperationType.Transfer;
+                        }
                     }
                 }
-            }
 
-            // Check distance for detach
-            var distance = (_currentDrag.StartPoint - currentPoint).Length;
-            if (distance > DETACH_THRESHOLD)
+                // Return Detach if outside bounds but no target window
+                var verticalDistance = Math.Abs(localPoint.Y - (TAB_STRIP_HEIGHT / 2));
+                if (verticalDistance > DETACH_THRESHOLD)
+                {
+                    return DragOperationType.Detach;
+                }
+
+                return DragOperationType.None;
+            }
+            catch (Exception ex)
             {
-                return DragOperationType.Detach;
+                _logger.LogError(ex, "Error determining operation type");
+                return DragOperationType.None;
             }
+        }
 
-            return DragOperationType.None;
+        /// <summary>
+        /// Finds the window under the cursor using proper window enumeration
+        /// </summary>
+        private Window FindWindowUnderCursor(Point screenPoint)
+        {
+            try
+            {
+                // Try each application window to see if the point is within it
+                foreach (Window window in Application.Current.Windows)
+                {
+                    if (window.WindowState == System.Windows.WindowState.Minimized) continue;
+
+                    var windowBounds = new Rect(window.Left, window.Top, window.Width, window.Height);
+                    if (windowBounds.Contains(screenPoint))
+                    {
+                        return window;
+                    }
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error finding window under cursor");
+                return null;
+            }
         }
 
         #region Private Methods

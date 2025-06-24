@@ -282,14 +282,22 @@ namespace ExplorerPro.UI.Controls
 
             // Find if we clicked on a tab header
             var tabItem = FindTabItemFromPoint(e.GetPosition(this));
-            if (tabItem != null && !IsAddNewTabButton(e.OriginalSource))
+            
+            // Validate that we have a valid tab item and not clicking on special buttons
+            if (tabItem != null && 
+                !IsAddNewTabButton(e.OriginalSource) && 
+                !IsCloseButton(e.OriginalSource) &&
+                IsValidTabForDrag(tabItem))
             {
                 _dragStartPoint = e.GetPosition(this);
                 _draggedTab = tabItem;
                 _isDragging = false;
                 
-                // Capture mouse for drag detection
-                CaptureMouse();
+                // Only capture mouse if we successfully identified a draggable tab
+                if (_draggedTab != null)
+                {
+                    CaptureMouse();
+                }
             }
         }
 
@@ -309,13 +317,90 @@ namespace ExplorerPro.UI.Controls
                 if (Math.Abs(dragDistance.X) > DRAG_THRESHOLD ||
                     Math.Abs(dragDistance.Y) > DRAG_THRESHOLD)
                 {
-                    StartDragOperation();
+                    // Release mouse capture before starting drag operation
+                    if (IsMouseCaptured)
+                    {
+                        ReleaseMouseCapture();
+                    }
+
+                    try
+                    {
+                        StartDragOperation();
+                    }
+                    finally
+                    {
+                        // Ensure cleanup happens even if drag operation fails
+                        if (_draggedTab != null)
+                        {
+                            _draggedTab.Opacity = 1.0;
+                        }
+                        
+                        if (IsMouseCaptured)
+                        {
+                            ReleaseMouseCapture();
+                        }
+                        
+                        // Reset drag state
+                        _dragStartPoint = null;
+                        _draggedTab = null;
+                        _isDragging = false;
+                    }
                 }
             }
             else if (_isDragging)
             {
                 UpdateDragOperation(e.GetPosition(null));
             }
+        }
+
+        /// <summary>
+        /// Handles mouse left button up to properly release mouse capture and reset drag state
+        /// </summary>
+        protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+        {
+            base.OnMouseLeftButtonUp(e);
+
+            try
+            {
+                // Complete any ongoing drag operation
+                if (_isDragging)
+                {
+                    CompleteDragOperation(e.GetPosition(null));
+                }
+                else if (_draggedTab != null)
+                {
+                    // Just a click, not a drag - select the tab
+                    SelectedItem = _draggedTab;
+                }
+            }
+            finally
+            {
+                // ALWAYS ensure mouse capture is released and state is reset
+                ResetDragState();
+            }
+        }
+
+        /// <summary>
+        /// Handles mouse capture lost to reset drag state when capture is lost unexpectedly
+        /// </summary>
+        protected override void OnLostMouseCapture(MouseEventArgs e)
+        {
+            base.OnLostMouseCapture(e);
+
+            // Reset all drag state when mouse capture is lost unexpectedly
+            _dragStartPoint = null;
+            _draggedTab = null;
+            _isDragging = false;
+
+            // Reset visual state if needed
+            if (_draggedTab != null)
+            {
+                _draggedTab.Opacity = 1.0;
+                _draggedTab.RenderTransform = null;
+            }
+
+            // Hide any visual indicators
+            HideAllIndicators();
         }
 
         /// <summary>
@@ -953,6 +1038,36 @@ namespace ExplorerPro.UI.Controls
                     return true;
                 element = VisualTreeHelper.GetParent(element);
             }
+            return false;
+        }
+
+        private bool IsCloseButton(object source)
+        {
+            var element = source as DependencyObject;
+            while (element != null)
+            {
+                if (element is Button button && 
+                    (button.Name == "CloseTabButton" || 
+                     button.Name == "PART_CloseButton" ||
+                     button.GetType().Name.Contains("CloseButton")))
+                    return true;
+                element = VisualTreeHelper.GetParent(element);
+            }
+            return false;
+        }
+
+        private bool IsValidTabForDrag(TabItem tabItem)
+        {
+            if (tabItem == null) return false;
+
+            // Check if the tab is associated with a valid TabItemModel
+            if (tabItem.Tag is TabItemModel tabModel)
+            {
+                // Don't allow dragging of pinned tabs in some scenarios
+                // For now, allow all tabs to be dragged
+                return true;
+            }
+
             return false;
         }
 
