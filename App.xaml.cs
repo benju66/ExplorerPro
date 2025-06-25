@@ -488,15 +488,15 @@ namespace ExplorerPro
         {
             try
             {
-                // Initialize window manager
-                var windowManagerLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.DetachedWindowManager>();
-                WindowManager = new ExplorerPro.Core.TabManagement.DetachedWindowManager(windowManagerLogger);
+                // Initialize window manager as new SimpleDetachedWindowManager with logger
+                var windowManagerLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.SimpleDetachedWindowManager>();
+                WindowManager = new ExplorerPro.Core.TabManagement.SimpleDetachedWindowManager(windowManagerLogger);
                 
-                // Initialize tab operations manager
+                // Initialize tab operations manager with logger and WindowManager
                 var tabOpsLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.TabOperationsManager>();
                 TabOperationsManager = new ExplorerPro.Core.TabManagement.TabOperationsManager(tabOpsLogger, WindowManager);
                 
-                // Initialize drag drop service
+                // Initialize drag drop service as new TabDragDropService with logger, WindowManager, and TabOperationsManager
                 var dragDropLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.TabDragDropService>();
                 DragDropService = new ExplorerPro.Core.TabManagement.TabDragDropService(dragDropLogger, WindowManager, TabOperationsManager);
                 
