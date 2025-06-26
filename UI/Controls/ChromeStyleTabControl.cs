@@ -2953,15 +2953,213 @@ namespace ExplorerPro.UI.Controls
 
         /// <summary>
         /// Updates a TabItem when its model changes
+        /// Updates all visual properties based on the model's state, including width adjustments for pinned tabs
         /// </summary>
         private void UpdateTabItemFromModel(TabItem tabItem, TabItemModel model)
         {
             if (tabItem == null || model == null) return;
 
-            tabItem.Header = model.HasUnsavedChanges ? $"• {model.Title}" : model.Title;
-            tabItem.Content = model.Content;
-            tabItem.ToolTip = string.IsNullOrEmpty(model.Tooltip) ? model.Title : model.Tooltip;
+            try
+            {
+                // Update basic properties
+                tabItem.Header = model.HasUnsavedChanges ? $"• {model.Title}" : model.Title;
+                tabItem.Content = model.Content;
+                tabItem.ToolTip = string.IsNullOrEmpty(model.Tooltip) ? model.Title : model.Tooltip;
+                tabItem.Tag = model; // Ensure model reference is maintained
+
+                // Update visual styling based on model state
+                ApplyTabStyling(tabItem, model);
+
+                // Update width for pinned tabs
+                UpdateTabWidth(tabItem, model);
+
+                // Update close button visibility
+                UpdateCloseButtonVisibility(tabItem, model);
+
+                // Update background and foreground based on tab color
+                UpdateTabColors(tabItem, model);
+
+                // Update font styling
+                UpdateTabFontStyling(tabItem, model);
+
+                // Update drag state visual feedback
+                UpdateDragStateVisuals(tabItem, model);
+
+                // Update active/inactive state
+                UpdateActiveState(tabItem, model);
+
+                _logger?.LogDebug($"Updated TabItem visual properties for '{model.Title}'");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Failed to update TabItem from model for '{model.Title}'");
+            }
+        }
+
+        /// <summary>
+        /// Applies visual styling to the TabItem based on the model state
+        /// Preserves the ultra-modern Chrome styling while updating based on model
+        /// </summary>
+        private void ApplyTabStyling(TabItem tabItem, TabItemModel model)
+        {
+            // Ensure the tab uses the Chrome style (don't override with generic styles)
+            if (model.IsPinned)
+            {
+                // For pinned tabs, apply the pinned template
+                tabItem.SetResourceReference(TemplateProperty, "ChromePinnedTabTemplate");
+            }
+            else
+            {
+                // For regular tabs, use the Chrome style which includes the template
+                tabItem.SetResourceReference(StyleProperty, "ChromeTabItemStyle");
+            }
+
+            // Don't override opacity here - let the Chrome template handle dragging visuals
+            // The ChromeTabItemStyle already has sophisticated drag animations built-in
+        }
+
+        /// <summary>
+        /// Updates the tab width based on pinned state and content
+        /// </summary>
+        private void UpdateTabWidth(TabItem tabItem, TabItemModel model)
+        {
+            if (model.IsPinned)
+            {
+                // Pinned tabs are narrower to save space
+                tabItem.MinWidth = 80;
+                tabItem.MaxWidth = 120;
+                tabItem.Width = double.NaN; // Auto-size within constraints
+            }
+            else
+            {
+                // Regular tabs have more flexible sizing
+                tabItem.MinWidth = 120;
+                tabItem.MaxWidth = 250;
+                tabItem.Width = double.NaN; // Auto-size within constraints
+            }
+        }
+
+        /// <summary>
+        /// Updates close button visibility based on model properties
+        /// Works with the Chrome template's CloseButton element and ShowCloseButton binding
+        /// </summary>
+        private void UpdateCloseButtonVisibility(TabItem tabItem, TabItemModel model)
+        {
+            // The Chrome template automatically binds to Tag.ShowCloseButton
+            // Since we added this computed property to TabItemModel, the template will
+            // automatically show/hide the close button based on IsPinned and IsClosable
+            
+            // For direct element access (fallback), also update the button directly
+            var closeButton = FindChildOfType<Button>(tabItem, "CloseButton");
+            if (closeButton != null)
+            {
+                closeButton.Visibility = model.ShowCloseButton 
+                    ? Visibility.Visible 
+                    : Visibility.Collapsed;
+            }
+            
+            _logger?.LogDebug($"Close button visibility for '{model.Title}': {model.ShowCloseButton}");
+        }
+
+        /// <summary>
+        /// Updates tab colors based on the model's color theme
+        /// Works with the Chrome template's existing styling
+        /// </summary>
+        private void UpdateTabColors(TabItem tabItem, TabItemModel model)
+        {
+            if (model.TabColor != Colors.LightGray) // Only apply custom colors
+            {
+                var colorBrush = new SolidColorBrush(model.TabColor);
+                
+                // Find the TabBorder from the Chrome template
+                var tabBorder = FindChildOfType<Border>(tabItem, "TabBorder");
+                if (tabBorder != null)
+                {
+                    // Apply subtle color accent without destroying the Chrome gradient
+                    var accentBrush = colorBrush.Clone();
+                    accentBrush.Opacity = 0.15; // Very subtle
+                    
+                    // Create a gradient that preserves the Chrome look but adds color accent
+                    var gradientBrush = new LinearGradientBrush();
+                    gradientBrush.StartPoint = new Point(0, 0);
+                    gradientBrush.EndPoint = new Point(0, 1);
+                    gradientBrush.GradientStops.Add(new GradientStop(Colors.White, 0.0));
+                    gradientBrush.GradientStops.Add(new GradientStop(model.TabColor, 0.3) { Color = Color.FromArgb(30, model.TabColor.R, model.TabColor.G, model.TabColor.B) });
+                    gradientBrush.GradientStops.Add(new GradientStop(Colors.White, 1.0));
+                    
+                    tabBorder.Background = gradientBrush;
+                    
+                    // Add colored border accent
+                    tabBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(80, model.TabColor.R, model.TabColor.G, model.TabColor.B));
+                }
+            }
+            else
+            {
+                // Reset to Chrome template default
+                var tabBorder = FindChildOfType<Border>(tabItem, "TabBorder");
+                if (tabBorder != null)
+                {
+                    tabBorder.SetResourceReference(Border.BackgroundProperty, "TabInactiveGradient");
+                    tabBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(0xD0, 0xD7, 0xDE));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Updates font styling based on model state
+        /// </summary>
+        private void UpdateTabFontStyling(TabItem tabItem, TabItemModel model)
+        {
+            // Bold font for pinned tabs
             tabItem.FontWeight = model.IsPinned ? FontWeights.Bold : FontWeights.Normal;
+            
+            // Italic for unsaved changes
+            tabItem.FontStyle = model.HasUnsavedChanges ? FontStyles.Italic : FontStyles.Normal;
+            
+            // Slightly larger font for active tabs
+            tabItem.FontSize = model.IsActive ? 12.5 : 12.0;
+        }
+
+        /// <summary>
+        /// Updates visual feedback for drag state
+        /// The Chrome template already handles drag animations, so we just ensure the model binding works
+        /// </summary>
+        private void UpdateDragStateVisuals(TabItem tabItem, TabItemModel model)
+        {
+            // The ChromeTabItemStyle template already has sophisticated drag animations
+            // that are triggered by the IsDragging data binding. We don't need to manually
+            // override these - just ensure the model is properly bound as Tag
+            // The template handles: opacity changes, scale transforms, and shadow effects
+            
+            // Only log for debugging
+            if (model.IsDragging)
+            {
+                _logger?.LogDebug($"Tab '{model.Title}' entered drag state - Chrome animations active");
+            }
+        }
+
+        /// <summary>
+        /// Updates active/inactive state visual indicators
+        /// Chrome template handles IsSelected automatically, so we sync with that
+        /// </summary>
+        private void UpdateActiveState(TabItem tabItem, TabItemModel model)
+        {
+            // The Chrome template automatically handles IsSelected state with beautiful animations
+            // We just need to ensure the TabItem's IsSelected matches the model's IsActive
+            if (tabItem.IsSelected != model.IsActive)
+            {
+                // Update the selection state if it's out of sync
+                // This will trigger the Chrome template's selection animations
+                if (model.IsActive && !tabItem.IsSelected)
+                {
+                    tabItem.IsSelected = true;
+                }
+            }
+            
+            // The template handles all the visual changes:
+            // - Background color changes to white
+            // - Border color changes to #0078D4 (blue)
+            // - Z-index elevation for proper layering
         }
 
         /// <summary>

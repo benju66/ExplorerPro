@@ -93,7 +93,14 @@ namespace ExplorerPro.Models
         public bool IsPinned
         {
             get => _isPinned;
-            set => SetProperty(ref _isPinned, value);
+            set 
+            {
+                if (SetProperty(ref _isPinned, value))
+                {
+                    // Notify that ShowCloseButton may have changed
+                    OnPropertyChanged(nameof(ShowCloseButton));
+                }
+            }
         }
 
         /// <summary>
@@ -156,8 +163,21 @@ namespace ExplorerPro.Models
         public bool IsClosable
         {
             get => _isClosable;
-            set => SetProperty(ref _isClosable, value);
+            set 
+            {
+                if (SetProperty(ref _isClosable, value))
+                {
+                    // Notify that ShowCloseButton may have changed
+                    OnPropertyChanged(nameof(ShowCloseButton));
+                }
+            }
         }
+
+        /// <summary>
+        /// Whether to show the close button (computed based on IsPinned and IsClosable)
+        /// Used by the Chrome tab template for binding
+        /// </summary>
+        public bool ShowCloseButton => !IsPinned && IsClosable;
 
         #endregion
 
