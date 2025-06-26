@@ -3590,6 +3590,8 @@ namespace ExplorerPro.UI.Controls
         #region IDisposable Implementation
 
         private bool _disposed = false;
+        private readonly List<IDisposable> _disposables = new List<IDisposable>();
+        private readonly List<WeakReference> _eventHandlers = new List<WeakReference>();
 
         /// <summary>
         /// Disposes the control and its resources
@@ -3601,7 +3603,7 @@ namespace ExplorerPro.UI.Controls
         }
 
         /// <summary>
-        /// Protected disposal method
+        /// Protected disposal method with comprehensive cleanup
         /// </summary>
         protected virtual void Dispose(bool disposing)
         {
@@ -3609,22 +3611,158 @@ namespace ExplorerPro.UI.Controls
             {
                 if (disposing)
                 {
-                    // Dispose managed resources
-                    _insertionIndicator?.Dispose();
-                    _insertionIndicator = null;
-                    
-                    if (_detachPreviewWindow != null)
+                    try
                     {
-                        _detachPreviewWindow.Close();
+                        // Cancel any ongoing drag operations
+                        CancelDragOperation();
+                        
+                        // Stop animations
+                        StopCurrentAnimation();
+                        
+                        // Dispose managed resources
+                        _insertionIndicator?.Dispose();
+                        _insertionIndicator = null;
+                        
+                        // Close windows
+                        CloseWindow(_detachPreviewWindow);
+                        CloseWindow(_dragVisualWindow);
                         _detachPreviewWindow = null;
+                        _dragVisualWindow = null;
+                        
+                        // Dispose insertion line
+                        if (_insertionLine != null)
+                        {
+                            if (_insertionLine.Parent is Panel parent)
+                                parent.Children.Remove(_insertionLine);
+                            _insertionLine = null;
+                        }
+                        
+                        // Clean up window highlights
+                        RemoveAllWindowHighlights();
+                        
+                        // Dispose tab operations manager
+                        if (_tabOperationsManager is IDisposable disposableManager)
+                        {
+                            disposableManager.Dispose();
+                        }
+                        _tabOperationsManager = null;
+                        
+                        // Dispose drag drop service
+                        if (_dragDropService is IDisposable disposableService)
+                        {
+                            disposableService.Dispose();
+                        }
+                        _dragDropService = null;
+                        
+                        // Dispose current drag operation
+                        if (_currentDragOperation is IDisposable disposableOperation)
+                        {
+                            disposableOperation.Dispose();
+                        }
+                        _currentDragOperation = null;
+                        
+                        // Dispose all tracked disposables
+                        foreach (var disposable in _disposables)
+                        {
+                            try
+                            {
+                                disposable?.Dispose();
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger?.LogWarning(ex, "Error disposing resource in ChromeStyleTabControl");
+                            }
+                        }
+                        _disposables.Clear();
+                        
+                        // Clear weak event handlers
+                        _eventHandlers.Clear();
+                        
+                        // Unsubscribe from TabItems collection changes
+                        if (TabItems != null)
+                        {
+                            TabItems.CollectionChanged -= OnTabItemsCollectionChanged;
+                            
+                            // Dispose adapters if they are TabModelAdapter instances
+                            foreach (var tabItem in TabItems.OfType<TabModelAdapter>())
+                            {
+                                tabItem.Dispose();
+                            }
+                        }
+                        
+                        // Clear references
+                        _draggedTab = null;
+                        _dragStartPoint = null;
+                        
+                        _logger?.LogDebug("ChromeStyleTabControl disposed successfully");
                     }
-                    
-                    // Clean up window highlights
-                    RemoveAllWindowHighlights();
+                    catch (Exception ex)
+                    {
+                        _logger?.LogError(ex, "Error during ChromeStyleTabControl disposal");
+                    }
                 }
 
                 _disposed = true;
             }
+        }
+
+        /// <summary>
+        /// Safely closes a window
+        /// </summary>
+        private void CloseWindow(Window window)
+        {
+            if (window != null)
+            {
+                try
+                {
+                    window.Close();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Error closing window during disposal");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Adds a disposable resource to be tracked for cleanup
+        /// </summary>
+        protected void TrackDisposable(IDisposable disposable)
+        {
+            if (disposable != null && !_disposed)
+            {
+                _disposables.Add(disposable);
+            }
+        }
+
+        /// <summary>
+        /// Adds a weak reference to event handlers for cleanup tracking
+        /// </summary>
+        protected void TrackEventHandler(object handler)
+        {
+            if (handler != null && !_disposed)
+            {
+                _eventHandlers.Add(new WeakReference(handler));
+            }
+        }
+
+        /// <summary>
+        /// Checks if the control is disposed and throws if it is
+        /// </summary>
+        protected void ThrowIfDisposed()
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(ChromeStyleTabControl));
+            }
+        }
+
+        /// <summary>
+        /// Finalizer to ensure cleanup even if Dispose() wasn't called
+        /// </summary>
+        ~ChromeStyleTabControl()
+        {
+            Dispose(false);
         }
 
         #endregion
