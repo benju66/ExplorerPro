@@ -3,7 +3,9 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using System.Windows;
+using System.Threading.Tasks;
 using ExplorerPro.UI.MainWindow;
+using ExplorerPro.Core.TabManagement;
 
 namespace ExplorerPro.Models
 {
@@ -28,6 +30,10 @@ namespace ExplorerPro.Models
         private DateTime _lastActivated;
         private int _activationCount;
         private bool _isDisposed;
+        private TabPriority _priority;
+        private bool _isLoading;
+        private string _iconPath;
+        private object _metadata;
         
         #endregion
 
@@ -49,6 +55,10 @@ namespace ExplorerPro.Models
             _createdAt = DateTime.UtcNow;
             _lastActivated = DateTime.UtcNow;
             _activationCount = 0;
+            _priority = TabPriority.Normal;
+            _isLoading = false;
+            _iconPath = string.Empty;
+            _metadata = null;
         }
         
         /// <summary>
@@ -161,6 +171,42 @@ namespace ExplorerPro.Models
         {
             get => _state;
             set => SetProperty(ref _state, value);
+        }
+        
+        /// <summary>
+        /// Priority level of the tab for resource allocation
+        /// </summary>
+        public TabPriority Priority
+        {
+            get => _priority;
+            set => SetProperty(ref _priority, value);
+        }
+        
+        /// <summary>
+        /// Whether the tab is currently loading content
+        /// </summary>
+        public bool IsLoading
+        {
+            get => _isLoading;
+            set => SetProperty(ref _isLoading, value);
+        }
+        
+        /// <summary>
+        /// Path to the tab's icon resource
+        /// </summary>
+        public string IconPath
+        {
+            get => _iconPath;
+            set => SetProperty(ref _iconPath, value);
+        }
+        
+        /// <summary>
+        /// Additional metadata associated with the tab
+        /// </summary>
+        public object Metadata
+        {
+            get => _metadata;
+            set => SetProperty(ref _metadata, value);
         }
         
         #endregion
@@ -279,6 +325,52 @@ namespace ExplorerPro.Models
         public void Deactivate()
         {
             IsActive = false;
+        }
+        
+        /// <summary>
+        /// Asynchronously initializes the tab content
+        /// </summary>
+        public async Task InitializeAsync()
+        {
+            IsLoading = true;
+            try
+            {
+                State = TabState.Loading;
+                
+                // Content initialization logic would go here
+                await Task.Delay(100); // Simulate async initialization
+                
+                State = TabState.Normal;
+            }
+            catch
+            {
+                State = TabState.Error;
+                throw;
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
+        
+        /// <summary>
+        /// Creates a tab from a creation request
+        /// </summary>
+        public static TabModel FromCreationRequest(TabCreationRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            
+            var tab = new TabModel(request.Title, request.Path)
+            {
+                IsPinned = request.IsPinned,
+                Priority = request.Priority,
+                Content = request.Content
+            };
+            
+            if (request.CustomColor.HasValue)
+                tab.CustomColor = request.CustomColor.Value;
+                
+            return tab;
         }
         
         #endregion

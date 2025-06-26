@@ -1,293 +1,379 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 
 namespace ExplorerPro.Core.Collections
 {
     /// <summary>
-    /// Thread-safe bounded collection that maintains a maximum number of items
-    /// Automatically removes oldest items when size limit is exceeded
-    /// Phase 5: Resource Bounds - History and Collection Limits
+    /// Thread-safe bounded collection with Observable notifications.
+    /// Provides enterprise-level collection management with capacity limits.
     /// </summary>
-    public class BoundedCollection<T> : IEnumerable<T>, IDisposable
+    /// <typeparam name="T">Type of items in the collection</typeparam>
+    public class BoundedCollection<T> : INotifyCollectionChanged, INotifyPropertyChanged, IEnumerable<T>, IDisposable
     {
-        private readonly LinkedList<T> _items = new LinkedList<T>();
-        private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
+        private readonly ObservableCollection<T> _collection;
+        private readonly object _lock = new object();
         private readonly int _maxSize;
-        private bool _disposed;
+        private bool _isDisposed;
 
-        public BoundedCollection(int maxSize)
+        public BoundedCollection(int maxSize = 100)
         {
-            if (maxSize <= 0) 
-                throw new ArgumentException("Max size must be greater than 0", nameof(maxSize));
+            if (maxSize <= 0)
+                throw new ArgumentException("Max size must be greater than zero", nameof(maxSize));
+                
             _maxSize = maxSize;
+            _collection = new ObservableCollection<T>();
+            _collection.CollectionChanged += OnCollectionChanged;
+            ((INotifyPropertyChanged)_collection).PropertyChanged += OnPropertyChanged;
         }
 
+        /// <summary>
+        /// Gets the underlying observable collection for data binding
+        /// </summary>
+        public ObservableCollection<T> Collection => _collection;
+
+        /// <summary>
+        /// Gets the number of items in the collection
+        /// </summary>
         public int Count
         {
             get
             {
-                _lock.EnterReadLock();
-                try
+                lock (_lock)
                 {
-                    return _disposed ? 0 : _items.Count;
-                }
-                finally
-                {
-                    _lock.ExitReadLock();
+                    return _collection.Count;
                 }
             }
         }
 
+        /// <summary>
+        /// Gets the maximum capacity of the collection
+        /// </summary>
         public int MaxSize => _maxSize;
 
+        /// <summary>
+        /// Checks if a new item can be added without exceeding capacity
+        /// </summary>
+        public bool CanAdd()
+        {
+            lock (_lock)
+            {
+                return _collection.Count < _maxSize;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the item at the specified index
+        /// </summary>
+        public T this[int index]
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _collection[index];
+                }
+            }
+            set
+            {
+                lock (_lock)
+                {
+                    _collection[index] = value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Adds an item to the collection if capacity allows
+        /// </summary>
+        public void Add(T item)
+        {
+            lock (_lock)
+            {
+                ThrowIfDisposed();
+                
+                if (_collection.Count >= _maxSize)
+                    throw new InvalidOperationException($"Collection has reached maximum capacity of {_maxSize}");
+                    
+                _collection.Add(item);
+            }
+        }
+
+        /// <summary>
+        /// Tries to add an item to the collection
+        /// </summary>
+        public bool TryAdd(T item)
+        {
+            lock (_lock)
+            {
+                if (_isDisposed || _collection.Count >= _maxSize)
+                    return false;
+                    
+                _collection.Add(item);
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Inserts an item at the specified index
+        /// </summary>
+        public void Insert(int index, T item)
+        {
+            lock (_lock)
+            {
+                ThrowIfDisposed();
+                
+                if (_collection.Count >= _maxSize)
+                    throw new InvalidOperationException($"Collection has reached maximum capacity of {_maxSize}");
+                    
+                _collection.Insert(index, item);
+            }
+        }
+
+        /// <summary>
+        /// Removes the specified item from the collection
+        /// </summary>
+        public bool Remove(T item)
+        {
+            lock (_lock)
+            {
+                ThrowIfDisposed();
+                return _collection.Remove(item);
+            }
+        }
+
+        /// <summary>
+        /// Removes the item at the specified index
+        /// </summary>
+        public void RemoveAt(int index)
+        {
+            lock (_lock)
+            {
+                ThrowIfDisposed();
+                _collection.RemoveAt(index);
+            }
+        }
+
+        /// <summary>
+        /// Moves an item from one index to another
+        /// </summary>
+        public void Move(int oldIndex, int newIndex)
+        {
+            lock (_lock)
+            {
+                ThrowIfDisposed();
+                _collection.Move(oldIndex, newIndex);
+            }
+        }
+
+        /// <summary>
+        /// Clears all items from the collection
+        /// </summary>
+        public void Clear()
+        {
+            lock (_lock)
+            {
+                ThrowIfDisposed();
+                _collection.Clear();
+            }
+        }
+
+        /// <summary>
+        /// Checks if the collection contains the specified item
+        /// </summary>
+        public bool Contains(T item)
+        {
+            lock (_lock)
+            {
+                return _collection.Contains(item);
+            }
+        }
+
+        /// <summary>
+        /// Gets the index of the specified item
+        /// </summary>
+        public int IndexOf(T item)
+        {
+            lock (_lock)
+            {
+                return _collection.IndexOf(item);
+            }
+        }
+
+        /// <summary>
+        /// Creates a new array containing all items in the collection
+        /// </summary>
+        public T[] ToArray()
+        {
+            lock (_lock)
+            {
+                return _collection.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// Creates a new list containing all items in the collection
+        /// </summary>
+        public List<T> ToList()
+        {
+            lock (_lock)
+            {
+                return new List<T>(_collection);
+            }
+        }
+
+        /// <summary>
+        /// Gets an enumerator for the collection
+        /// </summary>
+        public IEnumerator<T> GetEnumerator()
+        {
+            List<T> snapshot;
+            lock (_lock)
+            {
+                snapshot = new List<T>(_collection);
+            }
+            return snapshot.GetEnumerator();
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+        /// <summary>
+        /// Applies a LINQ Where clause safely
+        /// </summary>
+        public IEnumerable<T> Where(Func<T, bool> predicate)
+        {
+            lock (_lock)
+            {
+                return _collection.Where(predicate).ToList();
+            }
+        }
+
+        /// <summary>
+        /// Gets the first item matching the predicate
+        /// </summary>
+        public T FirstOrDefault(Func<T, bool> predicate = null)
+        {
+            lock (_lock)
+            {
+                return predicate == null ? _collection.FirstOrDefault() : _collection.FirstOrDefault(predicate);
+            }
+        }
+
+        /// <summary>
+        /// Gets whether the collection is empty
+        /// </summary>
         public bool IsEmpty
         {
             get
             {
-                _lock.EnterReadLock();
-                try
+                lock (_lock)
                 {
-                    return _disposed || _items.Count == 0;
-                }
-                finally
-                {
-                    _lock.ExitReadLock();
+                    return _collection.Count == 0;
                 }
             }
         }
 
-        public void Add(T item)
-        {
-            if (_disposed) throw new ObjectDisposedException(nameof(BoundedCollection<T>));
-
-            _lock.EnterWriteLock();
-            try
-            {
-                _items.AddLast(item);
-                
-                while (_items.Count > _maxSize)
-                {
-                    var removed = _items.First.Value;
-                    _items.RemoveFirst();
-                    OnItemRemoved(removed);
-                }
-            }
-            finally
-            {
-                _lock.ExitWriteLock();
-            }
-        }
-
+        /// <summary>
+        /// Adds an item to the beginning of the collection
+        /// </summary>
         public void AddFirst(T item)
         {
-            if (_disposed) throw new ObjectDisposedException(nameof(BoundedCollection<T>));
-
-            _lock.EnterWriteLock();
-            try
+            lock (_lock)
             {
-                _items.AddFirst(item);
+                ThrowIfDisposed();
                 
-                while (_items.Count > _maxSize)
-                {
-                    var removed = _items.Last.Value;
-                    _items.RemoveLast();
-                    OnItemRemoved(removed);
-                }
-            }
-            finally
-            {
-                _lock.ExitWriteLock();
+                if (_collection.Count >= _maxSize)
+                    throw new InvalidOperationException($"Collection has reached maximum capacity of {_maxSize}");
+                    
+                _collection.Insert(0, item);
             }
         }
 
+        /// <summary>
+        /// Removes and returns the last item from the collection
+        /// </summary>
         public T RemoveLast()
         {
-            if (_disposed) throw new ObjectDisposedException(nameof(BoundedCollection<T>));
-
-            _lock.EnterWriteLock();
-            try
+            lock (_lock)
             {
-                if (_items.Count == 0)
+                ThrowIfDisposed();
+                
+                if (_collection.Count == 0)
                     throw new InvalidOperationException("Collection is empty");
-
-                var item = _items.Last.Value;
-                _items.RemoveLast();
+                    
+                var lastIndex = _collection.Count - 1;
+                var item = _collection[lastIndex];
+                _collection.RemoveAt(lastIndex);
                 return item;
-            }
-            finally
-            {
-                _lock.ExitWriteLock();
             }
         }
 
+        /// <summary>
+        /// Removes and returns the first item from the collection
+        /// </summary>
         public T RemoveFirst()
         {
-            if (_disposed) throw new ObjectDisposedException(nameof(BoundedCollection<T>));
-
-            _lock.EnterWriteLock();
-            try
+            lock (_lock)
             {
-                if (_items.Count == 0)
+                ThrowIfDisposed();
+                
+                if (_collection.Count == 0)
                     throw new InvalidOperationException("Collection is empty");
-
-                var item = _items.First.Value;
-                _items.RemoveFirst();
+                    
+                var item = _collection[0];
+                _collection.RemoveAt(0);
                 return item;
             }
-            finally
-            {
-                _lock.ExitWriteLock();
-            }
         }
 
-        public void Clear()
-        {
-            if (_disposed) throw new ObjectDisposedException(nameof(BoundedCollection<T>));
+        #region Events
 
-            _lock.EnterWriteLock();
-            try
-            {
-                foreach (var item in _items)
-                {
-                    OnItemRemoved(item);
-                }
-                _items.Clear();
-            }
-            finally
-            {
-                _lock.ExitWriteLock();
-            }
+        public event NotifyCollectionChangedEventHandler CollectionChanged;
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        private void OnCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            CollectionChanged?.Invoke(this, e);
         }
 
-        public bool Contains(T item)
+        private void OnPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            _lock.EnterReadLock();
-            try
-            {
-                return !_disposed && _items.Contains(item);
-            }
-            finally
-            {
-                _lock.ExitReadLock();
-            }
+            PropertyChanged?.Invoke(this, e);
         }
 
-        public T[] ToArray()
-        {
-            _lock.EnterReadLock();
-            try
-            {
-                if (_disposed) return new T[0];
-                
-                var array = new T[_items.Count];
-                _items.CopyTo(array, 0);
-                return array;
-            }
-            finally
-            {
-                _lock.ExitReadLock();
-            }
-        }
+        #endregion
 
-        public T[] ToArrayReverse()
-        {
-            _lock.EnterReadLock();
-            try
-            {
-                if (_disposed) return new T[0];
-                
-                return _items.Reverse().ToArray();
-            }
-            finally
-            {
-                _lock.ExitReadLock();
-            }
-        }
+        #region Disposal
 
-        public T GetLast()
+        private void ThrowIfDisposed()
         {
-            _lock.EnterReadLock();
-            try
-            {
-                if (_disposed || _items.Count == 0)
-                    throw new InvalidOperationException("Collection is empty or disposed");
-                
-                return _items.Last.Value;
-            }
-            finally
-            {
-                _lock.ExitReadLock();
-            }
-        }
-
-        public T GetFirst()
-        {
-            _lock.EnterReadLock();
-            try
-            {
-                if (_disposed || _items.Count == 0)
-                    throw new InvalidOperationException("Collection is empty or disposed");
-                
-                return _items.First.Value;
-            }
-            finally
-            {
-                _lock.ExitReadLock();
-            }
-        }
-
-        protected virtual void OnItemRemoved(T item)
-        {
-            // Override to handle cleanup of removed items
-            (item as IDisposable)?.Dispose();
-        }
-
-        public IEnumerator<T> GetEnumerator()
-        {
-            var snapshot = ToArray();
-            foreach (var item in snapshot)
-            {
-                yield return item;
-            }
-        }
-
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            return GetEnumerator();
+            if (_isDisposed)
+                throw new ObjectDisposedException(nameof(BoundedCollection<T>));
         }
 
         public void Dispose()
         {
-            Dispose(true);
+            if (_isDisposed) return;
+
+            lock (_lock)
+            {
+                if (_isDisposed) return;
+
+                _collection.CollectionChanged -= OnCollectionChanged;
+                ((INotifyPropertyChanged)_collection).PropertyChanged -= OnPropertyChanged;
+                
+                _collection.Clear();
+                _isDisposed = true;
+            }
+
             GC.SuppressFinalize(this);
         }
 
-        protected virtual void Dispose(bool disposing)
-        {
-            if (_disposed) return;
-
-            if (disposing)
-            {
-                _lock.EnterWriteLock();
-                try
-                {
-                    foreach (var item in _items)
-                    {
-                        OnItemRemoved(item);
-                    }
-                    _items.Clear();
-                }
-                finally
-                {
-                    _lock.ExitWriteLock();
-                    _lock?.Dispose();
-                }
-            }
-
-            _disposed = true;
-        }
+        #endregion
     }
 } 

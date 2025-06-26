@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using ExplorerPro.Core.TabManagement;
 using ExplorerPro.Models;
 using ExplorerPro.Commands;
+using ExplorerPro.Core.Commands;
 
 namespace ExplorerPro.ViewModels
 {
@@ -113,59 +114,59 @@ namespace ExplorerPro.ViewModels
         #region Commands
         
         /// <summary>
-        /// Command to create a new tab
+        /// Modern async command to create a new tab
         /// </summary>
-        public ICommand NewTabCommand { get; private set; }
+        public IAsyncCommand NewTabCommand { get; private set; }
         
         /// <summary>
-        /// Command to close a tab
+        /// Modern async command to close a tab
         /// </summary>
-        public ICommand CloseTabCommand { get; private set; }
+        public IAsyncCommand<TabModel> CloseTabCommand { get; private set; }
         
         /// <summary>
-        /// Command to duplicate a tab
+        /// Modern async command to duplicate a tab
         /// </summary>
-        public ICommand DuplicateTabCommand { get; private set; }
+        public IAsyncCommand<TabModel> DuplicateTabCommand { get; private set; }
         
         /// <summary>
-        /// Command to rename a tab
+        /// Modern async command to rename a tab
         /// </summary>
-        public ICommand RenameTabCommand { get; private set; }
+        public IAsyncCommand<TabModel> RenameTabCommand { get; private set; }
         
         /// <summary>
-        /// Command to change tab color
+        /// Modern async command to change tab color
         /// </summary>
-        public ICommand ChangeTabColorCommand { get; private set; }
+        public IAsyncCommand<TabModel> ChangeTabColorCommand { get; private set; }
         
         /// <summary>
-        /// Command to clear tab color
+        /// Modern async command to clear tab color
         /// </summary>
-        public ICommand ClearTabColorCommand { get; private set; }
+        public IAsyncCommand<TabModel> ClearTabColorCommand { get; private set; }
         
         /// <summary>
-        /// Command to pin/unpin a tab
+        /// Modern async command to pin/unpin a tab
         /// </summary>
-        public ICommand TogglePinTabCommand { get; private set; }
+        public IAsyncCommand<TabModel> TogglePinTabCommand { get; private set; }
         
         /// <summary>
-        /// Command to navigate to next tab
+        /// Modern async command to navigate to next tab
         /// </summary>
-        public ICommand NextTabCommand { get; private set; }
+        public IAsyncCommand NextTabCommand { get; private set; }
         
         /// <summary>
-        /// Command to navigate to previous tab
+        /// Modern async command to navigate to previous tab
         /// </summary>
-        public ICommand PreviousTabCommand { get; private set; }
+        public IAsyncCommand PreviousTabCommand { get; private set; }
         
         /// <summary>
-        /// Command to move tab
+        /// Modern async command to move tab
         /// </summary>
-        public ICommand MoveTabCommand { get; private set; }
+        public IAsyncCommand<(TabModel tab, int newIndex)> MoveTabCommand { get; private set; }
         
         /// <summary>
-        /// Command to activate a specific tab
+        /// Modern async command to activate a specific tab
         /// </summary>
-        public ICommand ActivateTabCommand { get; private set; }
+        public IAsyncCommand<TabModel> ActivateTabCommand { get; private set; }
         
         #endregion
 
@@ -384,66 +385,32 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         private void InitializeCommands()
         {
-            NewTabCommand = new RelayCommand(async () => await CreateTabAsync("New Tab"));
+            // Use modern command system with proper async support
+            NewTabCommand = ModernTabCommandSystem.CreateNewTabCommand(_tabManager, _logger);
             
-            CloseTabCommand = new RelayCommand<TabModel>(async tab => 
-            {
-                if (tab != null) await CloseTabAsync(tab);
-            });
+            CloseTabCommand = ModernTabCommandSystem.CreateCloseTabCommand(_tabManager, _logger);
             
-            DuplicateTabCommand = new RelayCommand<TabModel>(async tab => 
-            {
-                if (tab != null) await DuplicateTabAsync(tab);
-            });
+            DuplicateTabCommand = ModernTabCommandSystem.CreateDuplicateTabCommand(_tabManager, _logger);
             
-            RenameTabCommand = new RelayCommand<TabModel>(async tab => 
-            {
-                if (tab != null)
-                {
-                    // This would typically open a dialog
-                    // For now, just add " (renamed)" to demonstrate
-                    await RenameTabAsync(tab, tab.Title + " (renamed)");
-                }
-            });
+            RenameTabCommand = ModernTabCommandSystem.CreateRenameTabCommand(_tabManager, _logger);
             
-            ChangeTabColorCommand = new RelayCommand<TabModel>(async tab => 
-            {
-                if (tab != null)
-                {
-                    // This would typically open a color picker
-                    // For now, just set to a default color
-                    await SetTabColorAsync(tab, Colors.LightBlue);
-                }
-            });
+            ChangeTabColorCommand = ModernTabCommandSystem.CreateChangeColorCommand(_tabManager, _logger);
             
-            ClearTabColorCommand = new RelayCommand<TabModel>(async tab => 
-            {
-                if (tab != null) await ClearTabColorAsync(tab);
-            });
+            ClearTabColorCommand = ModernTabCommandSystem.CreateClearColorCommand(_tabManager, _logger);
             
-            TogglePinTabCommand = new RelayCommand<TabModel>(async tab => 
-            {
-                if (tab != null) await ToggleTabPinnedAsync(tab);
-            });
+            TogglePinTabCommand = ModernTabCommandSystem.CreateTogglePinCommand(_tabManager, _logger);
             
-            NextTabCommand = new RelayCommand(async () => await NavigateToNextTabAsync());
+            NextTabCommand = ModernTabCommandSystem.CreateNextTabCommand(_tabManager, _logger);
             
-            PreviousTabCommand = new RelayCommand(async () => await NavigateToPreviousTabAsync());
+            PreviousTabCommand = ModernTabCommandSystem.CreatePreviousTabCommand(_tabManager, _logger);
             
-            MoveTabCommand = new RelayCommand<TabModel>(async tab => 
-            {
-                if (tab != null)
-                {
-                    // This would typically be called with specific index
-                    // For demo, move to end
-                    await MoveTabAsync(tab, TabCount - 1);
-                }
-            });
+            MoveTabCommand = ModernTabCommandSystem.CreateMoveTabCommand(_tabManager, _logger);
             
-            ActivateTabCommand = new RelayCommand<TabModel>(tab => 
-            {
-                if (tab != null) ActiveTab = tab;
-            });
+            ActivateTabCommand = new AsyncRelayCommand<TabModel>(
+                async tab => await _tabManager.ActivateTabAsync(tab),
+                tab => tab != null && Tabs.Contains(tab),
+                _logger
+            );
         }
 
         #endregion
