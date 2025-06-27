@@ -1749,6 +1749,9 @@ namespace ExplorerPro.UI.MainWindow
                 
                 // Initialize tab management services
                 InitializeTabManagement();
+                
+                // Initialize modern tab system integration
+                InitializeTabIntegration();
             }
             catch (Exception ex)
             {
@@ -6858,6 +6861,49 @@ namespace ExplorerPro.UI.MainWindow
         {
             // Service handles completion
             _instanceLogger?.LogDebug($"Tab drag completed: {e.TabItem.Title}");
+        }
+
+        private TabIntegrationBridge _tabIntegrationBridge;
+
+        /// <summary>
+        /// Integration bridge for connecting modern tab system to legacy UI
+        /// </summary>
+        public TabIntegrationBridge TabIntegrationBridge => _tabIntegrationBridge;
+
+        /// <summary>
+        /// Initializes tab system integration after UI is loaded
+        /// </summary>
+        private void InitializeTabIntegration()
+        {
+            try
+            {
+                _instanceLogger?.LogInformation("Initializing tab system integration...");
+
+                // Create and initialize the integration bridge
+                _tabIntegrationBridge = new TabIntegrationBridge(
+                    this,
+                    logger: _instanceLogger?.CreateLogger<TabIntegrationBridge>());
+
+                // Complete the integration
+                _tabIntegrationBridge.CompleteIntegration();
+
+                _instanceLogger?.LogInformation("✅ Tab system integration completed successfully");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "❌ Failed to initialize tab integration");
+                
+                // Fall back to enhanced legacy mode
+                try
+                {
+                    _tabIntegrationBridge?.EnhanceLegacyTabControl();
+                    _instanceLogger?.LogInformation("✅ Enhanced legacy tab control as fallback");
+                }
+                catch (Exception fallbackEx)
+                {
+                    _instanceLogger?.LogError(fallbackEx, "❌ Even fallback enhancement failed");
+                }
+            }
         }
 
     }

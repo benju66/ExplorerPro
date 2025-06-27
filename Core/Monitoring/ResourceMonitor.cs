@@ -280,11 +280,30 @@ namespace ExplorerPro.Core.Monitoring
         
         public bool IsValid => WorkingSetMB >= 0;
         
+        // Performance indicators
+        public PerformanceLevel MemoryPerformance => 
+            WorkingSetMB > 1000 ? PerformanceLevel.Poor :
+            WorkingSetMB > 500 ? PerformanceLevel.Warning :
+            PerformanceLevel.Good;
+            
+        public PerformanceLevel ThreadPerformance =>
+            ThreadCount > 50 ? PerformanceLevel.Poor :
+            ThreadCount > 25 ? PerformanceLevel.Warning :
+            PerformanceLevel.Good;
+        
         public override string ToString()
         {
             return $"Memory: {WorkingSetMB}MB working set, {ManagedMemoryMB}MB managed, " +
                    $"Threads: {ThreadCount}, Handles: {HandleCount}, " +
                    $"GC: Gen0={Gen0Collections}, Gen1={Gen1Collections}, Gen2={Gen2Collections}";
         }
+    }
+    
+    public enum PerformanceLevel
+    {
+        Good,
+        Warning,
+        Poor,
+        Critical
     }
 } 

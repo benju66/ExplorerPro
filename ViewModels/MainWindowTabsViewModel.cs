@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Extensions.Logging;
 using ExplorerPro.Core.TabManagement;
+using ExplorerPro.Core.Threading;
 using ExplorerPro.Models;
 using ExplorerPro.Commands;
 using ExplorerPro.Core.Commands;
@@ -17,12 +18,13 @@ namespace ExplorerPro.ViewModels
     /// ViewModel for the main window tab system using proper MVVM architecture.
     /// This replaces the scattered tab logic in MainWindow.xaml.cs
     /// </summary>
-    public class MainWindowTabsViewModel : INotifyPropertyChanged, IDisposable
+    public class MainWindowTabsViewModel : INotifyPropertyChanged, IDisposable, IThreadSafeOperationsConsumer
     {
         #region Private Fields
         
         private readonly ITabManagerService _tabManager;
         private readonly ILogger<MainWindowTabsViewModel> _logger;
+        private ThreadSafeTabOperations _threadSafeOperations;
         private bool _isDisposed;
         
         #endregion
@@ -474,6 +476,19 @@ namespace ExplorerPro.ViewModels
         protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+        
+        #endregion
+
+        #region IThreadSafeOperationsConsumer Implementation
+        
+        /// <summary>
+        /// Sets the thread-safe operations manager
+        /// </summary>
+        public void SetThreadSafeOperations(ThreadSafeTabOperations threadSafeOperations)
+        {
+            _threadSafeOperations = threadSafeOperations;
+            _logger?.LogDebug("Thread-safe operations manager set in MainWindowTabsViewModel");
         }
         
         #endregion

@@ -1,0 +1,680 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:ExplorerPro.UI.Controls"
+                    xmlns:interfaces="clr-namespace:ExplorerPro.UI.Controls.Interfaces">
+
+    <!-- ========================================
+         MODERN COLOR PALETTE & THEME RESOURCES
+         ======================================== -->
+    
+    <!-- Light Theme Colors -->
+    <Color x:Key="TabControlBackgroundColor">#FAFAFA</Color>
+    <Color x:Key="TabItemInactiveColor">#F5F5F5</Color>
+    <Color x:Key="TabItemActiveColor">#FFFFFF</Color>
+    <Color x:Key="TabItemHoverColor">#E8F4FD</Color>
+    <Color x:Key="TabItemBorderColor">#E1E5E9</Color>
+    <Color x:Key="TabItemActiveBorderColor">#0078D4</Color>
+    <Color x:Key="TabItemForegroundColor">#323130</Color>
+    <Color x:Key="TabItemForegroundActiveColor">#201F1E</Color>
+    <Color x:Key="AccentPrimaryColor">#0078D4</Color>
+    <Color x:Key="AccentSecondaryColor">#106EBE</Color>
+    <Color x:Key="ShadowColor">#000000</Color>
+    <Color x:Key="FocusGlowColor">#0078D4</Color>
+    <Color x:Key="CloseButtonHoverColor">#E81123</Color>
+    <Color x:Key="CloseButtonActiveColor">#A90E21</Color>
+    
+    <!-- Brushes -->
+    <SolidColorBrush x:Key="TabControlBackground" Color="{StaticResource TabControlBackgroundColor}"/>
+    <SolidColorBrush x:Key="TabItemInactiveBackground" Color="{StaticResource TabItemInactiveColor}"/>
+    <SolidColorBrush x:Key="TabItemActiveBackground" Color="{StaticResource TabItemActiveColor}"/>
+    <SolidColorBrush x:Key="TabItemHoverBackground" Color="{StaticResource TabItemHoverColor}"/>
+    <SolidColorBrush x:Key="TabItemBorderBrush" Color="{StaticResource TabItemBorderColor}"/>
+    <SolidColorBrush x:Key="TabItemActiveBorderBrush" Color="{StaticResource TabItemActiveBorderColor}"/>
+    <SolidColorBrush x:Key="TabItemForeground" Color="{StaticResource TabItemForegroundColor}"/>
+    <SolidColorBrush x:Key="TabItemForegroundActive" Color="{StaticResource TabItemForegroundActiveColor}"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentPrimaryColor}"/>
+    <SolidColorBrush x:Key="FocusGlowBrush" Color="{StaticResource FocusGlowColor}"/>
+    
+    <!-- Gradients for depth and modern appearance -->
+    <LinearGradientBrush x:Key="TabInactiveGradient" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#F8F9FA" Offset="0"/>
+        <GradientStop Color="#F0F2F4" Offset="1"/>
+    </LinearGradientBrush>
+    
+    <LinearGradientBrush x:Key="TabActiveGradient" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#FFFFFF" Offset="0"/>
+        <GradientStop Color="#FAFBFC" Offset="1"/>
+    </LinearGradientBrush>
+    
+    <LinearGradientBrush x:Key="TabHoverGradient" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#F0F8FF" Offset="0"/>
+        <GradientStop Color="#E6F3FF" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- ========================================
+         MODERN CLOSE BUTTON STYLE
+         ======================================== -->
+    
+    <Style x:Key="ModernCloseButtonStyle" TargetType="{x:Type Button}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="#605E5C"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Width" Value="20"/>
+        <Setter Property="Height" Value="20"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border x:Name="ButtonBorder" 
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="10"
+                            RenderTransformOrigin="0.5,0.5">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="ButtonScale" ScaleX="1" ScaleY="1"/>
+                        </Border.RenderTransform>
+                        <Grid>
+                            <Ellipse x:Name="CloseCircle" 
+                                     Fill="Transparent" 
+                                     Width="16" Height="16"/>
+                            <TextBlock x:Name="CloseIcon"
+                                       Text="×"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       FontWeight="{TemplateBinding FontWeight}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Margin="0,-1,0,0"/>
+                        </Grid>
+                    </Border>
+                    
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="CloseCircle"
+                                                      Storyboard.TargetProperty="Fill.Color"
+                                                      To="{StaticResource CloseButtonHoverColor}"
+                                                      Duration="0:0:0.15"/>
+                                        <ColorAnimation Storyboard.TargetName="CloseIcon"
+                                                      Storyboard.TargetProperty="Foreground.Color"
+                                                      To="White"
+                                                      Duration="0:0:0.15"/>
+                                        <DoubleAnimation Storyboard.TargetName="ButtonScale"
+                                                       Storyboard.TargetProperty="ScaleX"
+                                                       To="1.1" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase EasingMode="EaseOut" Amplitude="0.3"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="ButtonScale"
+                                                       Storyboard.TargetProperty="ScaleY"
+                                                       To="1.1" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase EasingMode="EaseOut" Amplitude="0.3"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="CloseCircle"
+                                                      Storyboard.TargetProperty="Fill.Color"
+                                                      To="Transparent"
+                                                      Duration="0:0:0.15"/>
+                                        <ColorAnimation Storyboard.TargetName="CloseIcon"
+                                                      Storyboard.TargetProperty="Foreground.Color"
+                                                      To="#605E5C"
+                                                      Duration="0:0:0.15"/>
+                                        <DoubleAnimation Storyboard.TargetName="ButtonScale"
+                                                       Storyboard.TargetProperty="ScaleX"
+                                                       To="1.0" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase EasingMode="EaseIn" Amplitude="0.3"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="ButtonScale"
+                                                       Storyboard.TargetProperty="ScaleY"
+                                                       To="1.0" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase EasingMode="EaseIn" Amplitude="0.3"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========================================
+         MODERN TAB ITEM STYLE (CHROME-INSPIRED)
+         ======================================== -->
+    
+    <Style x:Key="ModernTabItemStyle" TargetType="{x:Type TabItem}">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Foreground" Value="{StaticResource TabItemForeground}"/>
+        <Setter Property="Background" Value="{StaticResource TabInactiveGradient}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource TabItemBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1,1,1,0"/>
+        <Setter Property="Margin" Value="0,2,0,0"/>
+        <Setter Property="Padding" Value="12,8,12,8"/>
+        <Setter Property="MinWidth" Value="80"/>
+        <Setter Property="MaxWidth" Value="240"/>
+        <Setter Property="Height" Value="32"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type TabItem}">
+                    <Grid x:Name="TemplateRoot" SnapsToDevicePixels="true">
+                        <Border x:Name="MainBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8,8,0,0"
+                                Margin="2,0,2,0"
+                                RenderTransformOrigin="0.5,0.5">
+                            
+                            <!-- Transform for animations -->
+                            <Border.RenderTransform>
+                                <TransformGroup>
+                                    <ScaleTransform x:Name="TabScale" ScaleX="1" ScaleY="1"/>
+                                    <TranslateTransform x:Name="TabTranslate" X="0" Y="0"/>
+                                </TransformGroup>
+                            </Border.RenderTransform>
+                            
+                            <!-- Shadow effect -->
+                            <Border.Effect>
+                                <DropShadowEffect x:Name="TabShadow"
+                                                Color="{StaticResource ShadowColor}"
+                                                Direction="270"
+                                                ShadowDepth="1"
+                                                BlurRadius="3"
+                                                Opacity="0.15"/>
+                            </Border.Effect>
+                            
+                            <Grid>
+                                <!-- Active Tab Accent -->
+                                <Border x:Name="AccentBorder"
+                                        Height="2"
+                                        VerticalAlignment="Top"
+                                        Background="{StaticResource AccentBrush}"
+                                        CornerRadius="1"
+                                        Margin="8,4,8,0"
+                                        Opacity="0"/>
+                                
+                                <!-- Color Accent Bar for Custom Colors -->
+                                <Border x:Name="ColorAccentBar"
+                                        Height="3"
+                                        VerticalAlignment="Top"
+                                        CornerRadius="1.5"
+                                        Margin="6,1,6,0"
+                                        Visibility="Collapsed"/>
+                                
+                                <!-- Tab Content Container -->
+                                <Grid Margin="{TemplateBinding Padding}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <!-- Tab Icon -->
+                                    <Border x:Name="IconContainer" Grid.Column="0" 
+                                            Margin="0,0,8,0" 
+                                            RenderTransformOrigin="0.5,0.5">
+                                        <Border.RenderTransform>
+                                            <RotateTransform x:Name="IconRotation" Angle="0"/>
+                                        </Border.RenderTransform>
+                                        <Image x:Name="TabIcon"
+                                               Width="16" Height="16"
+                                               VerticalAlignment="Center"
+                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                               Visibility="Collapsed"/>
+                                    </Border>
+                                    
+                                    <!-- Tab Title -->
+                                    <ContentPresenter x:Name="ContentPresenter"
+                                                    Grid.Column="1"
+                                                    ContentSource="Header"
+                                                    Focusable="False"
+                                                    HorizontalAlignment="Left"
+                                                    VerticalAlignment="Center"
+                                                    SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"
+                                                    TextElement.FontFamily="Segoe UI"
+                                                    TextElement.FontSize="13"
+                                                    TextElement.FontWeight="Normal"/>
+                                    
+                                    <!-- Loading Indicator -->
+                                    <Ellipse x:Name="LoadingIndicator"
+                                             Grid.Column="1"
+                                             Width="12" Height="12"
+                                             Fill="{StaticResource AccentBrush}"
+                                             HorizontalAlignment="Right"
+                                             VerticalAlignment="Center"
+                                             Margin="0,0,6,0"
+                                             Visibility="Collapsed"
+                                             RenderTransformOrigin="0.5,0.5">
+                                        <Ellipse.RenderTransform>
+                                            <RotateTransform x:Name="LoadingRotation" Angle="0"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    
+                                    <!-- Close Button -->
+                                    <Button x:Name="CloseButton"
+                                            Grid.Column="2"
+                                            Style="{StaticResource ModernCloseButtonStyle}"
+                                            Visibility="Visible"
+                                            Focusable="False"
+                                            Opacity="0.7"
+                                            RenderTransformOrigin="0.5,0.5">
+                                        <Button.RenderTransform>
+                                            <ScaleTransform x:Name="CloseButtonScale" ScaleX="1" ScaleY="1"/>
+                                        </Button.RenderTransform>
+                                    </Button>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    
+                    <ControlTemplate.Triggers>
+                        <!-- Hover State -->
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="MainBorder"
+                                                      Storyboard.TargetProperty="Background.(GradientBrush.GradientStops)[0].Color"
+                                                      To="#F0F8FF" Duration="0:0:0.15"/>
+                                        <ColorAnimation Storyboard.TargetName="MainBorder"
+                                                      Storyboard.TargetProperty="Background.(GradientBrush.GradientStops)[1].Color"
+                                                      To="#E6F3FF" Duration="0:0:0.15"/>
+                                        <DoubleAnimation Storyboard.TargetName="TabShadow"
+                                                       Storyboard.TargetProperty="ShadowDepth"
+                                                       To="2" Duration="0:0:0.15"/>
+                                        <DoubleAnimation Storyboard.TargetName="TabShadow"
+                                                       Storyboard.TargetProperty="BlurRadius"
+                                                       To="5" Duration="0:0:0.15"/>
+                                        <DoubleAnimation Storyboard.TargetName="CloseButton"
+                                                       Storyboard.TargetProperty="Opacity"
+                                                       To="1.0" Duration="0:0:0.15"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="MainBorder"
+                                                      Storyboard.TargetProperty="Background.(GradientBrush.GradientStops)[0].Color"
+                                                      Duration="0:0:0.15"/>
+                                        <ColorAnimation Storyboard.TargetName="MainBorder"
+                                                      Storyboard.TargetProperty="Background.(GradientBrush.GradientStops)[1].Color"
+                                                      Duration="0:0:0.15"/>
+                                        <DoubleAnimation Storyboard.TargetName="TabShadow"
+                                                       Storyboard.TargetProperty="ShadowDepth"
+                                                       To="1" Duration="0:0:0.15"/>
+                                        <DoubleAnimation Storyboard.TargetName="TabShadow"
+                                                       Storyboard.TargetProperty="BlurRadius"
+                                                       To="3" Duration="0:0:0.15"/>
+                                        <DoubleAnimation Storyboard.TargetName="CloseButton"
+                                                       Storyboard.TargetProperty="Opacity"
+                                                       To="0.7" Duration="0:0:0.15"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        
+                        <!-- Selected State -->
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="MainBorder" Property="Background" Value="{StaticResource TabActiveGradient}"/>
+                            <Setter TargetName="MainBorder" Property="BorderBrush" Value="{StaticResource TabItemActiveBorderBrush}"/>
+                            <Setter TargetName="MainBorder" Property="BorderThickness" Value="1,1,1,0"/>
+                            <Setter TargetName="AccentBorder" Property="Opacity" Value="1"/>
+                            <Setter TargetName="CloseButton" Property="Opacity" Value="1"/>
+                            <Setter Property="Panel.ZIndex" Value="1"/>
+                            <Setter Property="Foreground" Value="{StaticResource TabItemForegroundActive}"/>
+                        </Trigger>
+                        
+                        <!-- Focus State -->
+                        <Trigger Property="IsFocused" Value="True">
+                            <Setter TargetName="MainBorder" Property="BorderBrush" Value="{StaticResource FocusGlowBrush}"/>
+                            <Setter TargetName="MainBorder" Property="BorderThickness" Value="2,2,2,0"/>
+                        </Trigger>
+                        
+                        <!-- Pinned State -->
+                        <DataTrigger Binding="{Binding Tag.IsPinned, RelativeSource={RelativeSource Self}}" Value="True">
+                            <Setter Property="Width" Value="40"/>
+                            <Setter Property="MinWidth" Value="40"/>
+                            <Setter Property="MaxWidth" Value="40"/>
+                            <Setter Property="Padding" Value="8,8,8,8"/>
+                            <Setter TargetName="ContentPresenter" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="CloseButton" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="TabIcon" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="IconContainer" Property="Margin" Value="0"/>
+                            <!-- Set pinned icon -->
+                            <Setter TargetName="TabIcon" Property="Source" Value="{StaticResource PinIcon}"/>
+                        </DataTrigger>
+                        
+                        <!-- Loading State Animation -->
+                        <DataTrigger Binding="{Binding Tag.IsLoading, RelativeSource={RelativeSource Self}}" Value="True">
+                            <Setter TargetName="LoadingIndicator" Property="Visibility" Value="Visible"/>
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard RepeatBehavior="Forever">
+                                        <DoubleAnimation Storyboard.TargetName="LoadingRotation"
+                                                       Storyboard.TargetProperty="Angle"
+                                                       From="0" To="360" Duration="0:0:1"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                        </DataTrigger>
+                        
+                        <!-- Dragging State -->
+                        <DataTrigger Binding="{Binding Tag.IsDragging, RelativeSource={RelativeSource Self}}" Value="True">
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                       To="0.5" Duration="0:0:0.2">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="TabScale"
+                                                       Storyboard.TargetProperty="ScaleX"
+                                                       To="0.95" Duration="0:0:0.2">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="TabScale"
+                                                       Storyboard.TargetProperty="ScaleY"
+                                                       To="0.95" Duration="0:0:0.2">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="TabShadow"
+                                                       Storyboard.TargetProperty="ShadowDepth"
+                                                       To="5" Duration="0:0:0.2"/>
+                                        <DoubleAnimation Storyboard.TargetName="TabShadow"
+                                                       Storyboard.TargetProperty="BlurRadius"
+                                                       To="10" Duration="0:0:0.2"/>
+                                        <DoubleAnimation Storyboard.TargetName="TabShadow"
+                                                       Storyboard.TargetProperty="Opacity"
+                                                       To="0.4" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                            <DataTrigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                       To="1.0" Duration="0:0:0.2">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseIn"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="TabScale"
+                                                       Storyboard.TargetProperty="ScaleX"
+                                                       To="1.0" Duration="0:0:0.2">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase EasingMode="EaseOut" Amplitude="0.3"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="TabScale"
+                                                       Storyboard.TargetProperty="ScaleY"
+                                                       To="1.0" Duration="0:0:0.2">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase EasingMode="EaseOut" Amplitude="0.3"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="TabShadow"
+                                                       Storyboard.TargetProperty="ShadowDepth"
+                                                       To="1" Duration="0:0:0.2"/>
+                                        <DoubleAnimation Storyboard.TargetName="TabShadow"
+                                                       Storyboard.TargetProperty="BlurRadius"
+                                                       To="3" Duration="0:0:0.2"/>
+                                        <DoubleAnimation Storyboard.TargetName="TabShadow"
+                                                       Storyboard.TargetProperty="Opacity"
+                                                       To="0.15" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.ExitActions>
+                        </DataTrigger>
+                        
+                        <!-- Drop Target State -->
+                        <DataTrigger Binding="{Binding Tag.IsDropTarget, RelativeSource={RelativeSource Self}}" Value="True">
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="MainBorder"
+                                                      Storyboard.TargetProperty="Background.(GradientBrush.GradientStops)[0].Color"
+                                                      To="#E3F2FD" Duration="0:0:0.2"/>
+                                        <ColorAnimation Storyboard.TargetName="MainBorder"
+                                                      Storyboard.TargetProperty="Background.(GradientBrush.GradientStops)[1].Color"
+                                                      To="#BBDEFB" Duration="0:0:0.2"/>
+                                        <ColorAnimation Storyboard.TargetName="MainBorder"
+                                                      Storyboard.TargetProperty="BorderBrush.Color"
+                                                      To="{StaticResource AccentPrimaryColor}" Duration="0:0:0.2"/>
+                                        <DoubleAnimation Storyboard.TargetName="MainBorder"
+                                                       Storyboard.TargetProperty="BorderThickness.Left"
+                                                       To="2" Duration="0:0:0.2"/>
+                                        <DoubleAnimation Storyboard.TargetName="MainBorder"
+                                                       Storyboard.TargetProperty="BorderThickness.Top"
+                                                       To="2" Duration="0:0:0.2"/>
+                                        <DoubleAnimation Storyboard.TargetName="MainBorder"
+                                                       Storyboard.TargetProperty="BorderThickness.Right"
+                                                       To="2" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                            <DataTrigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="MainBorder"
+                                                      Storyboard.TargetProperty="Background.(GradientBrush.GradientStops)[0].Color"
+                                                      Duration="0:0:0.2"/>
+                                        <ColorAnimation Storyboard.TargetName="MainBorder"
+                                                      Storyboard.TargetProperty="Background.(GradientBrush.GradientStops)[1].Color"
+                                                      Duration="0:0:0.2"/>
+                                        <ColorAnimation Storyboard.TargetName="MainBorder"
+                                                      Storyboard.TargetProperty="BorderBrush.Color"
+                                                      Duration="0:0:0.2"/>
+                                        <DoubleAnimation Storyboard.TargetName="MainBorder"
+                                                       Storyboard.TargetProperty="BorderThickness.Left"
+                                                       To="1" Duration="0:0:0.2"/>
+                                        <DoubleAnimation Storyboard.TargetName="MainBorder"
+                                                       Storyboard.TargetProperty="BorderThickness.Top"
+                                                       To="1" Duration="0:0:0.2"/>
+                                        <DoubleAnimation Storyboard.TargetName="MainBorder"
+                                                       Storyboard.TargetProperty="BorderThickness.Right"
+                                                       To="1" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.ExitActions>
+                        </DataTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========================================
+         MODERN TAB CONTROL TEMPLATE
+         ======================================== -->
+    
+    <Style TargetType="{x:Type local:ModernTabControl}">
+        <Setter Property="Background" Value="{StaticResource TabControlBackground}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource TabItemBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+        <Setter Property="TabStripPlacement" Value="Top"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type local:ModernTabControl}">
+                    <Grid x:Name="TemplateRoot" 
+                          ClipToBounds="true" 
+                          SnapsToDevicePixels="true"
+                          KeyboardNavigation.TabNavigation="Local">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Tab Header Strip -->
+                        <Border x:Name="HeaderPanel" 
+                                Grid.Row="0"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="0,0,0,1"
+                                Padding="0,2,0,0">
+                            
+                            <!-- Tab Scroll Viewer for overflow handling -->
+                            <ScrollViewer x:Name="TabScrollViewer"
+                                        HorizontalScrollBarVisibility="Auto"
+                                        VerticalScrollBarVisibility="Disabled"
+                                        CanContentScroll="True"
+                                        Style="{DynamicResource ModernScrollViewerStyle}">
+                                
+                                <!-- Tab Panel -->
+                                <TabPanel x:Name="TabPanel"
+                                        IsItemsHost="true"
+                                        Margin="4,0,4,0"
+                                        KeyboardNavigation.TabIndex="1"
+                                        Panel.ZIndex="1"/>
+                            </ScrollViewer>
+                        </Border>
+                        
+                        <!-- Content Area -->
+                        <Border x:Name="ContentPanel" 
+                                Grid.Row="1"
+                                Background="White"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="0"
+                                KeyboardNavigation.DirectionalNavigation="Contained"
+                                KeyboardNavigation.TabIndex="2"
+                                KeyboardNavigation.TabNavigation="Local">
+                            
+                            <ContentPresenter x:Name="PART_SelectedContentHost"
+                                            ContentSource="SelectedContent"
+                                            Margin="{TemplateBinding Padding}"
+                                            SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========================================
+         TAB DROP ZONE STYLE FOR DRAG & DROP
+         ======================================== -->
+    
+    <Style TargetType="{x:Type local:TabDropZone}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type local:TabDropZone}">
+                    <Grid>
+                        <Rectangle x:Name="DropIndicator"
+                                 Width="3" Height="28"
+                                 Fill="{StaticResource AccentBrush}"
+                                 RadiusX="1.5" RadiusY="1.5"
+                                 RenderTransformOrigin="0.5,0.5">
+                            <Rectangle.RenderTransform>
+                                <ScaleTransform x:Name="IndicatorScale" ScaleX="1" ScaleY="1"/>
+                            </Rectangle.RenderTransform>
+                            <Rectangle.Effect>
+                                <DropShadowEffect Color="{StaticResource AccentPrimaryColor}" 
+                                                BlurRadius="12" 
+                                                ShadowDepth="0"
+                                                Opacity="0.6"/>
+                            </Rectangle.Effect>
+                        </Rectangle>
+                    </Grid>
+                    
+                    <ControlTemplate.Triggers>
+                        <EventTrigger RoutedEvent="Loaded">
+                            <BeginStoryboard>
+                                <Storyboard RepeatBehavior="Forever">
+                                    <DoubleAnimation Storyboard.TargetName="IndicatorScale"
+                                                   Storyboard.TargetProperty="ScaleY"
+                                                   From="0.8" To="1.2" Duration="0:0:0.6"
+                                                   AutoReverse="True">
+                                        <DoubleAnimation.EasingFunction>
+                                            <SineEase EasingMode="EaseInOut"/>
+                                        </DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                   From="0.6" To="1.0" Duration="0:0:0.6"
+                                                   AutoReverse="True">
+                                        <DoubleAnimation.EasingFunction>
+                                            <SineEase EasingMode="EaseInOut"/>
+                                        </DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Opacity" Value="0"/>
+    </Style>
+
+    <!-- ========================================
+         MODERN SCROLL VIEWER STYLE
+         ======================================== -->
+    
+    <Style x:Key="ModernScrollViewerStyle" TargetType="{x:Type ScrollViewer}">
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ScrollViewer}">
+                    <Grid>
+                        <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                              CanContentScroll="{TemplateBinding CanContentScroll}"
+                                              CanHorizontallyScroll="False"
+                                              CanVerticallyScroll="False"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              Content="{TemplateBinding Content}"
+                                              Grid.Column="0"
+                                              Margin="{TemplateBinding Padding}"
+                                              Grid.Row="0"/>
+                        
+                        <ScrollBar x:Name="PART_HorizontalScrollBar"
+                                 AutomationProperties.AutomationId="HorizontalScrollBar"
+                                 Cursor="Arrow"
+                                 Grid.Column="0"
+                                 Maximum="{TemplateBinding ScrollableWidth}"
+                                 Minimum="0"
+                                 Orientation="Horizontal"
+                                 Grid.Row="1"
+                                 Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"
+                                 Value="{Binding HorizontalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                 ViewportSize="{TemplateBinding ViewportWidth}"
+                                 Style="{DynamicResource ModernScrollBarStyle}"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Pin Icon Resource -->
+    <ImageSource x:Key="PinIcon">pack://application:,,,/Assets/Icons/pin.svg</ImageSource>
+    
+</ResourceDictionary> 
