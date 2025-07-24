@@ -12,7 +12,7 @@ namespace ExplorerPro.Core.TabManagement
     {
         public Window Window { get; set; }
         public ChromeStyleTabControl TabControl { get; set; }
-        public TabItemModel OriginalTab { get; set; }
+        public TabModel OriginalTab { get; set; }
         public Window SourceWindow { get; set; }
         public DateTime DetachedAt { get; set; }
         public Point InitialPosition { get; set; }

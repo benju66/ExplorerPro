@@ -540,7 +540,7 @@ namespace ExplorerPro.Core.TabManagement
                 tab.Path = hibernationData.OriginalPath;
                 tab.CustomColor = hibernationData.CustomColor;
                 tab.IsPinned = hibernationData.IsPinned;
-                tab.Metadata = hibernationData.Metadata;
+                tab.Metadata = hibernationData.Metadata as Dictionary<string, object> ?? new Dictionary<string, object>();
                 
                 // Restore extended state if available
                 if (hibernationData.ExtendedState != null && 

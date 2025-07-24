@@ -63,7 +63,7 @@ namespace ExplorerPro.UI.Controls
         public static readonly DependencyProperty TabItemsProperty =
             DependencyProperty.Register(
                 nameof(TabItems),
-                typeof(ObservableCollection<TabItemModel>),
+                typeof(ObservableCollection<TabModel>),
                 typeof(ChromeStyleTabControl),
                 new PropertyMetadata(null, OnTabItemsChanged));
 
@@ -73,7 +73,7 @@ namespace ExplorerPro.UI.Controls
         public static readonly DependencyProperty SelectedTabItemProperty =
             DependencyProperty.Register(
                 nameof(SelectedTabItem),
-                typeof(TabItemModel),
+                typeof(TabModel),
                 typeof(ChromeStyleTabControl),
                 new PropertyMetadata(null, OnSelectedTabItemChanged));
 
@@ -122,18 +122,18 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Gets or sets the collection of tab items
         /// </summary>
-        public ObservableCollection<TabItemModel> TabItems
+        public ObservableCollection<TabModel> TabItems
         {
-            get => (ObservableCollection<TabItemModel>)GetValue(TabItemsProperty);
+            get => (ObservableCollection<TabModel>)GetValue(TabItemsProperty);
             set => SetValue(TabItemsProperty, value);
         }
 
         /// <summary>
         /// Gets or sets the currently selected tab item model
         /// </summary>
-        public TabItemModel SelectedTabItem
+        public TabModel SelectedTabItem
         {
-            get => (TabItemModel)GetValue(SelectedTabItemProperty);
+            get => (TabModel)GetValue(SelectedTabItemProperty);
             set => SetValue(SelectedTabItemProperty, value);
         }
 
@@ -225,7 +225,7 @@ namespace ExplorerPro.UI.Controls
             // Initialize tab items collection if not set
             if (TabItems == null)
             {
-                TabItems = new ObservableCollection<TabItemModel>();
+                TabItems = new ObservableCollection<TabModel>();
             }
 
             // Wire up events
@@ -571,7 +571,7 @@ namespace ExplorerPro.UI.Controls
         {
             try
             {
-                if (_draggedTab?.Tag is TabItemModel tabModel)
+                if (_draggedTab?.Tag is TabModel tabModel)
                 {
                     _isDragging = true;
                     var window = Window.GetWindow(this);
@@ -627,14 +627,14 @@ namespace ExplorerPro.UI.Controls
                         else
                         {
                             // Local drag handling
-                            tabModel.IsDragging = true;
+                            tabModel.State = ExplorerPro.Models.TabState.Loading;
                         }
                     }
                     catch (Exception ex)
                     {
                         _logger?.LogWarning(ex, "Error starting drag service during drag start");
                         // Fallback to local handling
-                        tabModel.IsDragging = true;
+                        tabModel.State = ExplorerPro.Models.TabState.Loading;
                     }
 
                     // Raise drag started event
@@ -732,7 +732,7 @@ namespace ExplorerPro.UI.Controls
                 // Raise dragging event
                 try
                 {
-                    if (_draggedTab?.Tag is TabItemModel tabModel)
+                    if (_draggedTab?.Tag is TabModel tabModel)
                     {
                         TabDragging?.Invoke(this, new TabDragEventArgs(
                             tabModel,
@@ -832,7 +832,7 @@ namespace ExplorerPro.UI.Controls
                 // Raise completed event
                 try
                 {
-                    if (_draggedTab?.Tag is TabItemModel tabModel)
+                    if (_draggedTab?.Tag is TabModel tabModel)
                     {
                         TabDragCompleted?.Invoke(this, new TabDragEventArgs(
                             tabModel,
@@ -919,7 +919,7 @@ namespace ExplorerPro.UI.Controls
                     if (currentIndex != _currentDragOperation.OriginalIndex)
                     {
                         _tabOperationsManager?.ReorderTab(this, 
-                            _draggedTab.Tag as TabItemModel, 
+                            _draggedTab.Tag as TabModel, 
                             _currentDragOperation.OriginalIndex);
                     }
                 }
@@ -988,7 +988,7 @@ namespace ExplorerPro.UI.Controls
                             _currentDragOperation.OriginalIndex < Items.Count)
                         {
                             _tabOperationsManager?.ReorderTab(this, 
-                                _draggedTab.Tag as TabItemModel, 
+                                _draggedTab.Tag as TabModel, 
                                 _currentDragOperation.OriginalIndex);
                             
                             _logger?.LogDebug($"Restored tab to original position {_currentDragOperation.OriginalIndex}");
@@ -1032,11 +1032,11 @@ namespace ExplorerPro.UI.Controls
                 }
 
                 // Clear drag operation state
-                if (_draggedTab?.Tag is TabItemModel tabModel)
+                if (_draggedTab?.Tag is TabModel tabModel)
                 {
                     try
                     {
-                        tabModel.IsDragging = false;
+                        tabModel.State = ExplorerPro.Models.TabState.Normal;
                     }
                     catch (Exception ex)
                     {
@@ -1119,7 +1119,7 @@ namespace ExplorerPro.UI.Controls
             if (_tabOperationsManager == null || _draggedTab == null) return false;
 
             var dropIndex = _tabOperationsManager.CalculateDropIndex(this, screenPoint);
-            var tabModel = _draggedTab.Tag as TabItemModel;
+            var tabModel = _draggedTab.Tag as TabModel;
             
             return _tabOperationsManager.ReorderTab(this, tabModel, dropIndex);
         }
@@ -1164,7 +1164,7 @@ namespace ExplorerPro.UI.Controls
                 return false;
 
             var dropIndex = _tabOperationsManager.CalculateDropIndex(targetTabControl, screenPoint);
-            var tabModel = _draggedTab.Tag as TabItemModel;
+            var tabModel = _draggedTab.Tag as TabModel;
             
             return _tabOperationsManager.TransferTab(this, targetTabControl, tabModel, dropIndex);
         }
@@ -1911,7 +1911,7 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         private Window CreateDragVisual(TabItem tabItem)
         {
-            if (tabItem?.Tag is not TabItemModel tabModel)
+            if (tabItem?.Tag is not TabModel tabModel)
                 return null;
 
             // Create floating window with no chrome
@@ -2255,8 +2255,8 @@ namespace ExplorerPro.UI.Controls
         {
             if (tabItem == null) return false;
 
-            // Check if the tab is associated with a valid TabItemModel
-            if (tabItem.Tag is TabItemModel tabModel)
+            // Check if the tab is associated with a valid TabModel
+            if (tabItem.Tag is TabModel tabModel)
             {
                 // Don't allow dragging of pinned tabs in some scenarios
                 // For now, allow all tabs to be dragged
@@ -2534,7 +2534,7 @@ namespace ExplorerPro.UI.Controls
             {
                 // Find parent TabItem
                 var tabItem = FindParent<TabItem>(closeButton);
-                if (tabItem?.Tag is TabItemModel tabModel)
+                if (tabItem?.Tag is TabModel tabModel)
                 {
                     CloseTab(tabModel);
                 }
@@ -2561,7 +2561,7 @@ namespace ExplorerPro.UI.Controls
 
             // Find which tab was right-clicked
             var tabItem = FindTabItemFromPoint(e.GetPosition(this));
-            if (tabItem?.Tag is TabItemModel tabModel)
+            if (tabItem?.Tag is TabModel tabModel)
             {
                 // Select the tab that was right-clicked
                 SelectedItem = tabItem;
@@ -2575,7 +2575,7 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Shows the context menu for a tab
         /// </summary>
-        private void ShowTabContextMenu(TabItem tabItem, TabItemModel tabModel, Point position)
+        private void ShowTabContextMenu(TabItem tabItem, TabModel tabModel, Point position)
         {
             var contextMenu = new ContextMenu();
 
@@ -2639,7 +2639,7 @@ namespace ExplorerPro.UI.Controls
             }
 
             // Close Tab
-            if (tabModel.IsClosable && Items.Count > 1)
+            if (tabModel.CanClose && Items.Count > 1)
             {
                 var closeItem = new MenuItem 
                 { 
@@ -2729,7 +2729,7 @@ namespace ExplorerPro.UI.Controls
         /// Adds a new tab with default properties
         /// </summary>
         /// <returns>The created tab item model</returns>
-        public TabItemModel AddNewTab()
+        public TabModel AddNewTab()
         {
             return AddNewTab("New Tab", null);
         }
@@ -2740,14 +2740,14 @@ namespace ExplorerPro.UI.Controls
         /// <param name="title">Title of the new tab</param>
         /// <param name="content">Content for the new tab</param>
         /// <returns>The created tab item model</returns>
-        public TabItemModel AddNewTab(string title, object content = null)
+        public TabModel AddNewTab(string title, object content = null)
         {
             if (!AllowAddNew || (TabItems?.Count >= MaxTabCount))
             {
                 return null;
             }
 
-            var newTab = new TabItemModel(Guid.NewGuid().ToString(), title, content);
+            var newTab = new TabModel(title, "");
 
             // Fire event to allow customization before adding
             var eventArgs = new NewTabRequestedEventArgs(newTab);
@@ -2762,7 +2762,7 @@ namespace ExplorerPro.UI.Controls
             newTab = eventArgs.TabItem;
 
             // Add to collection
-            TabItems ??= new ObservableCollection<TabItemModel>();
+            TabItems ??= new ObservableCollection<TabModel>();
             TabItems.Add(newTab);
 
             // Select the new tab
@@ -2776,9 +2776,9 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         /// <param name="tabItem">Tab to close</param>
         /// <returns>True if the tab was closed, false otherwise</returns>
-        public bool CloseTab(TabItemModel tabItem)
+        public bool CloseTab(TabModel tabItem)
         {
-            if (!AllowDelete || tabItem == null || !tabItem.IsClosable)
+            if (!AllowDelete || tabItem == null || !tabItem.CanClose)
             {
                 return false;
             }
@@ -2825,7 +2825,7 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         /// <param name="tabId">ID of the tab to find</param>
         /// <returns>The tab item model or null if not found</returns>
-        public TabItemModel FindTabById(string tabId)
+        public TabModel FindTabById(string tabId)
         {
             return TabItems?.FirstOrDefault(t => t.Id == tabId);
         }
@@ -2864,13 +2864,13 @@ namespace ExplorerPro.UI.Controls
             if (d is ChromeStyleTabControl control)
             {
                 // Unsubscribe from old collection
-                if (e.OldValue is ObservableCollection<TabItemModel> oldCollection)
+                if (e.OldValue is ObservableCollection<TabModel> oldCollection)
                 {
                     oldCollection.CollectionChanged -= control.OnTabItemsCollectionChanged;
                 }
 
                 // Subscribe to new collection
-                if (e.NewValue is ObservableCollection<TabItemModel> newCollection)
+                if (e.NewValue is ObservableCollection<TabModel> newCollection)
                 {
                     newCollection.CollectionChanged += control.OnTabItemsCollectionChanged;
                     control.RefreshTabItems();
@@ -2899,7 +2899,7 @@ namespace ExplorerPro.UI.Controls
         }
 
         /// <summary>
-        /// Refreshes the actual TabControl items based on the TabItemModels
+        /// Refreshes the actual TabControl items based on the TabModels
         /// </summary>
         private void RefreshTabItems()
         {
@@ -2908,7 +2908,7 @@ namespace ExplorerPro.UI.Controls
 
             if (TabItems == null) return;
 
-            // Add TabItems based on TabItemModels
+            // Add TabItems based on TabModels
             foreach (var tabModel in TabItems)
             {
                 var tabItem = CreateTabItemFromModel(tabModel);
@@ -2920,16 +2920,16 @@ namespace ExplorerPro.UI.Controls
         }
 
         /// <summary>
-        /// Creates a WPF TabItem from a TabItemModel
+        /// Creates a WPF TabItem from a TabModel
         /// </summary>
-        private TabItem CreateTabItemFromModel(TabItemModel model)
+        private TabItem CreateTabItemFromModel(TabModel model)
         {
             var tabItem = new TabItem
             {
                 Header = model.Title,
                 Content = model.Content,
                 Tag = model,
-                ToolTip = string.IsNullOrEmpty(model.Tooltip) ? model.Title : model.Tooltip
+                ToolTip = string.IsNullOrEmpty(model.DisplayTitle) ? model.Title : model.DisplayTitle
             };
 
             // Apply styling based on model properties
@@ -2955,7 +2955,7 @@ namespace ExplorerPro.UI.Controls
         /// Updates a TabItem when its model changes
         /// Updates all visual properties based on the model's state, including width adjustments for pinned tabs
         /// </summary>
-        private void UpdateTabItemFromModel(TabItem tabItem, TabItemModel model)
+        private void UpdateTabItemFromModel(TabItem tabItem, TabModel model)
         {
             if (tabItem == null || model == null) return;
 
@@ -2964,7 +2964,6 @@ namespace ExplorerPro.UI.Controls
                 // Update basic properties
                 tabItem.Header = model.HasUnsavedChanges ? $"• {model.Title}" : model.Title;
                 tabItem.Content = model.Content;
-                tabItem.ToolTip = string.IsNullOrEmpty(model.Tooltip) ? model.Title : model.Tooltip;
                 tabItem.Tag = model; // Ensure model reference is maintained
 
                 // Update visual styling based on model state
@@ -3000,7 +2999,7 @@ namespace ExplorerPro.UI.Controls
         /// Applies visual styling to the TabItem based on the model state
         /// Preserves the ultra-modern Chrome styling while updating based on model
         /// </summary>
-        private void ApplyTabStyling(TabItem tabItem, TabItemModel model)
+        private void ApplyTabStyling(TabItem tabItem, TabModel model)
         {
             // Ensure the tab uses the Chrome style (don't override with generic styles)
             if (model.IsPinned)
@@ -3021,7 +3020,7 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Updates the tab width based on pinned state and content
         /// </summary>
-        private void UpdateTabWidth(TabItem tabItem, TabItemModel model)
+        private void UpdateTabWidth(TabItem tabItem, TabModel model)
         {
             if (model.IsPinned)
             {
@@ -3043,33 +3042,33 @@ namespace ExplorerPro.UI.Controls
         /// Updates close button visibility based on model properties
         /// Works with the Chrome template's CloseButton element and ShowCloseButton binding
         /// </summary>
-        private void UpdateCloseButtonVisibility(TabItem tabItem, TabItemModel model)
+        private void UpdateCloseButtonVisibility(TabItem tabItem, TabModel model)
         {
-            // The Chrome template automatically binds to Tag.ShowCloseButton
-            // Since we added this computed property to TabItemModel, the template will
+            // The Chrome template automatically binds to Tag.CanClose
+            // Since we added this computed property to TabModel, the template will
             // automatically show/hide the close button based on IsPinned and IsClosable
             
             // For direct element access (fallback), also update the button directly
             var closeButton = FindChildOfType<Button>(tabItem, "CloseButton");
             if (closeButton != null)
             {
-                closeButton.Visibility = model.ShowCloseButton 
+                closeButton.Visibility = model.CanClose 
                     ? Visibility.Visible 
                     : Visibility.Collapsed;
             }
             
-            _logger?.LogDebug($"Close button visibility for '{model.Title}': {model.ShowCloseButton}");
+            _logger?.LogDebug($"Close button visibility for '{model.Title}': {model.CanClose}");
         }
 
         /// <summary>
         /// Updates tab colors based on the model's color theme
         /// Works with the Chrome template's existing styling
         /// </summary>
-        private void UpdateTabColors(TabItem tabItem, TabItemModel model)
+        private void UpdateTabColors(TabItem tabItem, TabModel model)
         {
-            if (model.TabColor != Colors.LightGray) // Only apply custom colors
+            if (model.CustomColor != Colors.LightGray) // Only apply custom colors
             {
-                var colorBrush = new SolidColorBrush(model.TabColor);
+                var colorBrush = new SolidColorBrush(model.CustomColor);
                 
                 // Find the TabBorder from the Chrome template
                 var tabBorder = FindChildOfType<Border>(tabItem, "TabBorder");
@@ -3084,13 +3083,13 @@ namespace ExplorerPro.UI.Controls
                     gradientBrush.StartPoint = new Point(0, 0);
                     gradientBrush.EndPoint = new Point(0, 1);
                     gradientBrush.GradientStops.Add(new GradientStop(Colors.White, 0.0));
-                    gradientBrush.GradientStops.Add(new GradientStop(model.TabColor, 0.3) { Color = Color.FromArgb(30, model.TabColor.R, model.TabColor.G, model.TabColor.B) });
+                    gradientBrush.GradientStops.Add(new GradientStop(model.CustomColor, 0.3) { Color = Color.FromArgb(30, model.CustomColor.R, model.CustomColor.G, model.CustomColor.B) });
                     gradientBrush.GradientStops.Add(new GradientStop(Colors.White, 1.0));
                     
                     tabBorder.Background = gradientBrush;
                     
                     // Add colored border accent
-                    tabBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(80, model.TabColor.R, model.TabColor.G, model.TabColor.B));
+                    tabBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(80, model.CustomColor.R, model.CustomColor.G, model.CustomColor.B));
                 }
             }
             else
@@ -3108,7 +3107,7 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Updates font styling based on model state
         /// </summary>
-        private void UpdateTabFontStyling(TabItem tabItem, TabItemModel model)
+        private void UpdateTabFontStyling(TabItem tabItem, TabModel model)
         {
             // Bold font for pinned tabs
             tabItem.FontWeight = model.IsPinned ? FontWeights.Bold : FontWeights.Normal;
@@ -3124,7 +3123,7 @@ namespace ExplorerPro.UI.Controls
         /// Updates visual feedback for drag state
         /// The Chrome template already handles drag animations, so we just ensure the model binding works
         /// </summary>
-        private void UpdateDragStateVisuals(TabItem tabItem, TabItemModel model)
+        private void UpdateDragStateVisuals(TabItem tabItem, TabModel model)
         {
             // The ChromeTabItemStyle template already has sophisticated drag animations
             // that are triggered by the IsDragging data binding. We don't need to manually
@@ -3132,7 +3131,7 @@ namespace ExplorerPro.UI.Controls
             // The template handles: opacity changes, scale transforms, and shadow effects
             
             // Only log for debugging
-            if (model.IsDragging)
+            if (model.State == ExplorerPro.Models.TabState.Loading)
             {
                 _logger?.LogDebug($"Tab '{model.Title}' entered drag state - Chrome animations active");
             }
@@ -3142,7 +3141,7 @@ namespace ExplorerPro.UI.Controls
         /// Updates active/inactive state visual indicators
         /// Chrome template handles IsSelected automatically, so we sync with that
         /// </summary>
-        private void UpdateActiveState(TabItem tabItem, TabItemModel model)
+        private void UpdateActiveState(TabItem tabItem, TabModel model)
         {
             // The Chrome template automatically handles IsSelected state with beautiful animations
             // We just need to ensure the TabItem's IsSelected matches the model's IsActive
@@ -3174,7 +3173,7 @@ namespace ExplorerPro.UI.Controls
             if (tabItem != null)
             {
                 SelectedItem = tabItem;
-                SelectedTabItem.UpdateLastAccessed();
+                SelectedTabItem.Activate();
             }
         }
 
@@ -3297,7 +3296,7 @@ namespace ExplorerPro.UI.Controls
                 }
             }
 
-            if (SelectedItem is TabItem selectedTab && selectedTab.Tag is TabItemModel tabModel)
+            if (SelectedItem is TabItem selectedTab && selectedTab.Tag is TabModel tabModel)
             {
                 bool handled = false;
 
@@ -3340,7 +3339,7 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Moves the selected tab to the left
         /// </summary>
-        private bool MoveTabLeft(TabItemModel tab)
+        private bool MoveTabLeft(TabModel tab)
         {
             var currentIndex = GetTabIndex(tab);
             if (currentIndex > 0)
@@ -3353,7 +3352,7 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Moves the selected tab to the right
         /// </summary>
-        private bool MoveTabRight(TabItemModel tab)
+        private bool MoveTabRight(TabModel tab)
         {
             var currentIndex = GetTabIndex(tab);
             if (currentIndex < Items.Count - 1)
@@ -3380,7 +3379,7 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Gets the index of a tab by its model
         /// </summary>
-        private int GetTabIndex(TabItemModel tab)
+        private int GetTabIndex(TabModel tab)
         {
             for (int i = 0; i < Items.Count; i++)
             {
@@ -3405,10 +3404,10 @@ namespace ExplorerPro.UI.Controls
             base.OnSelectionChanged(e);
 
             // Update SelectedTabItem based on the actual selection
-            if (SelectedItem is TabItem selectedTabItem && selectedTabItem.Tag is TabItemModel model)
+            if (SelectedItem is TabItem selectedTabItem && selectedTabItem.Tag is TabModel model)
             {
                 SelectedTabItem = model;
-                model.UpdateLastAccessed();
+                model.Activate();
             }
         }
 
@@ -3435,15 +3434,16 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Duplicates a tab
         /// </summary>
-        private void DuplicateTab(TabItemModel tabModel)
+        private void DuplicateTab(TabModel tabModel)
         {
             try
             {
                 // Create a new tab with the same content type
-                var newTab = new TabItemModel(Guid.NewGuid().ToString(), $"{tabModel.Title} - Copy", tabModel.Content);
-                newTab.Tooltip = tabModel.Tooltip;
+                var newTab = new TabModel($"{tabModel.Title} - Copy", tabModel.Path);
+                newTab.Id = Guid.NewGuid().ToString();
+                newTab.Content = tabModel.Content;
                 
-                TabItems ??= new ObservableCollection<TabItemModel>();
+                TabItems ??= new ObservableCollection<TabModel>();
                 TabItems.Add(newTab);
                 SelectedTabItem = newTab;
 
@@ -3458,7 +3458,7 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Toggles the pin state of a tab
         /// </summary>
-        private void ToggleTabPin(TabItemModel tabModel)
+        private void ToggleTabPin(TabModel tabModel)
         {
             try
             {
@@ -3482,7 +3482,7 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Changes the color of a tab
         /// </summary>
-        private void ChangeTabColor(TabItemModel tabModel)
+        private void ChangeTabColor(TabModel tabModel)
         {
             try
             {
@@ -3510,7 +3510,7 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Detaches a tab to a new window
         /// </summary>
-        private void DetachTab(TabItemModel tabModel)
+        private void DetachTab(TabModel tabModel)
         {
             try
             {
@@ -3537,11 +3537,11 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Closes all tabs except the specified one
         /// </summary>
-        private void CloseOtherTabs(TabItemModel keepTab)
+        private void CloseOtherTabs(TabModel keepTab)
         {
             try
             {
-                var tabsToClose = TabItems?.Where(t => t != keepTab && t.IsClosable).ToList();
+                var tabsToClose = TabItems?.Where(t => t != keepTab && t.CanClose).ToList();
                 if (tabsToClose != null)
                 {
                     foreach (var tab in tabsToClose)
@@ -3561,7 +3561,7 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Closes all tabs to the right of the specified tab
         /// </summary>
-        private void CloseTabsToTheRight(TabItemModel fromTab)
+        private void CloseTabsToTheRight(TabModel fromTab)
         {
             try
             {
@@ -3570,7 +3570,7 @@ namespace ExplorerPro.UI.Controls
                 var fromIndex = TabItems.IndexOf(fromTab);
                 if (fromIndex >= 0)
                 {
-                    var tabsToClose = TabItems.Skip(fromIndex + 1).Where(t => t.IsClosable).ToList();
+                    var tabsToClose = TabItems.Skip(fromIndex + 1).Where(t => t.CanClose).ToList();
                     foreach (var tab in tabsToClose)
                     {
                         CloseTab(tab);
@@ -3775,10 +3775,10 @@ namespace ExplorerPro.UI.Controls
     /// </summary>
     public class NewTabRequestedEventArgs : EventArgs
     {
-        public TabItemModel TabItem { get; set; }
+        public TabModel TabItem { get; set; }
         public bool Cancel { get; set; }
 
-        public NewTabRequestedEventArgs(TabItemModel tabItem)
+        public NewTabRequestedEventArgs(TabModel tabItem)
         {
             TabItem = tabItem;
             Cancel = false;
@@ -3790,10 +3790,10 @@ namespace ExplorerPro.UI.Controls
     /// </summary>
     public class TabCloseRequestedEventArgs : EventArgs
     {
-        public TabItemModel TabItem { get; }
+        public TabModel TabItem { get; }
         public bool Cancel { get; set; }
 
-        public TabCloseRequestedEventArgs(TabItemModel tabItem)
+        public TabCloseRequestedEventArgs(TabModel tabItem)
         {
             TabItem = tabItem;
             Cancel = false;
@@ -3805,11 +3805,11 @@ namespace ExplorerPro.UI.Controls
     /// </summary>
     public class TabDragEventArgs : EventArgs
     {
-        public TabItemModel TabItem { get; }
+        public TabModel TabItem { get; }
         public Point StartPosition { get; }
         public Point CurrentPosition { get; }
 
-        public TabDragEventArgs(TabItemModel tabItem, Point startPosition, Point currentPosition)
+        public TabDragEventArgs(TabModel tabItem, Point startPosition, Point currentPosition)
         {
             TabItem = tabItem;
             StartPosition = startPosition;
@@ -3822,12 +3822,12 @@ namespace ExplorerPro.UI.Controls
     /// </summary>
     public class TabMetadataChangedEventArgs : EventArgs
     {
-        public TabItemModel TabItem { get; }
+        public TabModel TabItem { get; }
         public string PropertyName { get; }
         public object OldValue { get; }
         public object NewValue { get; }
 
-        public TabMetadataChangedEventArgs(TabItemModel tabItem, string propertyName, object oldValue, object newValue)
+        public TabMetadataChangedEventArgs(TabModel tabItem, string propertyName, object oldValue, object newValue)
         {
             TabItem = tabItem;
             PropertyName = propertyName;

@@ -211,13 +211,13 @@ namespace ExplorerPro.Tests.TabManagement
             Console.WriteLine("  ✅ Performance baseline met");
         }
 
-        private static TabItemModel CreateTestTab(string title)
+        private static TabModel CreateTestTab(string title)
         {
-            return new TabItemModel(Guid.NewGuid().ToString(), title, null)
+            return new TabModel(title)
             {
                 IsPinned = false,
                 HasUnsavedChanges = false,
-                TabColor = System.Windows.Media.Colors.LightGray
+                CustomColor = System.Windows.Media.Colors.LightGray
             };
         }
 
@@ -272,7 +272,7 @@ namespace ExplorerPro.Tests.TabManagement
             
             for (int i = 0; i < 10000; i++)
             {
-                var tab = new TabItemModel(Guid.NewGuid().ToString(), $"Tab {i}", null);
+                var tab = new TabModel($"Tab {i}");
             }
             
             stopwatch.Stop();
@@ -315,7 +315,7 @@ namespace ExplorerPro.Tests.TabManagement
             // Create and release objects
             for (int i = 0; i < 1000; i++)
             {
-                var tab = new TabItemModel(Guid.NewGuid().ToString(), $"Memory Test Tab {i}", null);
+                var tab = new TabModel($"Memory Test Tab {i}");
                 // Let it go out of scope
             }
             

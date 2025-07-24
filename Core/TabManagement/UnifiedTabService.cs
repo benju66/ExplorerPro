@@ -13,11 +13,11 @@ using ExplorerPro.UI.Controls;
 namespace ExplorerPro.Core.TabManagement
 {
     /// <summary>
-    /// Unified tab service that bridges TabModel (modern) and TabItemModel (legacy) 
+    /// Unified tab service that bridges TabModel (modern) and TabModel (legacy) 
     /// for compatibility with ChromeStyleTabControl while maintaining modern architecture.
     /// 
     /// This service acts as an adapter layer that:
-    /// - Exposes ObservableCollection&lt;TabItemModel&gt; for ChromeStyleTabControl
+    /// - Exposes ObservableCollection&lt;TabModel&gt; for ChromeStyleTabControl
     /// - Maintains internal ObservableCollection&lt;TabModel&gt; for modern services
     /// - Automatically synchronizes between the two collections
     /// - Handles proper disposal and memory management
@@ -28,7 +28,7 @@ namespace ExplorerPro.Core.TabManagement
         
         private readonly ITabManagerService _modernTabManager;
         private readonly ILogger<UnifiedTabService> _logger;
-        private readonly ObservableCollection<TabItemModel> _legacyTabItems;
+        private readonly ObservableCollection<TabModel> _legacyTabItems;
         private readonly ConcurrentDictionary<string, TabModelAdapter> _adapters;
         private bool _isDisposed;
         private bool _isSynchronizing; // Prevents circular updates
@@ -46,7 +46,7 @@ namespace ExplorerPro.Core.TabManagement
         {
             _modernTabManager = modernTabManager ?? throw new ArgumentNullException(nameof(modernTabManager));
             _logger = logger;
-            _legacyTabItems = new ObservableCollection<TabItemModel>();
+            _legacyTabItems = new ObservableCollection<TabModel>();
             _adapters = new ConcurrentDictionary<string, TabModelAdapter>();
             
             // Subscribe to modern tab manager events
@@ -75,7 +75,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Legacy tab items collection for ChromeStyleTabControl binding
         /// </summary>
-        public ObservableCollection<TabItemModel> LegacyTabItems => _legacyTabItems;
+        public ObservableCollection<TabModel> LegacyTabItems => _legacyTabItems;
         
         /// <summary>
         /// Modern tab collection (read-only access)
@@ -90,7 +90,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Currently active tab adapter (legacy)
         /// </summary>
-        public TabItemModel ActiveLegacyTab 
+        public TabModel ActiveLegacyTab 
         {
             get
             {
@@ -120,7 +120,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Creates a new tab and returns both modern and legacy representations
         /// </summary>
-        public async Task<(TabModel modern, TabItemModel legacy)> CreateTabAsync(string title, string path = null, TabCreationOptions options = null)
+        public async Task<(TabModel modern, TabModel legacy)> CreateTabAsync(string title, string path = null, TabCreationOptions options = null)
         {
             ThrowIfDisposed();
             
@@ -147,26 +147,10 @@ namespace ExplorerPro.Core.TabManagement
             ThrowIfDisposed();
             return await _modernTabManager.CloseTabAsync(tab, force);
         }
+
         
         /// <summary>
-        /// Closes a tab by legacy TabItemModel
-        /// </summary>
-        public async Task<bool> CloseTabAsync(TabItemModel legacyTab, bool force = false)
-        {
-            ThrowIfDisposed();
-            
-            var modernTab = GetModernTabById(legacyTab.Id);
-            if (modernTab != null)
-            {
-                return await _modernTabManager.CloseTabAsync(modernTab, force);
-            }
-            
-            _logger?.LogWarning($"Could not find modern tab for legacy tab ID: {legacyTab.Id}");
-            return false;
-        }
-        
-        /// <summary>
-        /// Gets the modern TabModel for a legacy TabItemModel ID
+        /// Gets the modern TabModel for a legacy TabModel ID
         /// </summary>
         public TabModel GetModernTabById(string tabId)
         {
@@ -175,9 +159,9 @@ namespace ExplorerPro.Core.TabManagement
         }
         
         /// <summary>
-        /// Gets the legacy TabItemModel for a modern TabModel ID
+        /// Gets the legacy TabModel for a modern TabModel ID
         /// </summary>
-        public TabItemModel GetLegacyTabById(string tabId)
+        public TabModel GetLegacyTabById(string tabId)
         {
             ThrowIfDisposed();
             
@@ -197,20 +181,7 @@ namespace ExplorerPro.Core.TabManagement
             ThrowIfDisposed();
             await _modernTabManager.ActivateTabAsync(tab);
         }
-        
-        /// <summary>
-        /// Activates a tab by legacy TabItemModel
-        /// </summary>
-        public async Task ActivateTabAsync(TabItemModel legacyTab)
-        {
-            ThrowIfDisposed();
-            
-            var modernTab = GetModernTabById(legacyTab.Id);
-            if (modernTab != null)
-            {
-                await _modernTabManager.ActivateTabAsync(modernTab);
-            }
-        }
+
         
         /// <summary>
         /// Reorders tabs
@@ -220,20 +191,7 @@ namespace ExplorerPro.Core.TabManagement
             ThrowIfDisposed();
             await _modernTabManager.MoveTabAsync(tab, newIndex);
         }
-        
-        /// <summary>
-        /// Reorders tabs by legacy model
-        /// </summary>
-        public async Task MoveTabAsync(TabItemModel legacyTab, int newIndex)
-        {
-            ThrowIfDisposed();
-            
-            var modernTab = GetModernTabById(legacyTab.Id);
-            if (modernTab != null)
-            {
-                await _modernTabManager.MoveTabAsync(modernTab, newIndex);
-            }
-        }
+
         
         #endregion
 

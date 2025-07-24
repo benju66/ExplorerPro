@@ -12,12 +12,12 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Detaches a tab to a new window
         /// </summary>
-        Window DetachTab(TabItemModel tab, Window sourceWindow);
+        Window DetachTab(TabModel tab, Window sourceWindow);
 
         /// <summary>
         /// Reattaches a tab to a target window
         /// </summary>
-        void ReattachTab(TabItemModel tab, Window targetWindow, int insertIndex = -1);
+        void ReattachTab(TabModel tab, Window targetWindow, int insertIndex = -1);
 
         /// <summary>
         /// Gets all currently detached windows
@@ -37,7 +37,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Finds the window containing a specific tab
         /// </summary>
-        Window FindWindowContainingTab(TabItemModel tab);
+        Window FindWindowContainingTab(TabModel tab);
 
         /// <summary>
         /// Gets all windows that can accept tab drops

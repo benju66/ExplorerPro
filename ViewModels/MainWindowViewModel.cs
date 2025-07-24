@@ -18,8 +18,8 @@ namespace ExplorerPro.ViewModels
         #region Fields
 
         private readonly ILogger<MainWindowViewModel> _logger;
-        private readonly ObservableCollection<TabItemModel> _tabItems;
-        private TabItemModel _selectedTabItem;
+        private readonly ObservableCollection<TabModel> _tabItems;
+        private TabModel _selectedTabItem;
         private string _windowTitle;
         private bool _isInitialized;
         private ExplorerPro.Core.TabManagement.ITabManagerService _tabManager;
@@ -35,7 +35,7 @@ namespace ExplorerPro.ViewModels
         public MainWindowViewModel(ILogger<MainWindowViewModel> logger = null)
         {
             _logger = logger;
-            _tabItems = new ObservableCollection<TabItemModel>();
+            _tabItems = new ObservableCollection<TabModel>();
             _windowTitle = "ExplorerPro";
             _isInitialized = false;
 
@@ -50,12 +50,12 @@ namespace ExplorerPro.ViewModels
         /// <summary>
         /// Collection of tab items
         /// </summary>
-        public ObservableCollection<TabItemModel> TabItems => _tabItems;
+        public ObservableCollection<TabModel> TabItems => _tabItems;
 
         /// <summary>
         /// Currently selected tab item
         /// </summary>
-        public TabItemModel SelectedTabItem
+        public TabModel SelectedTabItem
         {
             get => _selectedTabItem;
             set
@@ -175,20 +175,14 @@ namespace ExplorerPro.ViewModels
         /// <param name="title">Tab title</param>
         /// <param name="content">Tab content</param>
         /// <returns>The created tab item</returns>
-        public TabItemModel AddNewTab(string title = null, object content = null)
+        public TabModel AddNewTab(string title = null, object content = null)
         {
             try
             {
-                title ??= $"Tab {_tabItems.Count + 1}";
+                title = title ?? $"Tab {_tabItems.Count + 1}";
                 
-                var newTab = new TabItemModel(Guid.NewGuid().ToString(), title, content);
-                
-                // If content is not provided, create a MainWindowContainer
-                if (content == null)
-                {
-                    // This will be handled by the MainWindow when it receives the NewTabRequested event
-                    newTab.Content = null; // Will be set later
-                }
+                var newTab = new TabModel(title, "");
+                newTab.Content = content;
 
                 _tabItems.Add(newTab);
                 SelectedTabItem = newTab;
@@ -210,17 +204,26 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         /// <param name="tabItem">Tab to close</param>
         /// <returns>True if the tab was closed</returns>
-        public bool CloseTab(TabItemModel tabItem)
+        public bool CloseTab(TabModel tabItem)
         {
-            if (tabItem == null || !tabItem.IsClosable)
-                return false;
-
-            // Don't close the last tab
-            if (_tabItems.Count <= 1)
-                return false;
-
             try
             {
+                if (tabItem == null) return false;
+
+                // Don't close pinned tabs with unsaved changes
+                if (tabItem.IsPinned && tabItem.HasUnsavedChanges)
+                {
+                    _logger?.LogWarning($"Cannot close pinned tab with unsaved changes: {tabItem.Title}");
+                    return false;
+                }
+
+                // Don't close the last tab
+                if (_tabItems.Count <= 1)
+                {
+                    _logger?.LogWarning("Cannot close the last tab");
+                    return false;
+                }
+
                 var wasSelected = SelectedTabItem == tabItem;
                 var index = _tabItems.IndexOf(tabItem);
                 
@@ -229,19 +232,16 @@ namespace ExplorerPro.ViewModels
                 // Select another tab if this was the selected one
                 if (wasSelected && _tabItems.Count > 0)
                 {
-                    // Select the tab at the same index, or the last tab if index is out of bounds
-                    var newIndex = Math.Min(index, _tabItems.Count - 1);
-                    SelectedTabItem = _tabItems[newIndex];
+                    var nextIndex = Math.Min(index, _tabItems.Count - 1);
+                    SelectedTabItem = _tabItems[nextIndex];
                 }
 
-                UpdateWindowTitle();
-                
                 _logger?.LogDebug($"Closed tab: {tabItem.Title}");
                 return true;
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, $"Failed to close tab: {tabItem?.Title}");
+                _logger?.LogError(ex, $"Error closing tab: {tabItem?.Title}");
                 return false;
             }
         }
@@ -260,17 +260,14 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         /// <param name="tabItem">Tab to duplicate</param>
         /// <returns>The duplicated tab</returns>
-        public TabItemModel DuplicateTab(TabItemModel tabItem)
+        public TabModel DuplicateTab(TabModel tabItem)
         {
             if (tabItem == null) return null;
 
             try
             {
                 var duplicatedTab = tabItem.Clone();
-                duplicatedTab.Id = Guid.NewGuid().ToString();
                 duplicatedTab.Title = $"{tabItem.Title} - Copy";
-                duplicatedTab.CreatedAt = DateTime.Now;
-                duplicatedTab.LastAccessed = DateTime.Now;
 
                 _tabItems.Add(duplicatedTab);
                 SelectedTabItem = duplicatedTab;
@@ -289,7 +286,7 @@ namespace ExplorerPro.ViewModels
         /// Toggles the pin state of the specified tab
         /// </summary>
         /// <param name="tabItem">Tab to toggle pin state</param>
-        public async void TogglePinTab(TabItemModel tabItem)
+        public async void TogglePinTab(TabModel tabItem)
         {
             if (tabItem == null) return;
 
@@ -325,7 +322,7 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         /// <param name="tabId">Tab ID to find</param>
         /// <returns>The tab item or null if not found</returns>
-        public TabItemModel FindTabById(string tabId)
+        public TabModel FindTabById(string tabId)
         {
             return _tabItems.FirstOrDefault(t => t.Id == tabId);
         }
@@ -374,10 +371,10 @@ namespace ExplorerPro.ViewModels
         private void InitializeCommands()
         {
             AddNewTabCommand = new RelayCommand(() => AddNewTab());
-            CloseTabCommand = new RelayCommand<TabItemModel>(tab => CloseTab(tab));
+            CloseTabCommand = new RelayCommand<TabModel>(tab => CloseTab(tab));
             CloseCurrentTabCommand = new RelayCommand(() => CloseCurrentTab());
-            DuplicateTabCommand = new RelayCommand<TabItemModel>(tab => DuplicateTab(tab));
-            TogglePinTabCommand = new RelayCommand<TabItemModel>(TogglePinTab);
+            DuplicateTabCommand = new RelayCommand<TabModel>(tab => DuplicateTab(tab));
+            TogglePinTabCommand = new RelayCommand<TabModel>(TogglePinTab);
             
             // Phase 2 Commands
             RenameTabCommand = Commands.TabCommands.CreateRenameTabCommand(_logger);
@@ -392,7 +389,7 @@ namespace ExplorerPro.ViewModels
         {
             if (_tabItems.Count == 0)
             {
-                var defaultTab = new TabItemModel(Guid.NewGuid().ToString(), "Home", null);
+                var defaultTab = new TabModel("Home", "");
                 _tabItems.Add(defaultTab);
                 SelectedTabItem = defaultTab;
             }
@@ -403,10 +400,17 @@ namespace ExplorerPro.ViewModels
         /// </summary>
         private void OnSelectedTabChanged()
         {
-            if (SelectedTabItem != null)
+            try
             {
-                SelectedTabItem.UpdateLastAccessed();
-                UpdateWindowTitle();
+                if (_selectedTabItem != null)
+                {
+                    _selectedTabItem.Activate();
+                    UpdateWindowTitle();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error handling selected tab changed");
             }
         }
 

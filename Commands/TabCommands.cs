@@ -112,14 +112,14 @@ namespace ExplorerPro.Commands
         {
             try
             {
-                if (parameter is TabItemModel tabModel)
+                if (parameter is TabModel tabModel)
                 {
                     var dialog = new RenameDialog(tabModel.Title);
                     if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.NewName))
                     {
                         var oldTitle = tabModel.Title;
                         tabModel.Title = dialog.NewName.Trim();
-                        tabModel.UpdateLastAccessed();
+                        tabModel.MarkAsModified();
                         logger?.LogDebug($"Tab renamed from '{oldTitle}' to '{tabModel.Title}'");
                     }
                 }
@@ -137,15 +137,15 @@ namespace ExplorerPro.Commands
         {
             try
             {
-                if (parameter is TabItemModel tabModel)
+                if (parameter is TabModel tabModel)
                 {
-                    var dialog = new ColorPickerDialog(tabModel.TabColor);
+                    var dialog = new ColorPickerDialog(tabModel.CustomColor);
                     if (dialog.ShowDialog() == true)
                     {
-                        var oldColor = tabModel.TabColor;
-                        tabModel.TabColor = dialog.SelectedColor;
-                        tabModel.UpdateLastAccessed();
-                        logger?.LogDebug($"Tab color changed from {oldColor} to {tabModel.TabColor}");
+                        var oldColor = tabModel.CustomColor;
+                        tabModel.CustomColor = dialog.SelectedColor;
+                        tabModel.MarkAsModified();
+                        logger?.LogDebug($"Tab color changed from {oldColor} to {tabModel.CustomColor}");
                     }
                 }
             }
@@ -162,10 +162,10 @@ namespace ExplorerPro.Commands
         {
             try
             {
-                if (parameter is TabItemModel tabModel)
+                if (parameter is TabModel tabModel)
                 {
                     tabModel.IsPinned = !tabModel.IsPinned;
-                    tabModel.UpdateLastAccessed();
+                    tabModel.MarkAsModified();
                     logger?.LogDebug($"Tab '{tabModel.Title}' pin state changed to {tabModel.IsPinned}");
                 }
             }
@@ -182,7 +182,7 @@ namespace ExplorerPro.Commands
         {
             try
             {
-                if (parameter is TabItemModel tabModel)
+                if (parameter is TabModel tabModel)
                 {
                     // This should be handled by the ChromeStyleTabControl
                     // We just mark it as requested for closure
@@ -207,7 +207,7 @@ namespace ExplorerPro.Commands
         /// </summary>
         private static bool CanExecuteRenameTab(object parameter)
         {
-            return parameter is TabItemModel tabModel && tabModel.IsClosable;
+            return parameter is TabModel tabModel && tabModel.CanClose;
         }
 
         /// <summary>
@@ -215,7 +215,7 @@ namespace ExplorerPro.Commands
         /// </summary>
         private static bool CanExecuteChangeColor(object parameter)
         {
-            return parameter is TabItemModel;
+            return parameter is TabModel;
         }
 
         /// <summary>
@@ -223,7 +223,7 @@ namespace ExplorerPro.Commands
         /// </summary>
         private static bool CanExecuteTogglePin(object parameter)
         {
-            return parameter is TabItemModel;
+            return parameter is TabModel;
         }
 
         /// <summary>
@@ -231,7 +231,7 @@ namespace ExplorerPro.Commands
         /// </summary>
         private static bool CanExecuteCloseTab(object parameter)
         {
-            return parameter is TabItemModel tabModel && tabModel.IsClosable;
+            return parameter is TabModel tabModel && tabModel.CanClose;
         }
 
         #endregion

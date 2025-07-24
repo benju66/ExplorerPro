@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -701,16 +701,11 @@ namespace ExplorerPro.UI.MainWindow
                     {
                         Header = header,
                         Content = content,
-                        Tag = new TabItemModel
+                        Tag = new TabModel(header, "")
                         {
-                            Id = Guid.NewGuid().ToString(),
-                            Title = header,
                             Content = content,
                             IsPinned = false,
-                            IsClosable = true,
-                            TabColor = Colors.LightGray,
-                            CreatedAt = DateTime.Now,
-                            LastAccessed = DateTime.Now
+                            CustomColor = Colors.LightGray
                         }
                     };
                     
@@ -2329,17 +2324,14 @@ namespace ExplorerPro.UI.MainWindow
                 {
                     Header = tabTitle,
                     Content = container,
-                    // Create proper TabItemModel instead of Dictionary
-                    Tag = new TabItemModel
+                    // Create proper TabModel instead of Dictionary
+                    Tag = new TabModel
                     {
                         Id = Guid.NewGuid().ToString(),
                         Title = tabTitle,
                         Content = container,
                         IsPinned = false,
-                        IsClosable = true,
-                        TabColor = Colors.LightGray,
-                        CreatedAt = DateTime.Now,
-                        LastAccessed = DateTime.Now
+                        CustomColor = Colors.LightGray
                     }
                 };
                 
@@ -2403,16 +2395,13 @@ namespace ExplorerPro.UI.MainWindow
                 var newTabItem = new TabItem
                 {
                     Header = tabHeader,
-                    Tag = new TabItemModel
+                    Tag = new TabModel
                     {
                         Id = Guid.NewGuid().ToString(),
                         Title = tabHeader,
                         Content = null,
                         IsPinned = false,
-                        IsClosable = true,
-                        TabColor = Colors.LightGray,
-                        CreatedAt = DateTime.Now,
-                        LastAccessed = DateTime.Now
+                        CustomColor = Colors.LightGray
                     }
                 };
                 
@@ -2446,8 +2435,8 @@ namespace ExplorerPro.UI.MainWindow
                     // Update the tab content with the container
                     newTabItem.Content = container;
                     
-                    // Update the TabItemModel with the container content
-                    if (newTabItem.Tag is TabItemModel tabModel)
+                    // Update the TabModel with the container content
+                    if (newTabItem.Tag is TabModel tabModel)
                     {
                         tabModel.Content = container;
                         tabModel.Title = !string.IsNullOrEmpty(Path.GetFileName(safePath)) ? Path.GetFileName(safePath) : "Home";
@@ -2686,7 +2675,7 @@ namespace ExplorerPro.UI.MainWindow
                                 if (viewModelTab != null)
                                 {
                                     viewModelTab.Title = newTitle;
-                                    viewModelTab.UpdateLastAccessed();
+                                    viewModelTab.Activate();
                                 }
                             }
                             
@@ -2733,9 +2722,9 @@ namespace ExplorerPro.UI.MainWindow
                     {
                         // Get current color from metadata or use default
                         var currentColor = Colors.LightGray; // Default color
-                        if (contextTabItem.Tag is Dictionary<string, object> metadata && metadata.ContainsKey("TabColor"))
+                        if (contextTabItem.Tag is Dictionary<string, object> metadata && metadata.ContainsKey("CustomColor"))
                         {
-                            if (metadata["TabColor"] is Color storedColor)
+                            if (metadata["CustomColor"] is Color storedColor)
                             {
                                 currentColor = storedColor;
                             }
@@ -2750,14 +2739,14 @@ namespace ExplorerPro.UI.MainWindow
                             // Update metadata stored in TabItem.Tag
                             if (contextTabItem.Tag is Dictionary<string, object> existingMetadata)
                             {
-                                existingMetadata["TabColor"] = newColor;
+                                existingMetadata["CustomColor"] = newColor;
                                 existingMetadata["LastModified"] = DateTime.Now;
                             }
                             else
                             {
                                 contextTabItem.Tag = new Dictionary<string, object>
                                 {
-                                    ["TabColor"] = newColor,
+                                    ["CustomColor"] = newColor,
                                     ["LastModified"] = DateTime.Now
                                 };
                             }
@@ -2771,13 +2760,13 @@ namespace ExplorerPro.UI.MainWindow
                                     (t.Content != null && t.Content == contextTabItem.Content));
                                 if (viewModelTab != null)
                                 {
-                                    viewModelTab.TabColor = newColor;
-                                    viewModelTab.UpdateLastAccessed();
+                                    viewModelTab.CustomColor = newColor;
+                                    viewModelTab.Activate();
                                 }
                             }
                             
                             // Set the DataContext to enable binding-based color changes
-                            SetTabColorDataContext(contextTabItem, newColor);
+                            SetTabModelContext(contextTabItem, newColor);
                             
                             // Force immediate UI refresh
                             contextTabItem.UpdateLayout();
@@ -2872,19 +2861,19 @@ namespace ExplorerPro.UI.MainWindow
                 {
                     _instanceLogger?.LogDebug($"Found metadata with {metadata.Count} entries: {string.Join(", ", metadata.Keys)}");
                     
-                    if (metadata.ContainsKey("TabColor") && metadata["TabColor"] is Color color)
+                    if (metadata.ContainsKey("CustomColor") && metadata["CustomColor"] is Color color)
                     {
-                        _instanceLogger?.LogDebug($"Found TabColor in metadata: {color}");
+                        _instanceLogger?.LogDebug($"Found CustomColor in metadata: {color}");
                         // Consider LightGray as the default "no color" value
                         bool hasCustomColor = color != Colors.LightGray && color != Colors.Transparent;
                         _instanceLogger?.LogDebug($"Is custom color (not LightGray/Transparent): {hasCustomColor}");
                         return hasCustomColor;
                     }
                     
-                    if (metadata.ContainsKey("TabColorData"))
+                    if (metadata.ContainsKey("TabModel"))
                     {
-                        _instanceLogger?.LogDebug("Found TabColorData in metadata");
-                        return true; // If TabColorData exists, there's a custom color
+                        _instanceLogger?.LogDebug("Found TabModel in metadata");
+                        return true; // If TabModel exists, there's a custom color
                     }
                 }
                 else
@@ -2893,10 +2882,10 @@ namespace ExplorerPro.UI.MainWindow
                 }
                 
                 // Check if the tab has a custom DataContext for color binding
-                if (tabItem.DataContext is TabColorData colorData)
+                if (tabItem.DataContext is TabModel colorData)
                 {
-                    _instanceLogger?.LogDebug($"Found TabColorData in DataContext: {colorData.TabColor}");
-                    bool hasCustomColor = colorData.TabColor != Colors.LightGray && colorData.TabColor != Colors.Transparent;
+                    _instanceLogger?.LogDebug($"Found TabModel in DataContext: {colorData.CustomColor}");
+                    bool hasCustomColor = colorData.CustomColor != Colors.LightGray && colorData.CustomColor != Colors.Transparent;
                     _instanceLogger?.LogDebug($"DataContext has custom color: {hasCustomColor}");
                     return hasCustomColor;
                 }
@@ -2949,8 +2938,8 @@ namespace ExplorerPro.UI.MainWindow
                         // Update metadata stored in TabItem.Tag
                         if (contextTabItem.Tag is Dictionary<string, object> existingMetadata)
                         {
-                            existingMetadata.Remove("TabColor");
-                            existingMetadata.Remove("TabColorData");
+                            existingMetadata.Remove("CustomColor");
+                            existingMetadata.Remove("TabModel");
                             existingMetadata["LastModified"] = DateTime.Now;
                         }
                         
@@ -2963,13 +2952,13 @@ namespace ExplorerPro.UI.MainWindow
                                 (t.Content != null && t.Content == contextTabItem.Content));
                             if (viewModelTab != null)
                             {
-                                viewModelTab.TabColor = defaultColor;
-                                viewModelTab.UpdateLastAccessed();
+                                viewModelTab.CustomColor = defaultColor;
+                                viewModelTab.Activate();
                             }
                         }
                         
                         // Clear the DataContext and reset to original template styling
-                        ClearTabColorStyling(contextTabItem);
+                        ClearCustomColorStyling(contextTabItem);
                         
                         // Force immediate UI refresh
                         contextTabItem.UpdateLayout();
@@ -3087,8 +3076,8 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                // Single source of truth - only check TabItemModel
-                if (tabItem?.Tag is TabItemModel model)
+                // Single source of truth - only check TabModel
+                if (tabItem?.Tag is TabModel model)
                 {
                     return model.IsPinned;
                 }
@@ -3221,7 +3210,7 @@ namespace ExplorerPro.UI.MainWindow
         public MainWindow DetachTabToNewWindow(TabItem tabItem)
         {
             // Try using service-based approach first
-            if (tabItem?.Tag is TabItemModel serviceTabModel && _windowManager != null)
+            if (tabItem?.Tag is TabModel serviceTabModel && _windowManager != null)
             {
                 var newWindow = _windowManager.DetachTab(serviceTabModel, this);
                 return newWindow as MainWindow;
@@ -3239,7 +3228,7 @@ namespace ExplorerPro.UI.MainWindow
                 // Extract container and metadata
                 var container = tabItem.Content as MainWindowContainer;
                 var tabTitle = tabItem.Header?.ToString() ?? "Detached";
-                var tabModel = GetTabItemModel(tabItem);
+                var tabModel = GetTabModel(tabItem);
 
                 // Remove from current window
                 MainTabs.Items.Remove(tabItem);
@@ -3486,16 +3475,13 @@ namespace ExplorerPro.UI.MainWindow
                 {
                     Header = tabTitle,
                     Content = container,
-                    Tag = new TabItemModel
+                    Tag = new TabModel
                     {
                         Id = Guid.NewGuid().ToString(),
                         Title = tabTitle,
                         Content = container,
                         IsPinned = false,
-                        IsClosable = true,
-                        TabColor = Colors.LightGray,
-                        CreatedAt = DateTime.Now,
-                        LastAccessed = DateTime.Now
+                        CustomColor = Colors.LightGray
                     }
                 };
                 
@@ -5437,7 +5423,7 @@ namespace ExplorerPro.UI.MainWindow
             try
             {
                 // Handle metadata changes (e.g., update window title when active tab changes)
-                if (e.PropertyName == nameof(TabItemModel.IsActive) && (bool)e.NewValue)
+                if (e.PropertyName == nameof(TabModel.IsActive) && (bool)e.NewValue)
                 {
                     // Note: Direct tab manipulation approach - no ViewModel needed
                     // Window title updates are handled by the tab selection changed event
@@ -6144,29 +6130,29 @@ namespace ExplorerPro.UI.MainWindow
         #endregion
 
         /// <summary>
-        /// Gets the TabItemModel corresponding to a TabItem
+        /// Gets the TabModel corresponding to a TabItem
         /// </summary>
         /// <param name="tabItem">The TabItem to find the model for</param>
-        /// <returns>The corresponding TabItemModel or null if not found</returns>
-        private TabItemModel GetTabItemModel(TabItem tabItem)
+        /// <returns>The corresponding TabModel or null if not found</returns>
+        private TabModel GetTabModel(TabItem tabItem)
         {
             if (tabItem == null) return null;
 
             try
             {
                 // First try to get existing model from Tag
-                if (tabItem.Tag is TabItemModel existingModel)
+                if (tabItem.Tag is TabModel existingModel)
                 {
                     return existingModel;
                 }
 
-                // Create a TabItemModel based on the TabItem's current state
-                var tabModel = new TabItemModel
+                // Create a TabModel based on the TabItem's current state
+                var tabModel = new TabModel
                 {
                     Title = tabItem.Header?.ToString() ?? "Untitled",
                     Content = tabItem.Content,
                     IsPinned = false, // Default value - could be stored in Tag
-                    TabColor = Colors.LightGray, // Default value
+                    CustomColor = Colors.LightGray, // Default value
                     HasUnsavedChanges = false // Default value
                 };
 
@@ -6176,8 +6162,8 @@ namespace ExplorerPro.UI.MainWindow
                     if (metadata.ContainsKey("IsPinned") && metadata["IsPinned"] is bool pinned)
                         tabModel.IsPinned = pinned;
                     
-                    if (metadata.ContainsKey("TabColor") && metadata["TabColor"] is Color color)
-                        tabModel.TabColor = color;
+                    if (metadata.ContainsKey("CustomColor") && metadata["CustomColor"] is Color color)
+                        tabModel.CustomColor = color;
                         
                     if (metadata.ContainsKey("HasUnsavedChanges") && metadata["HasUnsavedChanges"] is bool hasChanges)
                         tabModel.HasUnsavedChanges = hasChanges;
@@ -6190,17 +6176,17 @@ namespace ExplorerPro.UI.MainWindow
             }
             catch (Exception ex)
             {
-                _instanceLogger?.LogError(ex, "Error creating TabItemModel for TabItem");
+                _instanceLogger?.LogError(ex, "Error creating TabModel for TabItem");
                 return null;
             }
         }
 
         /// <summary>
-        /// Updates a TabItem based on a TabItemModel's properties
+        /// Updates a TabItem based on a TabModel's properties
         /// </summary>
         /// <param name="tabItem">The TabItem to update</param>
         /// <param name="tabModel">The model with updated properties</param>
-        private void UpdateTabItemFromModel(TabItem tabItem, TabItemModel tabModel)
+        private void UpdateTabItemFromModel(TabItem tabItem, TabModel tabModel)
         {
             if (tabItem == null || tabModel == null) return;
 
@@ -6238,11 +6224,11 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Applies visual styling to a TabItem based on TabItemModel properties
+        /// Applies visual styling to a TabItem based on TabModel properties
         /// </summary>
         /// <param name="tabItem">The TabItem to style</param>
         /// <param name="tabModel">The model with styling information</param>
-        private void ApplyTabStyling(TabItem tabItem, TabItemModel tabModel)
+        private void ApplyTabStyling(TabItem tabItem, TabModel tabModel)
         {
             try
             {
@@ -6250,16 +6236,16 @@ namespace ExplorerPro.UI.MainWindow
                 tabItem.Tag = tabModel;
 
                 // Apply color styling (this preserves pinned state)
-                if (tabModel.TabColor != Colors.LightGray)
+                if (tabModel.CustomColor != Colors.LightGray)
                 {
-                    SetTabColorDataContext(tabItem, tabModel.TabColor);
+                    SetTabModelContext(tabItem, tabModel.CustomColor);
                 }
                 else
                 {
                     // For tabs without custom colors, clear DataContext to let Tag binding work
                     tabItem.DataContext = null;
                     // Clear any custom styling to return to default
-                    ClearTabColorStyling(tabItem);
+                    ClearCustomColorStyling(tabItem);
                 }
 
                 // Force refresh of the tab's visual state to apply triggers
@@ -6283,13 +6269,13 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         /// <param name="tabItem">The TabItem to set up</param>
         /// <param name="color">The color to apply</param>
-        private void SetTabColorDataContext(TabItem tabItem, Color color)
+        private void SetTabModelContext(TabItem tabItem, Color color)
         {
             try
             {
-                // Get current pinned state before creating TabColorData
+                // Get current pinned state before creating TabModel
                 bool isPinned = false;
-                if (tabItem.Tag is TabItemModel model)
+                if (tabItem.Tag is TabModel model)
                 {
                     isPinned = model.IsPinned;
                 }
@@ -6301,29 +6287,29 @@ namespace ExplorerPro.UI.MainWindow
                 }
 
                 // Create or update a simple data object for binding
-                var tabData = new TabColorData
+                var tabData = new TabModel
                 {
-                    TabColor = color,
-                    Header = tabItem.Header?.ToString() ?? "",
+                    CustomColor = color,
+                    Title = tabItem.Header?.ToString() ?? "",
                     IsPinned = isPinned // Preserve the pinned state
                 };
                 
                 // Set the DataContext to enable binding
                 tabItem.DataContext = tabData;
                 
-                // Keep the original Tag if it's a TabItemModel, otherwise use metadata
-                if (tabItem.Tag is TabItemModel originalModel)
+                // Keep the original Tag if it's a TabModel, otherwise use metadata
+                if (tabItem.Tag is TabModel originalModel)
                 {
                     // Keep the original model as Tag for proper binding
-                    originalModel.TabColor = color;
+                    originalModel.CustomColor = color;
                     tabItem.Tag = originalModel;
                 }
                 else
                 {
                     // Use metadata approach for legacy compatibility
                     var metadata = tabItem.Tag as Dictionary<string, object> ?? new Dictionary<string, object>();
-                    metadata["TabColor"] = color;
-                    metadata["TabColorData"] = tabData;
+                    metadata["CustomColor"] = color;
+                    metadata["TabModel"] = tabData;
                     metadata["IsPinned"] = isPinned;
                     tabItem.Tag = metadata;
                 }
@@ -6356,12 +6342,12 @@ namespace ExplorerPro.UI.MainWindow
                 
                 if (tabBorder != null)
                 {
-                    var tabData = tabItem.DataContext as TabColorData;
-                    if (tabData != null && tabData.TabColor != Colors.LightGray)
+                    var tabData = tabItem.DataContext as TabModel;
+                    if (tabData != null && tabData.CustomColor != Colors.LightGray)
                     {
                         // Apply color with transparency for a modern look
-                        var lightBrush = new SolidColorBrush(Color.FromArgb(80, tabData.TabColor.R, tabData.TabColor.G, tabData.TabColor.B));
-                        var borderBrush = new SolidColorBrush(Color.FromArgb(200, tabData.TabColor.R, tabData.TabColor.G, tabData.TabColor.B));
+                        var lightBrush = new SolidColorBrush(Color.FromArgb(80, tabData.CustomColor.R, tabData.CustomColor.G, tabData.CustomColor.B));
+                        var borderBrush = new SolidColorBrush(Color.FromArgb(200, tabData.CustomColor.R, tabData.CustomColor.G, tabData.CustomColor.B));
                         
                         tabBorder.Background = lightBrush;
                         tabBorder.BorderBrush = borderBrush;
@@ -6383,11 +6369,11 @@ namespace ExplorerPro.UI.MainWindow
                 else
                 {
                     // If TabBorder not found, try applying to the TabItem directly
-                    var tabData = tabItem.DataContext as TabColorData;
-                    if (tabData != null && tabData.TabColor != Colors.LightGray)
+                    var tabData = tabItem.DataContext as TabModel;
+                    if (tabData != null && tabData.CustomColor != Colors.LightGray)
                     {
-                        var lightBrush = new SolidColorBrush(Color.FromArgb(60, tabData.TabColor.R, tabData.TabColor.G, tabData.TabColor.B));
-                        var borderBrush = new SolidColorBrush(Color.FromArgb(180, tabData.TabColor.R, tabData.TabColor.G, tabData.TabColor.B));
+                        var lightBrush = new SolidColorBrush(Color.FromArgb(60, tabData.CustomColor.R, tabData.CustomColor.G, tabData.CustomColor.B));
+                        var borderBrush = new SolidColorBrush(Color.FromArgb(180, tabData.CustomColor.R, tabData.CustomColor.G, tabData.CustomColor.B));
                         
                         tabItem.Background = lightBrush;
                         tabItem.BorderBrush = borderBrush;
@@ -6411,14 +6397,14 @@ namespace ExplorerPro.UI.MainWindow
         /// Clears all color styling from a TabItem and restores original template behavior
         /// </summary>
         /// <param name="tabItem">The TabItem to clear styling from</param>
-        private void ClearTabColorStyling(TabItem tabItem)
+        private void ClearCustomColorStyling(TabItem tabItem)
         {
             try
             {
-                // Clear the TabItemModel color data to prevent reversion
-                if (tabItem.Tag is TabItemModel model)
+                // Clear the TabModel color data to prevent reversion
+                if (tabItem.Tag is TabModel model)
                 {
-                    model.TabColor = Colors.LightGray; // Reset to default
+                    model.CustomColor = Colors.LightGray; // Reset to default
                 }
                 
                 // Clear the DataContext that was set for color binding
@@ -6427,8 +6413,8 @@ namespace ExplorerPro.UI.MainWindow
                 // Clear any metadata that might store color information
                 if (tabItem.Tag is Dictionary<string, object> metadata)
                 {
-                    metadata.Remove("TabColor");
-                    metadata.Remove("TabColorData");
+                    metadata.Remove("CustomColor");
+                    metadata.Remove("TabModel");
                 }
                 
                 // Force the template to be applied if it hasn't been yet
@@ -6461,68 +6447,14 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
-        /// <summary>
-        /// Simple data class for tab color binding
-        /// </summary>
-        private class TabColorData : INotifyPropertyChanged
-        {
-            private Color _tabColor = Colors.LightGray;
-            private string _header = "";
-            private bool _isPinned = false;
 
-            public Color TabColor
-            {
-                get => _tabColor;
-                set
-                {
-                    if (_tabColor != value)
-                    {
-                        _tabColor = value;
-                        OnPropertyChanged();
-                    }
-                }
-            }
-
-            public string Header
-            {
-                get => _header;
-                set
-                {
-                    if (_header != value)
-                    {
-                        _header = value;
-                        OnPropertyChanged();
-                    }
-                }
-            }
-
-            public bool IsPinned
-            {
-                get => _isPinned;
-                set
-                {
-                    if (_isPinned != value)
-                    {
-                        _isPinned = value;
-                        OnPropertyChanged();
-                    }
-                }
-            }
-
-            public event PropertyChangedEventHandler PropertyChanged;
-
-            private void OnPropertyChanged([CallerMemberName] string propertyName = null)
-            {
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-            }
-        }
 
         /// <summary>
-        /// Gets the TabItemModel for the currently right-clicked tab in context menu
+        /// Gets the TabModel for the currently right-clicked tab in context menu
         /// </summary>
         /// <param name="contextMenu">The context menu</param>
-        /// <returns>The TabItemModel or null if not found</returns>
-        private TabItemModel GetContextMenuTabModel(ContextMenu contextMenu)
+        /// <returns>The TabModel or null if not found</returns>
+        private TabModel GetContextMenuTabModel(ContextMenu contextMenu)
         {
             try
             {
@@ -6541,7 +6473,7 @@ namespace ExplorerPro.UI.MainWindow
                     }
                     
                     // Fallback to creating a model from the TabItem
-                    return GetTabItemModel(_rightClickedTab);
+                    return GetTabModel(_rightClickedTab);
                 }
                 
                 // Fallback to selected tab if no right-clicked tab stored
@@ -6561,7 +6493,7 @@ namespace ExplorerPro.UI.MainWindow
                             }
                         }
                         
-                        return GetTabItemModel(selectedTabItem);
+                        return GetTabModel(selectedTabItem);
                     }
                 }
             }
@@ -6842,7 +6774,7 @@ namespace ExplorerPro.UI.MainWindow
         private void OnTabDragStarted(object sender, TabDragEventArgs e)
         {
             // Service already handles most of this in ChromeStyleTabControl
-            _instanceLogger?.LogDebug($"Tab drag started: {e.TabItem.Title}");
+                            _instanceLogger?.LogDebug($"Tab drag started: {e.TabItem.Title}");
         }
 
         /// <summary>
@@ -6851,7 +6783,7 @@ namespace ExplorerPro.UI.MainWindow
         private void OnTabDragging(object sender, TabDragEventArgs e)
         {
             // Service handles updates
-            _instanceLogger?.LogDebug($"Tab dragging: {e.TabItem.Title}");
+                            _instanceLogger?.LogDebug($"Tab dragging: {e.TabItem.Title}");
         }
 
         /// <summary>
@@ -6860,7 +6792,7 @@ namespace ExplorerPro.UI.MainWindow
         private void OnTabDragCompleted(object sender, TabDragEventArgs e)
         {
             // Service handles completion
-            _instanceLogger?.LogDebug($"Tab drag completed: {e.TabItem.Title}");
+                            _instanceLogger?.LogDebug($"Tab drag completed: {e.TabItem.Title}");
         }
 
         private TabIntegrationBridge _tabIntegrationBridge;
@@ -6887,21 +6819,21 @@ namespace ExplorerPro.UI.MainWindow
                 // Complete the integration
                 _tabIntegrationBridge.CompleteIntegration();
 
-                _instanceLogger?.LogInformation("✅ Tab system integration completed successfully");
+                _instanceLogger?.LogInformation("? Tab system integration completed successfully");
             }
             catch (Exception ex)
             {
-                _instanceLogger?.LogError(ex, "❌ Failed to initialize tab integration");
+                _instanceLogger?.LogError(ex, "? Failed to initialize tab integration");
                 
                 // Fall back to enhanced legacy mode
                 try
                 {
                     _tabIntegrationBridge?.EnhanceLegacyTabControl();
-                    _instanceLogger?.LogInformation("✅ Enhanced legacy tab control as fallback");
+                    _instanceLogger?.LogInformation("? Enhanced legacy tab control as fallback");
                 }
                 catch (Exception fallbackEx)
                 {
-                    _instanceLogger?.LogError(fallbackEx, "❌ Even fallback enhancement failed");
+                    _instanceLogger?.LogError(fallbackEx, "? Even fallback enhancement failed");
                 }
             }
         }

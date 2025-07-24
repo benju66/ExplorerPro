@@ -11,7 +11,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Initiates a drag operation for a tab
         /// </summary>
-        void StartDrag(TabItemModel tab, Point startPoint, Window sourceWindow);
+        void StartDrag(TabModel tab, Point startPoint, Window sourceWindow);
 
         /// <summary>
         /// Updates the current drag operation

@@ -95,7 +95,7 @@ namespace ExplorerPro.UI.Controls
             CreateDragVisual();
             ShowDragFeedback(DragOperationType.None);
             
-            var args = new TabDragEventArgs(new TabItemModel { Content = tab, SourceWindow = Window.GetWindow(_tabControl) }, startPoint, startPoint);
+            var args = new TabDragEventArgs(new TabModel { Content = tab }, startPoint, startPoint);
             DragStarted?.Invoke(this, args);
             
             _logger?.LogDebug("Started drag operation for tab '{Title}'", tab.Title);
@@ -120,7 +120,7 @@ namespace ExplorerPro.UI.Controls
             UpdateDragVisualPosition(currentPoint);
             UpdateInsertionIndicator(currentPoint, CalculateInsertionIndex(currentPoint));
             
-            var args = new TabDragEventArgs(new TabItemModel { Content = _draggedTab, SourceWindow = Window.GetWindow(_tabControl) }, _dragStartPoint, currentPoint);
+            var args = new TabDragEventArgs(new TabModel { Content = _draggedTab }, _dragStartPoint, currentPoint);
             Dragging?.Invoke(this, args);
         }
 
@@ -149,7 +149,7 @@ namespace ExplorerPro.UI.Controls
                         break;
                 }
                 
-                var args = new TabDragEventArgs(new TabItemModel { Content = _draggedTab, SourceWindow = Window.GetWindow(_tabControl) }, _dragStartPoint, endPoint);
+                var args = new TabDragEventArgs(new TabModel { Content = _draggedTab }, _dragStartPoint, endPoint);
                 DragCompleted?.Invoke(this, args);
                 
                 _logger?.LogDebug("Completed drag operation for tab '{Title}' with result: {Success}", 

@@ -6,6 +6,7 @@ using System.Windows;
 using System.Threading.Tasks;
 using ExplorerPro.UI.MainWindow;
 using ExplorerPro.Core.TabManagement;
+using System.Collections.Generic;
 
 namespace ExplorerPro.Models
 {
@@ -33,7 +34,7 @@ namespace ExplorerPro.Models
         private TabPriority _priority;
         private bool _isLoading;
         private string _iconPath;
-        private object _metadata;
+        private Dictionary<string, object> _metadata;
         
         #endregion
 
@@ -58,7 +59,7 @@ namespace ExplorerPro.Models
             _priority = TabPriority.Normal;
             _isLoading = false;
             _iconPath = string.Empty;
-            _metadata = null;
+            _metadata = new Dictionary<string, object>();
         }
         
         /// <summary>
@@ -203,7 +204,7 @@ namespace ExplorerPro.Models
         /// <summary>
         /// Additional metadata associated with the tab
         /// </summary>
-        public object Metadata
+        public Dictionary<string, object> Metadata
         {
             get => _metadata;
             set => SetProperty(ref _metadata, value);

@@ -519,7 +519,7 @@ namespace ExplorerPro.UI.Controls
             // Implementation would restore content from hibernation data
             await Task.Run(() =>
             {
-                tab.Metadata = data.ContentSnapshot;
+                tab.Metadata = data.ContentSnapshot as Dictionary<string, object> ?? new Dictionary<string, object>();
                 // Restore view state
             });
         }

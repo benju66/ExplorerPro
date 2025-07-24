@@ -15,7 +15,7 @@ namespace ExplorerPro.UI.MainWindow
     /// <summary>
     /// Integration helper that resolves the tab model compatibility crisis.
     /// This class bridges the gap between:
-    /// - ChromeStyleTabControl (expects TabItemModel)
+    /// - ChromeStyleTabControl (expects TabModel)
     /// - MainWindowTabsViewModel (uses TabModel)
     /// - MainWindow.xaml.cs (uses both inconsistently)
     /// 
@@ -112,7 +112,7 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Closes a tab using the unified system
         /// </summary>
-        public async Task<bool> CloseTabAsync(TabItemModel legacyTab)
+        public async Task<bool> CloseTabAsync(TabModel legacyTab)
         {
             ThrowIfDisposed();
             
@@ -170,18 +170,18 @@ namespace ExplorerPro.UI.MainWindow
         }
         
         /// <summary>
-        /// Gets the modern TabModel for a legacy TabItemModel
+        /// Gets the modern TabModel for a legacy TabModel
         /// </summary>
-        public TabModel GetModernTab(TabItemModel legacyTab)
+        public TabModel GetModernTab(TabModel legacyTab)
         {
             ThrowIfDisposed();
             return _unifiedTabService.GetModernTabById(legacyTab?.Id);
         }
         
         /// <summary>
-        /// Gets the legacy TabItemModel for a modern TabModel
+        /// Gets the legacy TabModel for a modern TabModel
         /// </summary>
-        public TabItemModel GetLegacyTab(TabModel modernTab)
+        public TabModel GetLegacyTab(TabModel modernTab)
         {
             ThrowIfDisposed();
             return _unifiedTabService.GetLegacyTabById(modernTab?.Id);

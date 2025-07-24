@@ -30,7 +30,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Detaches a tab to a new window
         /// </summary>
-        public Window DetachTab(TabItemModel tab, Window sourceWindow)
+        public Window DetachTab(TabModel tab, Window sourceWindow)
         {
             try
             {
@@ -105,7 +105,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Reattaches a tab to a target window
         /// </summary>
-        public void ReattachTab(TabItemModel tab, Window targetWindow, int insertIndex = -1)
+        public void ReattachTab(TabModel tab, Window targetWindow, int insertIndex = -1)
         {
             try
             {
@@ -163,7 +163,7 @@ namespace ExplorerPro.Core.TabManagement
                     targetTabControl.SelectedItem = tabItem;
 
                     // Update tab's window reference
-                    tab.SourceWindow = targetWindow;
+                    tab.Metadata["SourceWindow"] = targetWindow;
 
                     // Close source window if empty and it's a detached window
                     if (sourceTabControl.Items.Count == 0)
@@ -228,7 +228,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Finds window containing a tab
         /// </summary>
-        public Window FindWindowContainingTab(TabItemModel tab)
+        public Window FindWindowContainingTab(TabModel tab)
         {
             lock (_lockObject)
             {
@@ -259,7 +259,7 @@ namespace ExplorerPro.Core.TabManagement
 
         #region Private Methods
 
-        private MainWindow CreateDetachedWindow(TabItemModel tab, Window sourceWindow)
+        private MainWindow CreateDetachedWindow(TabModel tab, Window sourceWindow)
         {
             var mainWindow = sourceWindow as MainWindow;
             var newWindow = new MainWindow

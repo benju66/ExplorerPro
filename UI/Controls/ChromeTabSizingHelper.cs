@@ -62,7 +62,7 @@ namespace ExplorerPro.UI.Controls
         /// <param name="includeAddButton">Whether to reserve space for add button</param>
         /// <returns>Dictionary mapping tab IDs to their calculated widths</returns>
         public static Dictionary<string, double> CalculateTabWidths(
-            IEnumerable<TabItemModel> tabItems, 
+            IEnumerable<TabModel> tabItems, 
             double availableWidth, 
             bool includeAddButton = true)
         {
@@ -213,7 +213,7 @@ namespace ExplorerPro.UI.Controls
             tabItem.MinWidth = targetWidth;
             tabItem.MaxWidth = targetWidth;
             
-            // Apply to the TabItemModel if available
+            // Apply to the TabModel if available
             var tabModel = GetTabModel(tabItem);
             if (tabModel != null)
             {
@@ -223,11 +223,11 @@ namespace ExplorerPro.UI.Controls
         }
         
         /// <summary>
-        /// Gets the TabItemModel from a TabItem (works with both direct Tag and adapter patterns)
+        /// Gets the TabModel from a TabItem (works with both direct Tag and adapter patterns)
         /// </summary>
-        private static TabItemModel GetTabModel(TabItem tabItem)
+        private static TabModel GetTabModel(TabItem tabItem)
         {
-            if (tabItem?.Tag is TabItemModel model)
+            if (tabItem?.Tag is TabModel model)
                 return model;
                 
             // Handle adapter pattern
@@ -238,12 +238,12 @@ namespace ExplorerPro.UI.Controls
         }
         
         /// <summary>
-        /// Gets all TabItemModels from a TabControl
+        /// Gets all TabModels from a TabControl
         /// </summary>
-        private static IEnumerable<TabItemModel> GetTabModels(TabControl tabControl)
+        private static IEnumerable<TabModel> GetTabModels(TabControl tabControl)
         {
             if (tabControl?.Items == null)
-                return Enumerable.Empty<TabItemModel>();
+                return Enumerable.Empty<TabModel>();
                 
             return tabControl.Items
                 .OfType<TabItem>()

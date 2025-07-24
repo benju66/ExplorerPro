@@ -21,7 +21,7 @@ namespace ExplorerPro.Core.TabManagement
             _logger = logger;
         }
 
-        public Window DetachTab(TabItemModel tab, Window sourceWindow)
+        public Window DetachTab(TabModel tab, Window sourceWindow)
         {
             try
             {
@@ -101,7 +101,7 @@ namespace ExplorerPro.Core.TabManagement
             }
         }
 
-        public void ReattachTab(TabItemModel tab, Window targetWindow, int insertIndex = -1)
+        public void ReattachTab(TabModel tab, Window targetWindow, int insertIndex = -1)
         {
             try
             {
@@ -187,7 +187,7 @@ namespace ExplorerPro.Core.TabManagement
                 }
 
                 // Update tab's source window reference
-                tab.SourceWindow = targetWindow;
+                tab.Metadata["SourceWindow"] = targetWindow;
 
                 _logger?.LogInformation($"Successfully reattached tab '{tab.Title}' to target window");
             }
@@ -220,7 +220,7 @@ namespace ExplorerPro.Core.TabManagement
             }
         }
 
-        public Window FindWindowContainingTab(TabItemModel tab)
+        public Window FindWindowContainingTab(TabModel tab)
         {
             if (tab == null) return null;
 
@@ -261,9 +261,9 @@ namespace ExplorerPro.Core.TabManagement
         }
 
         /// <summary>
-        /// Finds the TabItem corresponding to the TabItemModel in the specified tab control
+        /// Finds the TabItem corresponding to the TabModel in the specified tab control
         /// </summary>
-        private System.Windows.Controls.TabItem FindTabItem(UI.Controls.ChromeStyleTabControl tabControl, TabItemModel tabModel)
+        private System.Windows.Controls.TabItem FindTabItem(UI.Controls.ChromeStyleTabControl tabControl, TabModel tabModel)
         {
             if (tabControl == null || tabModel == null) return null;
 
@@ -275,7 +275,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Creates a new MainWindow instance for the detached tab
         /// </summary>
-        private UI.MainWindow.MainWindow CreateNewMainWindow(TabItemModel tab, Window sourceWindow)
+        private UI.MainWindow.MainWindow CreateNewMainWindow(TabModel tab, Window sourceWindow)
         {
             try
             {
@@ -303,7 +303,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Transfers tab content from source to new window
         /// </summary>
-        private bool TransferTabContent(System.Windows.Controls.TabItem sourceTabItem, TabItemModel tabModel, 
+        private bool TransferTabContent(System.Windows.Controls.TabItem sourceTabItem, TabModel tabModel, 
             UI.Controls.ChromeStyleTabControl sourceTabControl, UI.MainWindow.MainWindow newWindow)
         {
             try
@@ -333,7 +333,7 @@ namespace ExplorerPro.Core.TabManagement
                 newTabControl.SelectedItem = newTabItem;
 
                 // Update the tab model's source window reference
-                tabModel.SourceWindow = newWindow;
+                tabModel.Metadata["SourceWindow"] = newWindow;
 
                 return true;
             }
@@ -415,7 +415,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Tracks the detached window in the management system
         /// </summary>
-        private void TrackDetachedWindow(UI.MainWindow.MainWindow newWindow, Window sourceWindow, TabItemModel tab)
+        private void TrackDetachedWindow(UI.MainWindow.MainWindow newWindow, Window sourceWindow, TabModel tab)
         {
             try
             {
@@ -448,7 +448,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Creates a new TabItem with transferred content for reattachment
         /// </summary>
-        private System.Windows.Controls.TabItem CreateTabItemWithTransferredContent(System.Windows.Controls.TabItem sourceTabItem, TabItemModel tabModel)
+        private System.Windows.Controls.TabItem CreateTabItemWithTransferredContent(System.Windows.Controls.TabItem sourceTabItem, TabModel tabModel)
         {
             try
             {

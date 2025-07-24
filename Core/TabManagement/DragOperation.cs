@@ -10,7 +10,7 @@ namespace ExplorerPro.Core.TabManagement
     /// </summary>
     public class DragOperation
     {
-        public TabItemModel Tab { get; set; }
+        public TabModel Tab { get; set; }
         public Window SourceWindow { get; set; }
         public ChromeStyleTabControl SourceTabControl { get; set; }
         public TabItem DraggedTabItem { get; set; }

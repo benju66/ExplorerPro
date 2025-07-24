@@ -49,7 +49,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Starts a drag operation
         /// </summary>
-        public void StartDrag(TabItemModel tab, Point startPoint, Window sourceWindow)
+        public void StartDrag(TabModel tab, Point startPoint, Window sourceWindow)
         {
             try
             {
@@ -73,7 +73,7 @@ namespace ExplorerPro.Core.TabManagement
                 }
 
                 // VALIDATION: Check if tab is draggable
-                if (!tab.IsClosable)
+                if (!tab.CanClose)
                 {
                     _logger.LogWarning($"Tab '{tab.Title}' is not draggable");
                     return;
@@ -91,7 +91,7 @@ namespace ExplorerPro.Core.TabManagement
                 }
 
                 // VALIDATION: Ensure tab is not already being dragged
-                if (tab.IsDragging)
+                if (tab.State == ExplorerPro.Models.TabState.Loading)
                 {
                     _logger.LogWarning($"Tab '{tab.Title}' is already being dragged");
                     return;
@@ -110,9 +110,9 @@ namespace ExplorerPro.Core.TabManagement
                 };
 
                 // Mark tab as dragging
-                tab.IsDragging = true;
-                tab.SourceWindow = sourceWindow;
-                tab.OriginalIndex = _currentDrag.OriginalIndex;
+                tab.State = ExplorerPro.Models.TabState.Loading;
+                tab.Metadata["SourceWindow"] = sourceWindow;
+                tab.Metadata["OriginalIndex"] = _currentDrag.OriginalIndex;
 
                 // Set up visual drag indicator
                 SetupVisualDragIndicator(tabItem);
@@ -558,7 +558,7 @@ namespace ExplorerPro.Core.TabManagement
 
         private bool CompleteDetach(Point dropPoint)
         {
-            var newWindow = _windowManager.DetachTab(_currentDrag.Tab, _currentDrag.SourceWindow);
+                                var newWindow = _windowManager.DetachTab(_currentDrag.Tab, _currentDrag.SourceWindow);
             if (newWindow != null)
             {
                 // Position at drop point
@@ -759,7 +759,7 @@ namespace ExplorerPro.Core.TabManagement
         {
             if (_currentDrag != null)
             {
-                _currentDrag.Tab.IsDragging = false;
+                _currentDrag.Tab.State = ExplorerPro.Models.TabState.Normal;
                 _currentDrag.IsActive = false;
             }
 

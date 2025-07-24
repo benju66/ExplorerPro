@@ -7,18 +7,18 @@ using ExplorerPro.Models;
 namespace ExplorerPro.Models
 {
     /// <summary>
-    /// Adapter that provides TabItemModel compatibility for TabModel instances.
+    /// Adapter that provides TabModel compatibility for TabModel instances.
     /// This bridges the gap between modern TabModel and legacy ChromeStyleTabControl expectations.
     /// Automatically synchronizes properties between the two models.
     /// </summary>
-    public class TabModelAdapter : TabItemModel, IDisposable
+    public class TabModelAdapter : TabModel, IDisposable
     {
         private readonly TabModel _sourceModel;
         private bool _isDisposed;
         private bool _isUpdating; // Prevents circular updates
 
         /// <summary>
-        /// Creates an adapter that wraps a TabModel and exposes it as TabItemModel
+        /// Creates an adapter that wraps a TabModel and exposes it as TabModel
         /// </summary>
         /// <param name="sourceModel">The modern TabModel to wrap</param>
         public TabModelAdapter(TabModel sourceModel) : base()
@@ -54,28 +54,26 @@ namespace ExplorerPro.Models
                 base.IsPinned = _sourceModel.IsPinned;
                 base.IsActive = _sourceModel.IsActive;
                 base.HasUnsavedChanges = _sourceModel.HasUnsavedChanges;
-                base.CreatedAt = _sourceModel.CreatedAt;
-                base.LastAccessed = _sourceModel.LastActivated;
-                base.IsClosable = _sourceModel.CanClose;
+                // CreatedAt, LastActivated, and CanClose are read-only properties
                 
-                // Convert Color to match TabItemModel expectations
+                // Convert Color to match TabModel expectations
                 if (_sourceModel.HasCustomColor)
                 {
-                    base.TabColor = _sourceModel.CustomColor;
+                    base.CustomColor = _sourceModel.CustomColor;
                 }
                 else
                 {
-                    base.TabColor = Colors.LightGray; // Default TabItemModel color
+                    base.CustomColor = Colors.LightGray; // Default TabModel color
                 }
                 
                 // Set tooltip with path information
                 if (!string.IsNullOrEmpty(_sourceModel.Path))
                 {
-                    base.Tooltip = $"{_sourceModel.Title}\n{_sourceModel.Path}";
+                    base.Title = $"{_sourceModel.Title}\n{_sourceModel.Path}";
                 }
                 else
                 {
-                    base.Tooltip = _sourceModel.Title;
+                    base.Title = _sourceModel.Title;
                 }
             }
             finally
@@ -111,15 +109,15 @@ namespace ExplorerPro.Models
                     _sourceModel.Content = base.Content;
                 
                 // Sync color - convert LightGray back to transparent for TabModel
-                if (base.TabColor == Colors.LightGray)
+                if (base.CustomColor == Colors.LightGray)
                 {
                     if (_sourceModel.HasCustomColor)
                         _sourceModel.ClearCustomColor();
                 }
                 else
                 {
-                    if (_sourceModel.CustomColor != base.TabColor)
-                        _sourceModel.CustomColor = base.TabColor;
+                    if (_sourceModel.CustomColor != base.CustomColor)
+                        _sourceModel.CustomColor = base.CustomColor;
                 }
             }
             finally
@@ -209,12 +207,12 @@ namespace ExplorerPro.Models
 
         public new Color TabColor
         {
-            get => base.TabColor;
+            get => base.CustomColor;
             set
             {
-                if (base.TabColor != value)
+                if (base.CustomColor != value)
                 {
-                    base.TabColor = value;
+                    base.CustomColor = value;
                     SynchronizeToSource();
                 }
             }
@@ -248,9 +246,9 @@ namespace ExplorerPro.Models
         /// <summary>
         /// Extracts the underlying TabModel from an adapter or returns null
         /// </summary>
-        public static TabModel UnwrapTabModel(TabItemModel tabItemModel)
+        public static TabModel UnwrapTabModel(TabModel TabModel)
         {
-            if (tabItemModel is TabModelAdapter adapter)
+            if (TabModel is TabModelAdapter adapter)
                 return adapter.SourceModel;
             
             return null;

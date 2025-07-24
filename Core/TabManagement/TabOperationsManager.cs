@@ -31,13 +31,13 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Reorders a tab within the same tab control
         /// </summary>
-        public bool ReorderTab(ChromeStyleTabControl tabControl, TabItemModel tab, int newIndex)
+        public bool ReorderTab(ChromeStyleTabControl tabControl, TabModel tab, int newIndex)
         {
             try
             {
                 if (tabControl == null || tab == null)
                 {
-                    _logger.LogWarning("TabControl or TabItemModel is null in ReorderTab");
+                    _logger.LogWarning("TabControl or TabModel is null in ReorderTab");
                     return false;
                 }
 
@@ -84,7 +84,7 @@ namespace ExplorerPro.Core.TabManagement
                         var wasSelected = tabControl.SelectedItem == tabItem;
                         
                         // Use ObservableCollection.Move for proper binding support
-                        if (tabControl.TabItems is ObservableCollection<TabItemModel> observableTabItems)
+                        if (tabControl.TabItems is ObservableCollection<TabModel> observableTabItems)
                         {
                             // Move in the underlying collection
                             observableTabItems.Move(currentIndex, newIndex);
@@ -127,7 +127,7 @@ namespace ExplorerPro.Core.TabManagement
                         }
 
                         // Update tab model's last accessed time
-                        tab.UpdateLastAccessed();
+                        tab.MarkAsModified();
                         
                         operationResult = true;
                     }
@@ -158,7 +158,7 @@ namespace ExplorerPro.Core.TabManagement
         public bool TransferTab(
             ChromeStyleTabControl source, 
             ChromeStyleTabControl target, 
-            TabItemModel tab, 
+            TabModel tab, 
             int targetIndex = -1)
         {
             try
@@ -194,7 +194,7 @@ namespace ExplorerPro.Core.TabManagement
                 }
 
                 // Update tab's source window reference
-                tab.SourceWindow = Window.GetWindow(target);
+                tab.Metadata["SourceWindow"] = Window.GetWindow(target);
 
                 _logger.LogInformation($"Transferred tab '{tab.Title}' between windows");
                 return true;
@@ -209,7 +209,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Creates a duplicate of a tab
         /// </summary>
-        public TabItemModel DuplicateTab(ChromeStyleTabControl tabControl, TabItemModel sourceTab)
+        public TabModel DuplicateTab(ChromeStyleTabControl tabControl, TabModel sourceTab)
         {
             try
             {
@@ -217,8 +217,6 @@ namespace ExplorerPro.Core.TabManagement
                 var newTab = sourceTab.Clone();
                 newTab.Id = Guid.NewGuid().ToString();
                 newTab.Title = $"{sourceTab.Title} - Copy";
-                newTab.CreatedAt = DateTime.Now;
-                newTab.LastAccessed = DateTime.Now;
 
                 // Create new TabItem
                 var newTabItem = new TabItem
@@ -245,7 +243,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Closes a tab with proper cleanup
         /// </summary>
-        public bool CloseTab(ChromeStyleTabControl tabControl, TabItemModel tab)
+        public bool CloseTab(ChromeStyleTabControl tabControl, TabModel tab)
         {
             try
             {
@@ -361,7 +359,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Enhanced drop index calculation that accounts for visual feedback and edge cases
         /// </summary>
-        public int CalculateDropIndexWithVisualFeedback(ChromeStyleTabControl tabControl, Point dropPoint, TabItemModel draggedTab = null)
+        public int CalculateDropIndexWithVisualFeedback(ChromeStyleTabControl tabControl, Point dropPoint, TabModel draggedTab = null)
         {
             try
             {
@@ -423,7 +421,7 @@ namespace ExplorerPro.Core.TabManagement
         /// <summary>
         /// Validates that a reorder operation is valid
         /// </summary>
-        private bool ValidateReorderOperation(ChromeStyleTabControl tabControl, TabItemModel tab, int newIndex)
+        private bool ValidateReorderOperation(ChromeStyleTabControl tabControl, TabModel tab, int newIndex)
         {
             if (tabControl == null || tab == null)
             {
@@ -453,7 +451,7 @@ namespace ExplorerPro.Core.TabManagement
             return true;
         }
 
-        private TabItem FindTabItem(ChromeStyleTabControl tabControl, TabItemModel model)
+        private TabItem FindTabItem(ChromeStyleTabControl tabControl, TabModel model)
         {
             try
             {
@@ -468,7 +466,7 @@ namespace ExplorerPro.Core.TabManagement
             }
         }
 
-        private int GetTabIndex(ChromeStyleTabControl tabControl, TabItemModel model)
+        private int GetTabIndex(ChromeStyleTabControl tabControl, TabModel model)
         {
             try
             {
@@ -482,7 +480,7 @@ namespace ExplorerPro.Core.TabManagement
             }
         }
 
-        private object CreateTabContent(TabItemModel model)
+        private object CreateTabContent(TabModel model)
         {
             try
             {
