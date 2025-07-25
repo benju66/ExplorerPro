@@ -395,6 +395,78 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
+        /// <summary>
+        /// Special weak event subscription for DragOver/Drop events
+        /// </summary>
+        private void SubscribeToDragEventWeak(
+            UIElement element,
+            RoutedEvent routedEvent,
+            DragEventHandler handler)
+        {
+            try
+            {
+                var weakRef = new WeakReference(handler.Target);
+                var method = handler.Method;
+                
+                DragEventHandler weakHandler = (s, e) =>
+                {
+                    var target = weakRef.Target;
+                    if (target != null)
+                    {
+                        method.Invoke(target, new object[] { s, e });
+                    }
+                };
+                
+                element.AddHandler(routedEvent, weakHandler);
+                
+                var subscription = Disposable.Create(() => element.RemoveHandler(routedEvent, weakHandler));
+                _eventSubscriptions.Add(subscription);
+                
+                _instanceLogger?.LogDebug($"Subscribed to drag event '{routedEvent.Name}' with weak reference");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, $"Error subscribing to weak drag event '{routedEvent?.Name}'");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Special weak event subscription for Mouse events
+        /// </summary>
+        private void SubscribeToMouseEventWeak(
+            UIElement element,
+            RoutedEvent routedEvent,
+            MouseButtonEventHandler handler)
+        {
+            try
+            {
+                var weakRef = new WeakReference(handler.Target);
+                var method = handler.Method;
+                
+                MouseButtonEventHandler weakHandler = (s, e) =>
+                {
+                    var target = weakRef.Target;
+                    if (target != null)
+                    {
+                        method.Invoke(target, new object[] { s, e });
+                    }
+                };
+                
+                element.AddHandler(routedEvent, weakHandler);
+                
+                var subscription = Disposable.Create(() => element.RemoveHandler(routedEvent, weakHandler));
+                _eventSubscriptions.Add(subscription);
+                
+                _instanceLogger?.LogDebug($"Subscribed to mouse event '{routedEvent.Name}' with weak reference");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, $"Error subscribing to weak mouse event '{routedEvent?.Name}'");
+                throw;
+            }
+        }
+
         #endregion
 
         #region Core Dependencies and Managers
@@ -6050,15 +6122,11 @@ namespace ExplorerPro.UI.MainWindow
         {
             AllowDrop = true;
             
-            // Subscribe to DragOver event with weak pattern
-            var dragOverSubscription = Disposable.Create(() => DragOver -= MainWindow_DragOver);
-            DragOver += MainWindow_DragOver;
-            _eventSubscriptions.Add(dragOverSubscription);
+            // Subscribe to DragOver event using proper weak drag event pattern
+            SubscribeToDragEventWeak(this, DragDrop.DragOverEvent, MainWindow_DragOver);
             
-            // Subscribe to Drop event with weak pattern
-            var dropSubscription = Disposable.Create(() => Drop -= MainWindow_Drop);
-            Drop += MainWindow_Drop;
-            _eventSubscriptions.Add(dropSubscription);
+            // Subscribe to Drop event using proper weak drag event pattern
+            SubscribeToDragEventWeak(this, DragDrop.DropEvent, MainWindow_Drop);
         }
 
         internal void ClearDragDrop()
@@ -6071,29 +6139,15 @@ namespace ExplorerPro.UI.MainWindow
         {
             if (MainTabs != null)
             {
-                // Subscribe to SelectionChanged using weak pattern
-                var subscription1 = Disposable.Create(() =>
-                {
-                    if (MainTabs != null)
-                        MainTabs.SelectionChanged -= MainTabs_SelectionChanged;
-                });
-                MainTabs.SelectionChanged += MainTabs_SelectionChanged;
-                _eventSubscriptions.Add(subscription1);
+                // Subscribe to SelectionChanged using proper weak pattern
+                SubscribeToSelectionChangedWeak(MainTabs, MainTabs_SelectionChanged);
 
-                // Subscribe to PreviewMouseRightButtonDown for context menu positioning
-                var subscription3 = Disposable.Create(() =>
-                {
-                    if (MainTabs != null)
-                        MainTabs.PreviewMouseRightButtonDown -= TabControl_PreviewMouseRightButtonDown;
-                });
-                MainTabs.PreviewMouseRightButtonDown += TabControl_PreviewMouseRightButtonDown;
-                _eventSubscriptions.Add(subscription3);
+                // Subscribe to PreviewMouseRightButtonDown using weak mouse event pattern
+                SubscribeToMouseEventWeak(MainTabs, UIElement.PreviewMouseRightButtonDownEvent, TabControl_PreviewMouseRightButtonDown);
             }
             
-            // Subscribe to Closing using weak pattern
-            var subscription2 = Disposable.Create(() => Closing -= MainWindow_Closing);
-            Closing += MainWindow_Closing;
-            _eventSubscriptions.Add(subscription2);
+            // Subscribe to Closing using proper weak pattern
+            SubscribeToClosingWeak(this, MainWindow_Closing);
         }
 
         internal void ClearAllEventHandlers()
