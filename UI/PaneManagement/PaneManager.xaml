@@ -69,7 +69,6 @@
     
     <Grid FocusVisualStyle="{x:Null}">
         <TabControl x:Name="TabControl"
-                   Grid.Row="1"
                    Template="{StaticResource ModernTabControlTemplate}"
                    ItemContainerStyle="{StaticResource FileTreeTabItemStyle}"
                    SelectionChanged="TabControl_SelectionChanged"

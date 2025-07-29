@@ -2767,7 +2767,9 @@ namespace ExplorerPro.UI.Controls
                     Header = "Change Color",
                     Icon = new TextBlock { Text = "🎨", FontSize = 12 }
                 };
-                colorItem.Click += (s, e) => ChangeTabColor(tabModel);
+                CreateWeakSubscription(
+                    () => colorItem.Click += (s, e) => ChangeTabColor(tabModel),
+                    () => colorItem.Click -= (s, e) => ChangeTabColor(tabModel));
                 contextMenu.Items.Add(colorItem);
             }
 
@@ -2781,7 +2783,9 @@ namespace ExplorerPro.UI.Controls
                     Header = "Move to New Window",
                     Icon = new TextBlock { Text = "🗗", FontSize = 12 }
                 };
-                detachItem.Click += (s, e) => DetachTab(tabModel);
+                CreateWeakSubscription(
+                    () => detachItem.Click += (s, e) => DetachTab(tabModel),
+                    () => detachItem.Click -= (s, e) => DetachTab(tabModel));
                 contextMenu.Items.Add(detachItem);
 
                 contextMenu.Items.Add(new Separator());
@@ -2795,7 +2799,9 @@ namespace ExplorerPro.UI.Controls
                     Header = "Close Tab",
                     Icon = new TextBlock { Text = "✕", FontSize = 12 }
                 };
-                closeItem.Click += (s, e) => CloseTab(tabModel);
+                CreateWeakSubscription(
+                    () => closeItem.Click += (s, e) => CloseTab(tabModel),
+                    () => closeItem.Click -= (s, e) => CloseTab(tabModel));
                 contextMenu.Items.Add(closeItem);
 
                 // Close Other Tabs
@@ -2806,7 +2812,9 @@ namespace ExplorerPro.UI.Controls
                         Header = "Close Other Tabs",
                         Icon = new TextBlock { Text = "⧈", FontSize = 12 }
                     };
-                    closeOthersItem.Click += (s, e) => CloseOtherTabs(tabModel);
+                    CreateWeakSubscription(
+                        () => closeOthersItem.Click += (s, e) => CloseOtherTabs(tabModel),
+                        () => closeOthersItem.Click -= (s, e) => CloseOtherTabs(tabModel));
                     contextMenu.Items.Add(closeOthersItem);
                 }
 
@@ -2819,7 +2827,9 @@ namespace ExplorerPro.UI.Controls
                         Header = "Close Tabs to the Right",
                         Icon = new TextBlock { Text = "→✕", FontSize = 12 }
                     };
-                    closeRightItem.Click += (s, e) => CloseTabsToTheRight(tabModel);
+                    CreateWeakSubscription(
+                        () => closeRightItem.Click += (s, e) => CloseTabsToTheRight(tabModel),
+                        () => closeRightItem.Click -= (s, e) => CloseTabsToTheRight(tabModel));
                     contextMenu.Items.Add(closeRightItem);
                 }
             }

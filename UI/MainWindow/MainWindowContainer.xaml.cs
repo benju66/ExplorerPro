@@ -422,8 +422,25 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
+                // Validate PaneManager is initialized first
+                if (_paneManager == null)
+                {
+                    Console.WriteLine("WARNING: PaneManager is null, attempting to initialize it");
+                    _paneManager = new PaneManager();
+                    if (MainContent?.Content == null)
+                    {
+                        MainContent.Content = _paneManager;
+                    }
+                }
+
                 // Validate path more thoroughly
                 string validPath = ValidatePath(rootPath);
+                
+                if (string.IsNullOrEmpty(validPath))
+                {
+                    Console.WriteLine($"ERROR: Could not validate path '{rootPath}', using fallback");
+                    validPath = GetFallbackPath();
+                }
                     
                 string name = string.IsNullOrEmpty(validPath) ? "Documents" : 
                     (Path.GetFileName(validPath) ?? validPath);
@@ -434,25 +451,102 @@ namespace ExplorerPro.UI.MainWindow
                     name = validPath; // For root paths like "C:\"
                 }
 
+                Console.WriteLine($"Creating file tree pane: '{name}' at path: '{validPath}'");
+
                 // Add a file tree tab with validated path
-                _paneManager?.AddNewFileTreePane(name, validPath);
+                var createdTab = _paneManager.AddNewFileTreePane(name, validPath);
+                
+                if (createdTab == null)
+                {
+                    Console.WriteLine($"ERROR: Failed to create file tree pane for path: {validPath}");
+                    
+                    // Try fallback path
+                    string fallbackPath = GetFallbackPath();
+                    Console.WriteLine($"Attempting fallback path: {fallbackPath}");
+                    
+                    createdTab = _paneManager.AddNewFileTreePane("Documents", fallbackPath);
+                    
+                    if (createdTab == null)
+                    {
+                        Console.WriteLine("CRITICAL ERROR: Failed to create file tree pane even with fallback path");
+                    }
+                    else
+                    {
+                        Console.WriteLine("SUCCESS: Created fallback file tree pane");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"SUCCESS: Created file tree pane '{name}' successfully");
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error initializing file tree: {ex.Message}");
-                // Fall back to a safe location
-                string fallbackPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                Console.WriteLine($"EXCEPTION in InitializeWithFileTree: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                
+                // Attempt recovery with safe fallback
                 try
                 {
-                    _paneManager?.AddNewFileTreePane("Documents", fallbackPath);
+                    if (_paneManager != null)
+                    {
+                        string safePath = GetFallbackPath();
+                        Console.WriteLine($"Attempting recovery with safe path: {safePath}");
+                        
+                        var recoveryTab = _paneManager.AddNewFileTreePane("Documents", safePath);
+                        if (recoveryTab != null)
+                        {
+                            Console.WriteLine("SUCCESS: Recovery pane created");
+                        }
+                        else
+                        {
+                            Console.WriteLine("CRITICAL: Recovery failed - no pane tabs will be available");
+                        }
+                    }
                 }
                 catch (Exception innerEx)
                 {
-                    Console.WriteLine($"Failed to initialize with fallback path: {innerEx.Message}");
-                    // Try one more time with user profile as a last resort
-                    string userPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                    _paneManager?.AddNewFileTreePane("Home", userPath);
+                    Console.WriteLine($"CRITICAL: Recovery attempt failed: {innerEx.Message}");
                 }
+            }
+        }
+
+        /// <summary>
+        /// Gets a safe fallback path that should always be accessible
+        /// </summary>
+        private string GetFallbackPath()
+        {
+            try
+            {
+                // Try user's Documents folder first
+                string documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                if (Directory.Exists(documentsPath))
+                {
+                    return documentsPath;
+                }
+
+                // Try user profile directory
+                string userPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                if (Directory.Exists(userPath))
+                {
+                    return userPath;
+                }
+
+                // Last resort - C:\ (Windows) or root (Unix)
+                if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                {
+                    return @"C:\";
+                }
+                else
+                {
+                    return "/";
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR getting fallback path: {ex.Message}");
+                // Ultimate fallback
+                return Environment.OSVersion.Platform == PlatformID.Win32NT ? @"C:\" : "/";
             }
         }
 
