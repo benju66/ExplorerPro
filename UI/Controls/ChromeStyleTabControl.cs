@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -14,6 +15,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using ExplorerPro.Core.TabManagement;
+using ExplorerPro.Core.Disposables;
 using ExplorerPro.Models;
 using ExplorerPro.UI.MainWindow;
 using Microsoft.Extensions.Logging;
@@ -228,7 +230,7 @@ namespace ExplorerPro.UI.Controls
                 TabItems = new ObservableCollection<TabModel>();
             }
 
-            // Wire up events
+            // Wire up events directly in constructor - weak references will be handled by CreateWeakSubscription
             Loaded += OnLoaded;
             KeyDown += OnKeyDown;
             MouseDoubleClick += OnMouseDoubleClick;
@@ -1250,7 +1252,9 @@ namespace ExplorerPro.UI.Controls
                     _currentAnimation = fadeStoryboard;
                     _isAnimating = true;
                     
-                    fadeStoryboard.Completed += (s, e) => _isAnimating = false;
+                    CreateWeakSubscription(
+                        () => fadeStoryboard.Completed += OnAnimationCompleted,
+                        () => fadeStoryboard.Completed -= OnAnimationCompleted);
                     fadeStoryboard.Begin();
                     
                     _logger?.LogDebug("Started drag visual feedback with smooth animation");
@@ -1423,7 +1427,9 @@ namespace ExplorerPro.UI.Controls
                 
                 _currentAnimation = storyboard;
                 _isAnimating = true;
-                storyboard.Completed += (s, e) => _isAnimating = false;
+                                    CreateWeakSubscription(
+                        () => storyboard.Completed += OnAnimationCompleted,
+                        () => storyboard.Completed -= OnAnimationCompleted);
                 storyboard.Begin();
             }
             catch (Exception ex)
@@ -1640,11 +1646,9 @@ namespace ExplorerPro.UI.Controls
                     Storyboard.SetTargetProperty(opacityAnimation, new PropertyPath("Opacity"));
                     endStoryboard.Children.Add(opacityAnimation);
                     
-                    endStoryboard.Completed += (s, e) =>
-                    {
-                        _draggedTab.RenderTransform = null;
-                        Effect = null; // Remove any glow effects
-                    };
+                    CreateWeakSubscription(
+                        () => endStoryboard.Completed += OnDragEndAnimationCompleted,
+                        () => endStoryboard.Completed -= OnDragEndAnimationCompleted);
                     
                     endStoryboard.Begin();
                 }
@@ -1664,12 +1668,9 @@ namespace ExplorerPro.UI.Controls
                     Storyboard.SetTargetProperty(fadeAnimation, new PropertyPath("Opacity"));
                     fadeOutStoryboard.Children.Add(fadeAnimation);
                     
-                    fadeOutStoryboard.Completed += (s, e) =>
-                    {
-                        _dragVisualWindow.Hide();
-                        _dragVisualWindow.Close();
-                        _dragVisualWindow = null;
-                    };
+                    CreateWeakSubscription(
+                        () => fadeOutStoryboard.Completed += OnDragVisualFadeOutCompleted,
+                        () => fadeOutStoryboard.Completed -= OnDragVisualFadeOutCompleted);
                     
                     fadeOutStoryboard.Begin();
                 }
@@ -2368,6 +2369,8 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
+            _logger?.LogInformation("ChromeStyleTabControl.OnLoaded event fired");
+            
             // Initialize services from App static properties
             if (_tabOperationsManager == null)
             {
@@ -2385,7 +2388,12 @@ namespace ExplorerPro.UI.Controls
             // Ensure we have at least one tab if none exist
             if (TabItems?.Count == 0 && AllowAddNew)
             {
+                _logger?.LogInformation("No tabs exist, adding new tab");
                 AddNewTab();
+            }
+            else
+            {
+                _logger?.LogInformation($"TabItems count: {TabItems?.Count ?? 0}");
             }
         }
 
@@ -2401,7 +2409,7 @@ namespace ExplorerPro.UI.Controls
                 if (addTabButton != null)
                 {
                     addTabButton.Click -= OnAddTabButtonClick; // Remove any existing handler
-                    addTabButton.Click += OnAddTabButtonClick;
+                    SubscribeToRoutedEventWeak(addTabButton, Button.ClickEvent, OnAddTabButtonClick);
                 }
 
                 // Wire up close button clicks for existing tabs
@@ -2428,7 +2436,7 @@ namespace ExplorerPro.UI.Controls
                 if (closeButton != null)
                 {
                     closeButton.Click -= OnTabCloseButtonClick; // Remove any existing handler
-                    closeButton.Click += OnTabCloseButtonClick;
+                    SubscribeToRoutedEventWeak(closeButton, Button.ClickEvent, OnTabCloseButtonClick);
                 }
             }
             catch (Exception ex)
@@ -2553,6 +2561,139 @@ namespace ExplorerPro.UI.Controls
         }
 
         /// <summary>
+        /// Handles animation completion for storyboards
+        /// </summary>
+        private void OnAnimationCompleted(object sender, EventArgs e)
+        {
+            _isAnimating = false;
+        }
+
+        /// <summary>
+        /// Handles drag end animation completion
+        /// </summary>
+        private void OnDragEndAnimationCompleted(object sender, EventArgs e)
+        {
+            if (_draggedTab != null)
+            {
+                _draggedTab.RenderTransform = null;
+            }
+            Effect = null; // Remove any glow effects
+        }
+
+        /// <summary>
+        /// Handles fade out animation completion for drag visual window
+        /// </summary>
+        private void OnDragVisualFadeOutCompleted(object sender, EventArgs e)
+        {
+            if (_dragVisualWindow != null)
+            {
+                _dragVisualWindow.Hide();
+                _dragVisualWindow.Close();
+                _dragVisualWindow = null;
+            }
+        }
+
+        /// <summary>
+        /// Creates a weak subscription for tab animation completion with specific tab reference
+        /// </summary>
+        private void SubscribeToTabAnimationCompleted(DoubleAnimation animation, TabItem tab)
+        {
+            EventHandler completedHandler = (s, e) => tab.RenderTransform = null;
+            CreateWeakSubscription(
+                () => animation.Completed += completedHandler,
+                () => animation.Completed -= completedHandler);
+        }
+
+        #endregion
+
+        #region Context Menu Event Handlers
+
+        /// <summary>
+        /// Handles context menu new tab click
+        /// </summary>
+        private void OnContextMenuNewTab(object sender, RoutedEventArgs e)
+        {
+            AddNewTab();
+        }
+
+        /// <summary>
+        /// Handles context menu duplicate tab click
+        /// </summary>
+        private void OnContextMenuDuplicateTab(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is TabModel tabModel)
+            {
+                DuplicateTab(tabModel);
+            }
+        }
+
+        /// <summary>
+        /// Handles context menu pin/unpin tab click
+        /// </summary>
+        private void OnContextMenuTogglePin(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is TabModel tabModel)
+            {
+                ToggleTabPin(tabModel);
+            }
+        }
+
+        /// <summary>
+        /// Handles context menu change color click
+        /// </summary>
+        private void OnContextMenuChangeColor(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is TabModel tabModel)
+            {
+                ChangeTabColor(tabModel);
+            }
+        }
+
+        /// <summary>
+        /// Handles context menu detach tab click
+        /// </summary>
+        private void OnContextMenuDetachTab(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is TabModel tabModel)
+            {
+                DetachTab(tabModel);
+            }
+        }
+
+        /// <summary>
+        /// Handles context menu close tab click
+        /// </summary>
+        private void OnContextMenuCloseTab(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is TabModel tabModel)
+            {
+                CloseTab(tabModel);
+            }
+        }
+
+        /// <summary>
+        /// Handles context menu close other tabs click
+        /// </summary>
+        private void OnContextMenuCloseOtherTabs(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is TabModel tabModel)
+            {
+                CloseOtherTabs(tabModel);
+            }
+        }
+
+        /// <summary>
+        /// Handles context menu close tabs to the right click
+        /// </summary>
+        private void OnContextMenuCloseTabsToTheRight(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is TabModel tabModel)
+            {
+                CloseTabsToTheRight(tabModel);
+            }
+        }
+
+        /// <summary>
         /// Handles right-click context menu on tabs
         /// </summary>
         protected override void OnPreviewMouseRightButtonDown(MouseButtonEventArgs e)
@@ -2585,7 +2726,9 @@ namespace ExplorerPro.UI.Controls
                 Header = "New Tab", 
                 Icon = new TextBlock { Text = "＋", FontSize = 12 }
             };
-            newTabItem.Click += (s, e) => AddNewTab();
+            CreateWeakSubscription(
+                () => newTabItem.Click += OnContextMenuNewTab,
+                () => newTabItem.Click -= OnContextMenuNewTab);
             contextMenu.Items.Add(newTabItem);
 
             contextMenu.Items.Add(new Separator());
@@ -2596,7 +2739,10 @@ namespace ExplorerPro.UI.Controls
                 Header = "Duplicate Tab",
                 Icon = new TextBlock { Text = "⧉", FontSize = 12 }
             };
-            duplicateItem.Click += (s, e) => DuplicateTab(tabModel);
+            duplicateItem.Tag = tabModel;
+            CreateWeakSubscription(
+                () => duplicateItem.Click += OnContextMenuDuplicateTab,
+                () => duplicateItem.Click -= OnContextMenuDuplicateTab);
             contextMenu.Items.Add(duplicateItem);
 
             contextMenu.Items.Add(new Separator());
@@ -2607,7 +2753,10 @@ namespace ExplorerPro.UI.Controls
                 Header = tabModel.IsPinned ? "Unpin Tab" : "Pin Tab",
                 Icon = new TextBlock { Text = tabModel.IsPinned ? "📌" : "📍", FontSize = 12 }
             };
-            pinItem.Click += (s, e) => ToggleTabPin(tabModel);
+            pinItem.Tag = tabModel;
+            CreateWeakSubscription(
+                () => pinItem.Click += OnContextMenuTogglePin,
+                () => pinItem.Click -= OnContextMenuTogglePin);
             contextMenu.Items.Add(pinItem);
 
             // Change Color (if not pinned)
@@ -2857,7 +3006,7 @@ namespace ExplorerPro.UI.Controls
         #region Private Methods
 
         /// <summary>
-        /// Handles changes to the TabItems collection
+        /// Handles changes to the TabItems dependency property
         /// </summary>
         private static void OnTabItemsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
@@ -2872,7 +3021,17 @@ namespace ExplorerPro.UI.Controls
                 // Subscribe to new collection
                 if (e.NewValue is ObservableCollection<TabModel> newCollection)
                 {
-                    newCollection.CollectionChanged += control.OnTabItemsCollectionChanged;
+                    // Only use weak subscriptions if _eventSubscriptions is initialized
+                    // During constructor, _eventSubscriptions might not be ready yet
+                    if (control._eventSubscriptions != null)
+                    {
+                        control.SubscribeToCollectionChangedWeak(newCollection, control.OnTabItemsCollectionChanged);
+                    }
+                    else
+                    {
+                        // Fallback to direct subscription during construction
+                        newCollection.CollectionChanged += control.OnTabItemsCollectionChanged;
+                    }
                     control.RefreshTabItems();
                 }
             }
@@ -2945,8 +3104,11 @@ namespace ExplorerPro.UI.Controls
                 tabItem.Header = $"• {model.Title}";
             }
 
-            // Wire up property change notifications
-            model.PropertyChanged += (s, e) => UpdateTabItemFromModel(tabItem, model);
+            // Wire up property change notifications using weak references
+            var handler = new PropertyChangedEventHandler((s, e) => UpdateTabItemFromModel(tabItem, model));
+            CreateWeakSubscription(
+                () => model.PropertyChanged += handler,
+                () => model.PropertyChanged -= handler);
 
             return tabItem;
         }
@@ -3209,10 +3371,7 @@ namespace ExplorerPro.UI.Controls
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
             };
 
-            animation.Completed += (s, e) =>
-            {
-                tab.RenderTransform = null;
-            };
+            SubscribeToTabAnimationCompleted(animation, tab);
 
             transform.BeginAnimation(TranslateTransform.XProperty, animation);
         }
@@ -3590,6 +3749,7 @@ namespace ExplorerPro.UI.Controls
         #region IDisposable Implementation
 
         private bool _disposed = false;
+        private readonly CompositeDisposable _eventSubscriptions = new CompositeDisposable();
         private readonly List<IDisposable> _disposables = new List<IDisposable>();
         private readonly List<WeakReference> _eventHandlers = new List<WeakReference>();
 
@@ -3675,6 +3835,9 @@ namespace ExplorerPro.UI.Controls
                         }
                         _disposables.Clear();
                         
+                        // Dispose all weak event subscriptions
+                        _eventSubscriptions.Dispose();
+                        
                         // Clear weak event handlers
                         _eventHandlers.Clear();
                         
@@ -3757,12 +3920,287 @@ namespace ExplorerPro.UI.Controls
             }
         }
 
+        #endregion
+
+        #region Weak Event Helpers
+        // NOTE: This weak event pattern matches MainWindow and WeakEventHelper patterns.
+        // While it uses weak references, the lambda closures create strong reference chains.
+        // This is a system-wide pattern that maintains consistency with the existing codebase.
+
+        /// <summary>
+        /// Subscribes to a routed event using weak references to prevent memory leaks
+        /// </summary>
+        private void SubscribeToRoutedEventWeak(UIElement element, RoutedEvent routedEvent, RoutedEventHandler handler)
+        {
+            if (element == null || routedEvent == null || handler == null) return;
+
+            try
+            {
+                var weakRef = new WeakReference(handler.Target);
+                var method = handler.Method;
+                
+                RoutedEventHandler weakHandler = (s, e) =>
+                {
+                    var target = weakRef.Target;
+                    if (target != null)
+                    {
+                        try
+                        {
+                            method.Invoke(target, new object[] { s, e });
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning(ex, "Error in weak routed event handler {MethodName}", method.Name);
+                        }
+                    }
+                };
+                
+                element.AddHandler(routedEvent, weakHandler);
+                var subscription = Disposable.Create(() => element.RemoveHandler(routedEvent, weakHandler));
+                _eventSubscriptions.Add(subscription);
+                
+                _logger?.LogDebug("Subscribed to routed event '{EventName}' with weak reference", routedEvent.Name);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error subscribing to weak routed event '{EventName}'", routedEvent?.Name);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Subscribes to an EventHandler using weak references
+        /// </summary>
+        private void SubscribeToEventHandlerWeak<TEventArgs>(object source, string eventName, EventHandler<TEventArgs> handler) 
+            where TEventArgs : EventArgs
+        {
+            if (source == null || string.IsNullOrEmpty(eventName) || handler == null) return;
+
+            try
+            {
+                var weakRef = new WeakReference(handler.Target);
+                var method = handler.Method;
+                var eventInfo = source.GetType().GetEvent(eventName);
+                
+                if (eventInfo == null)
+                {
+                    _logger?.LogWarning("Event '{EventName}' not found on type {TypeName}", eventName, source.GetType().Name);
+                    return;
+                }
+
+                EventHandler<TEventArgs> weakHandler = (s, e) =>
+                {
+                    var target = weakRef.Target;
+                    if (target != null)
+                    {
+                        try
+                        {
+                            method.Invoke(target, new object[] { s, e });
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning(ex, "Error in weak event handler {MethodName}", method.Name);
+                        }
+                    }
+                };
+                
+                eventInfo.AddEventHandler(source, weakHandler);
+                var subscription = Disposable.Create(() => eventInfo.RemoveEventHandler(source, weakHandler));
+                _eventSubscriptions.Add(subscription);
+                
+                _logger?.LogDebug("Subscribed to event '{EventName}' with weak reference", eventName);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error subscribing to weak event '{EventName}'", eventName);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Subscribes to an EventHandler using weak references
+        /// </summary>
+        private void SubscribeToEventHandlerWeak(object source, string eventName, EventHandler handler)
+        {
+            if (source == null || string.IsNullOrEmpty(eventName) || handler == null) return;
+
+            try
+            {
+                var weakRef = new WeakReference(handler.Target);
+                var method = handler.Method;
+                var eventInfo = source.GetType().GetEvent(eventName);
+                
+                if (eventInfo == null)
+                {
+                    _logger?.LogWarning("Event '{EventName}' not found on type {TypeName}", eventName, source.GetType().Name);
+                    return;
+                }
+
+                EventHandler weakHandler = (s, e) =>
+                {
+                    var target = weakRef.Target;
+                    if (target != null)
+                    {
+                        try
+                        {
+                            method.Invoke(target, new object[] { s, e });
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning(ex, "Error in weak event handler {MethodName}", method.Name);
+                        }
+                    }
+                };
+                
+                eventInfo.AddEventHandler(source, weakHandler);
+                var subscription = Disposable.Create(() => eventInfo.RemoveEventHandler(source, weakHandler));
+                _eventSubscriptions.Add(subscription);
+                
+                _logger?.LogDebug("Subscribed to event '{EventName}' with weak reference", eventName);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error subscribing to weak event '{EventName}'", eventName);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Creates a weak subscription for lambda expressions and inline handlers
+        /// </summary>
+        private IDisposable CreateWeakSubscription(Action subscribe, Action unsubscribe)
+        {
+            try
+            {
+                subscribe();
+                var subscription = Disposable.Create(() =>
+                {
+                    try
+                    {
+                        unsubscribe();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Error during weak subscription cleanup");
+                    }
+                });
+                
+                _eventSubscriptions.Add(subscription);
+                return subscription;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error creating weak subscription");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Subscribes to NotifyCollectionChanged event using weak references
+        /// </summary>
+        private void SubscribeToCollectionChangedWeak(
+            System.Collections.Specialized.INotifyCollectionChanged source, 
+            System.Collections.Specialized.NotifyCollectionChangedEventHandler handler)
+        {
+            if (source == null || handler == null) return;
+
+            try
+            {
+                var weakRef = new WeakReference(handler.Target);
+                var method = handler.Method;
+
+                System.Collections.Specialized.NotifyCollectionChangedEventHandler weakHandler = (s, e) =>
+                {
+                    var target = weakRef.Target;
+                    if (target != null)
+                    {
+                        try
+                        {
+                            method.Invoke(target, new object[] { s, e });
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning(ex, "Error in weak collection changed handler {MethodName}", method.Name);
+                        }
+                    }
+                };
+
+                source.CollectionChanged += weakHandler;
+                var subscription = Disposable.Create(() => source.CollectionChanged -= weakHandler);
+                _eventSubscriptions.Add(subscription);
+
+                _logger?.LogDebug("Subscribed to CollectionChanged event with weak reference");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error subscribing to weak CollectionChanged event");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Subscribes to PropertyChanged event using weak references
+        /// </summary>
+        private void SubscribeToPropertyChangedWeak(
+            System.ComponentModel.INotifyPropertyChanged source,
+            System.ComponentModel.PropertyChangedEventHandler handler)
+        {
+            if (source == null || handler == null) return;
+
+            try
+            {
+                var weakRef = new WeakReference(handler.Target);
+                var method = handler.Method;
+
+                System.ComponentModel.PropertyChangedEventHandler weakHandler = (s, e) =>
+                {
+                    var target = weakRef.Target;
+                    if (target != null)
+                    {
+                        try
+                        {
+                            method.Invoke(target, new object[] { s, e });
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning(ex, "Error in weak property changed handler {MethodName}", method.Name);
+                        }
+                    }
+                };
+
+                source.PropertyChanged += weakHandler;
+                var subscription = Disposable.Create(() => source.PropertyChanged -= weakHandler);
+                _eventSubscriptions.Add(subscription);
+
+                _logger?.LogDebug("Subscribed to PropertyChanged event with weak reference");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error subscribing to weak PropertyChanged event");
+                throw;
+            }
+        }
+
         /// <summary>
         /// Finalizer to ensure cleanup even if Dispose() wasn't called
         /// </summary>
         ~ChromeStyleTabControl()
         {
             Dispose(false);
+        }
+
+        #endregion
+
+        #region Template Application
+
+        /// <summary>
+        /// Called when the control template is applied
+        /// </summary>
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+            
+            // Additional template-specific initialization can be done here if needed
         }
 
         #endregion

@@ -902,7 +902,11 @@ namespace ExplorerPro.UI.MainWindow
                 _instanceLogger.LogInformation($"MainWindow created (ID: {windowId})");
                 
                 // Phase 4: Setup Chrome-style tab events
-                SetupChromeStyleTabEvents();
+                // Set up the MainTabs control reference if available
+                if (MainTabs != null)
+                {
+                    SetMainTabsControl(MainTabs);
+                }
                 
                 // Phase 7: Initialize tab management services
                 InitializeTabManagement();
@@ -926,17 +930,110 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private static (ILogger<MainWindow>, MainWindowInitializer, ExceptionHandler, ISettingsService) CreateDefaultServices()
         {
-            var logger = SharedLoggerFactory.CreateLogger<MainWindow>();
-            var initializerLogger = SharedLoggerFactory.CreateLogger<MainWindowInitializer>();
-            var initializer = new MainWindowInitializer(initializerLogger);
-            
-            var handlerLogger = SharedLoggerFactory.CreateLogger<ExceptionHandler>();
-            var telemetry = new ConsoleTelemetryService();
-            var handler = new ExceptionHandler(handlerLogger, telemetry);
-            
-            var settings = new SettingsService(App.Settings ?? new SettingsManager(), logger);
-            
-            return (logger, initializer, handler, settings);
+            ILogger<MainWindow> logger = null;
+            try
+            {
+                Console.WriteLine("CreateDefaultServices: Starting service creation");
+                
+                // Create logger first
+                try
+                {
+                    logger = SharedLoggerFactory.CreateLogger<MainWindow>();
+                    Console.WriteLine("CreateDefaultServices: Logger created successfully");
+                }
+                catch (Exception loggerEx)
+                {
+                    Console.WriteLine($"CreateDefaultServices: Failed to create logger: {loggerEx.Message}");
+                    throw new WindowInitializationException("Failed to create logger", Core.WindowState.Failed, loggerEx);
+                }
+                
+                // Create initializer
+                MainWindowInitializer initializer;
+                try
+                {
+                    var initializerLogger = SharedLoggerFactory.CreateLogger<MainWindowInitializer>();
+                    initializer = new MainWindowInitializer(initializerLogger);
+                    Console.WriteLine("CreateDefaultServices: Initializer created successfully");
+                }
+                catch (Exception initEx)
+                {
+                    logger?.LogError(initEx, "Failed to create MainWindowInitializer");
+                    throw new WindowInitializationException("Failed to create initializer", Core.WindowState.Failed, initEx);
+                }
+                
+                // Create exception handler
+                ExceptionHandler handler;
+                try
+                {
+                    var handlerLogger = SharedLoggerFactory.CreateLogger<ExceptionHandler>();
+                    var telemetry = new ConsoleTelemetryService();
+                    handler = new ExceptionHandler(handlerLogger, telemetry);
+                    Console.WriteLine("CreateDefaultServices: Exception handler created successfully");
+                }
+                catch (Exception handlerEx)
+                {
+                    logger?.LogError(handlerEx, "Failed to create ExceptionHandler");
+                    throw new WindowInitializationException("Failed to create exception handler", Core.WindowState.Failed, handlerEx);
+                }
+                
+                // Enhanced settings service creation with robust error handling
+                ISettingsService settings;
+                try
+                {
+                    // Use App.Settings if available, otherwise create fallback
+                    var settingsManager = App.Settings;
+                    if (settingsManager == null)
+                    {
+                        Console.WriteLine("CreateDefaultServices: App.Settings is null, creating fallback");
+                        logger.LogWarning("App.Settings is null during MainWindow creation, creating fallback settings");
+                        settingsManager = new SettingsManager(); // Create in-memory settings as fallback
+                        settingsManager.ApplyDefaultSettings();
+                    }
+                    else
+                    {
+                        Console.WriteLine("CreateDefaultServices: Using existing App.Settings");
+                    }
+                    
+                    Console.WriteLine("CreateDefaultServices: Creating SettingsService");
+                    settings = new SettingsService(settingsManager, logger);
+                    Console.WriteLine("CreateDefaultServices: SettingsService created successfully");
+                    logger.LogDebug("SettingsService created successfully");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"CreateDefaultServices: Failed to create SettingsService: {ex.Message}");
+                    logger.LogError(ex, "Failed to create SettingsService, creating fallback service");
+                    
+                    try
+                    {
+                        // Create a new SettingsManager with defaults as last resort
+                        Console.WriteLine("CreateDefaultServices: Creating fallback SettingsManager");
+                        var fallbackManager = new SettingsManager();
+                        fallbackManager.ApplyDefaultSettings();
+                        settings = new SettingsService(fallbackManager, logger);
+                        Console.WriteLine("CreateDefaultServices: Fallback SettingsService created");
+                        logger.LogWarning("Using fallback SettingsService with default values");
+                    }
+                    catch (Exception fallbackEx)
+                    {
+                        Console.WriteLine($"CreateDefaultServices: Failed to create fallback: {fallbackEx.Message}");
+                        logger.LogCritical(fallbackEx, "Failed to create even fallback SettingsService");
+                        throw new WindowInitializationException(
+                            "Cannot initialize settings service", 
+                            Core.WindowState.Failed, 
+                            new AggregateException(ex, fallbackEx));
+                    }
+                }
+                
+                Console.WriteLine("CreateDefaultServices: All services created successfully");
+                return (logger, initializer, handler, settings);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"CreateDefaultServices: Fatal error: {ex.Message}");
+                Console.WriteLine($"CreateDefaultServices: Stack trace: {ex.StackTrace}");
+                throw;
+            }
         }
 
         /// <summary>
@@ -1425,6 +1522,7 @@ namespace ExplorerPro.UI.MainWindow
         {
             System.Diagnostics.Debug.Assert(tabControl != null, "ChromeStyleTabControl cannot be null");
             _mainTabsControl = tabControl;
+            _instanceLogger?.LogInformation("SetMainTabsControl called - setting up tab events");
             // Setup event handlers for the chrome-style tab control
             SetupChromeStyleTabEvents();
         }
@@ -6891,6 +6989,8 @@ namespace ExplorerPro.UI.MainWindow
                 }
             }
         }
+
+
 
     }
 

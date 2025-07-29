@@ -272,6 +272,15 @@ namespace ExplorerPro
             Console.WriteLine(errorMsg);
             Console.WriteLine(ex.StackTrace);
             
+            // Log inner exceptions
+            Exception innerEx = ex.InnerException;
+            while (innerEx != null)
+            {
+                Console.WriteLine($"Inner Exception: {innerEx.Message}");
+                Console.WriteLine(innerEx.StackTrace);
+                innerEx = innerEx.InnerException;
+            }
+            
             try
             {
                 // Log to file as well
@@ -283,9 +292,19 @@ namespace ExplorerPro
                         Directory.CreateDirectory(errorLogDir);
                     }
                     
-                    // Append to log file
-                    File.AppendAllText(ErrorLogPath, 
-                        $"[{DateTime.Now}] {errorMsg}\r\n{ex.StackTrace}\r\n\r\n");
+                    // Append to log file with inner exceptions
+                    string logEntry = $"[{DateTime.Now}] {errorMsg}\r\n{ex.StackTrace}\r\n";
+                    
+                    // Add inner exceptions to log
+                    innerEx = ex.InnerException;
+                    while (innerEx != null)
+                    {
+                        logEntry += $"Inner Exception: {innerEx.Message}\r\n{innerEx.StackTrace}\r\n";
+                        innerEx = innerEx.InnerException;
+                    }
+                    
+                    logEntry += "\r\n";
+                    File.AppendAllText(ErrorLogPath, logEntry);
                 }
                 else
                 {
@@ -446,6 +465,21 @@ namespace ExplorerPro
             {
                 Console.WriteLine($"Error loading settings: {ex.Message}");
                 
+                // If settings file is corrupted, try to backup and recreate
+                if (File.Exists(SettingsPath))
+                {
+                    try
+                    {
+                        string backupPath = SettingsPath + ".backup." + DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                        File.Move(SettingsPath, backupPath);
+                        Console.WriteLine($"Corrupted settings file backed up to: {backupPath}");
+                    }
+                    catch (Exception backupEx)
+                    {
+                        Console.WriteLine($"Could not backup corrupted settings file: {backupEx.Message}");
+                    }
+                }
+                
                 // Create default settings on error
                 try
                 {
@@ -453,6 +487,7 @@ namespace ExplorerPro
                     Settings = new SettingsManager(SettingsPath);
                     Settings.ApplyDefaultSettings();
                     Settings.SaveSettings();
+                    Console.WriteLine("Default settings created and saved successfully");
                 }
                 catch (Exception innerEx)
                 {
@@ -461,6 +496,7 @@ namespace ExplorerPro
                     // Create settings in memory only as last resort
                     Settings = new SettingsManager();
                     Settings.ApplyDefaultSettings();
+                    Console.WriteLine("Using in-memory settings as fallback");
                 }
             }
         }

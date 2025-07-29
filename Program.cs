@@ -12,6 +12,15 @@ namespace ExplorerPro
         static async Task Main(string[] args)
         {
             // Check for test mode
+            if (args.Length > 0 && args[0] == "--test-phase2")
+            {
+                Console.WriteLine("Running Phase 2 validation tests...");
+                await ExplorerPro.Tests.Phase2ValidationTests.RunAllTests();
+                Console.WriteLine("Press any key to exit...");
+                Console.ReadKey();
+                return;
+            }
+            
             if (args.Length > 0 && args[0] == "--test-phase5")
             {
                 Console.WriteLine("Running Phase 5 validation tests...");
