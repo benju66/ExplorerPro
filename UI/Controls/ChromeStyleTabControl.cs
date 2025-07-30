@@ -245,6 +245,7 @@ namespace ExplorerPro.UI.Controls
         private bool _isDragging;
         private TabOperationsManager _tabOperationsManager;
         private ITabDragDropService _dragDropService;
+        private ExplorerPro.Core.TabManagement.TabStateManager _tabStateManager;
         private DragOperation _currentDragOperation;
         
         // Visual indicator fields
@@ -2382,6 +2383,13 @@ namespace ExplorerPro.UI.Controls
                 _dragDropService = ExplorerPro.App.DragDropService;
             }
             
+            if (_tabStateManager == null)
+            {
+                _tabStateManager = ExplorerPro.App.TabStateManager;
+                // Load any previously saved tab states
+                _ = LoadSavedTabStatesAsync();
+            }
+            
             // Wire up event handlers for dynamically created buttons
             WireUpTabControlEvents();
             
@@ -3065,6 +3073,30 @@ namespace ExplorerPro.UI.Controls
         private void OnTabItemsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
             RefreshTabItems();
+            
+            // Save state when tabs are added or removed
+            try
+            {
+                if (e.Action == NotifyCollectionChangedAction.Add && e.NewItems != null)
+                {
+                    foreach (TabModel tabModel in e.NewItems)
+                    {
+                        SaveTabState(tabModel);
+                    }
+                }
+                else if (e.Action == NotifyCollectionChangedAction.Remove && e.OldItems != null)
+                {
+                    // Remove saved state for deleted tabs
+                    foreach (TabModel tabModel in e.OldItems)
+                    {
+                        _tabStateManager?.RemoveTabState(tabModel.Id);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error handling tab collection change for state persistence");
+            }
         }
 
         /// <summary>
@@ -3130,6 +3162,12 @@ namespace ExplorerPro.UI.Controls
             CreateWeakSubscription(
                 () => model.PropertyChanged += handler,
                 () => model.PropertyChanged -= handler);
+
+            // Wire up property change notifications for state persistence
+            var persistenceHandler = new PropertyChangedEventHandler((s, e) => OnTabModelPropertyChanged(s, e));
+            CreateWeakSubscription(
+                () => model.PropertyChanged += persistenceHandler,
+                () => model.PropertyChanged -= persistenceHandler);
 
             return tabItem;
         }
@@ -3776,6 +3814,124 @@ namespace ExplorerPro.UI.Controls
 
         #endregion
 
+        #region Tab State Persistence
+
+        /// <summary>
+        /// Loads previously saved tab states and restores session
+        /// </summary>
+        private async Task LoadSavedTabStatesAsync()
+        {
+            if (_tabStateManager == null) return;
+
+            try
+            {
+                _logger?.LogInformation("Loading saved tab states for session restoration");
+                await _tabStateManager.LoadSavedStatesAsync();
+                
+                // Check if user wants session restoration (from settings)
+                var restoreSession = App.Settings?.GetSetting<bool>("restore_session", false) ?? false;
+                if (!restoreSession)
+                {
+                    _logger?.LogInformation("Session restoration disabled in settings");
+                    return;
+                }
+                
+                // If no tabs exist and we have saved states, restore them
+                if (TabItems?.Count == 0)
+                {
+                    await RestoreTabsFromSavedStatesAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error loading saved tab states");
+            }
+        }
+
+        /// <summary>
+        /// Restores tabs from saved states
+        /// </summary>
+        private async Task RestoreTabsFromSavedStatesAsync()
+        {
+            // This is a placeholder for future implementation
+            // For now, just log that we would restore tabs
+            _logger?.LogInformation("Tab restoration from saved states - feature ready for implementation");
+            
+            // TODO: In a full implementation, we would:
+            // 1. Get all saved tab states from _tabStateManager
+            // 2. Create TabModels from the saved states  
+            // 3. Add them to TabItems collection
+            // 4. Apply saved pinning, positioning, etc.
+            
+            await Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Saves the current state of a tab
+        /// </summary>
+        private void SaveTabState(TabModel tabModel)
+        {
+            if (_tabStateManager == null || tabModel == null) return;
+
+            try
+            {
+                // Create TabState from TabModel (need to be careful about naming conflict)
+                var tabStateData = new Core.TabManagement.TabState
+                {
+                    Title = tabModel.Title,
+                    Path = tabModel.Path,
+                    IsPinned = tabModel.IsPinned,
+                    IsHibernated = tabModel.State == Models.TabState.Hibernated,
+                    LastAccessed = tabModel.LastActivated,
+                    CustomProperties = new Dictionary<string, object>
+                    {
+                        { "CustomColor", tabModel.CustomColor.ToString() },
+                        { "Priority", tabModel.Priority.ToString() },
+                        { "CreatedAt", tabModel.CreatedAt },
+                        { "ActivationCount", tabModel.ActivationCount }
+                    }
+                };
+
+                _tabStateManager.SaveTabState(tabModel.Id, tabStateData);
+                _logger?.LogDebug($"Saved state for tab: {tabModel.Title}");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, $"Error saving state for tab: {tabModel.Title}");
+            }
+        }
+
+        /// <summary>
+        /// Saves the state of all current tabs
+        /// </summary>
+        private void SaveAllTabStates()
+        {
+            if (TabItems == null) return;
+
+            foreach (var tabModel in TabItems)
+            {
+                SaveTabState(tabModel);
+            }
+        }
+
+        /// <summary>
+        /// Handles tab property changes for state persistence
+        /// </summary>
+        private void OnTabModelPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (sender is TabModel tabModel)
+            {
+                // Save state when important properties change
+                var importantProperties = new[] { "Title", "Path", "IsPinned", "IsActive", "State" };
+                if (importantProperties.Contains(e.PropertyName))
+                {
+                    SaveTabState(tabModel);
+                }
+            }
+        }
+
+        #endregion
+
         #region IDisposable Implementation
 
         private bool _disposed = false;
@@ -3843,6 +3999,17 @@ namespace ExplorerPro.UI.Controls
                             disposableService.Dispose();
                         }
                         _dragDropService = null;
+                        
+                        // Save all tab states before disposal
+                        try
+                        {
+                            SaveAllTabStates();
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning(ex, "Error saving tab states during disposal");
+                        }
+                        _tabStateManager = null;
                         
                         // Dispose current drag operation
                         if (_currentDragOperation is IDisposable disposableOperation)

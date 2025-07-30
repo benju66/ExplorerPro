@@ -37,6 +37,7 @@ namespace ExplorerPro
         public static ExplorerPro.Core.TabManagement.IDetachedWindowManager? WindowManager { get; private set; }
         public static ExplorerPro.Core.TabManagement.TabOperationsManager? TabOperationsManager { get; private set; }
         public static ExplorerPro.Core.TabManagement.ITabDragDropService? DragDropService { get; private set; }
+        public static ExplorerPro.Core.TabManagement.TabStateManager? TabStateManager { get; private set; }
 
         // Logger factory for dependency injection
         private static ILoggerFactory? _loggerFactory;
@@ -524,6 +525,10 @@ namespace ExplorerPro
         {
             try
             {
+                // Initialize tab state manager for session persistence
+                var stateManagerLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.TabStateManager>();
+                TabStateManager = new ExplorerPro.Core.TabManagement.TabStateManager(stateManagerLogger);
+                
                 // Initialize window manager as new SimpleDetachedWindowManager with logger
                 var windowManagerLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.SimpleDetachedWindowManager>();
                 WindowManager = new ExplorerPro.Core.TabManagement.SimpleDetachedWindowManager(windowManagerLogger);
@@ -542,6 +547,7 @@ namespace ExplorerPro
             {
                 Console.WriteLine($"Error initializing tab management services: {ex.Message}");
                 // Set to null on failure
+                TabStateManager = null;
                 WindowManager = null;
                 TabOperationsManager = null;
                 DragDropService = null;
@@ -986,6 +992,19 @@ namespace ExplorerPro
             catch (Exception ex)
             {
                 Console.WriteLine($"Error clearing WindowManager: {ex.Message}");
+            }
+            
+            try
+            {
+                if (TabStateManager != null)
+                {
+                    Console.WriteLine("TabStateManager reference cleared");
+                    TabStateManager = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error clearing TabStateManager: {ex.Message}");
             }
             
             try

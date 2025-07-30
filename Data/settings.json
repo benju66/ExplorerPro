@@ -5,6 +5,7 @@
     "Enable Dark Mode": false,
     "Show Address Bar": true
   },
+  "restore_session": true,
   "dockable_panels": {
     "pinned_panel": true,
     "recent_items_panel": false,
