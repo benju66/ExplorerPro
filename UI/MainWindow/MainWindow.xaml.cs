@@ -2825,23 +2825,21 @@ namespace ExplorerPro.UI.MainWindow
                     
                     if (contextTabItem != null)
                     {
-                        var oldTitle = contextTabItem.Header?.ToString() ?? "Untitled";
+                        // Use the unified command system for consistent renaming
+                        var context = ExplorerPro.Commands.UnifiedTabCommands.CreateContext(
+                            contextTabItem, this, _instanceLogger);
                         
-                        // Show rename dialog with smart positioning
-                        var dialog = new UI.Dialogs.RenameDialog(oldTitle, this, contextTabItem);
-                        if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.NewName))
+                        var task = ExplorerPro.Commands.UnifiedTabCommands.RenameTabAsync(context);
+                        var success = task.Result;
+                        
+                        if (success)
                         {
-                            var newTitle = dialog.NewName.Trim();
-                            
-                            // Update the UI TabItem directly (most important)
-                            contextTabItem.Header = newTitle;
-                            
-                            // Update any associated model in the ViewModel
+                            // Update any associated model in the ViewModel for compatibility
+                            var newTitle = contextTabItem.Header?.ToString() ?? "Untitled";
                             if (_viewModel?.TabItems != null)
                             {
                                 var viewModelTab = _viewModel.TabItems.FirstOrDefault(t => 
-                                    t.Title == oldTitle || 
-                                    (t.Content != null && t.Content == contextTabItem.Content));
+                                    t.Content != null && t.Content == contextTabItem.Content);
                                 if (viewModelTab != null)
                                 {
                                     viewModelTab.Title = newTitle;
@@ -2849,27 +2847,16 @@ namespace ExplorerPro.UI.MainWindow
                                 }
                             }
                             
-                            // Update metadata stored in TabItem.Tag if it exists
-                            if (contextTabItem.Tag is Dictionary<string, object> metadata)
-                            {
-                                metadata["Title"] = newTitle;
-                                metadata["LastModified"] = DateTime.Now;
-                            }
-                            else
-                            {
-                                contextTabItem.Tag = new Dictionary<string, object>
-                                {
-                                    ["Title"] = newTitle,
-                                    ["LastModified"] = DateTime.Now
-                                };
-                            }
-                            
                             // Force immediate UI refresh
                             contextTabItem.UpdateLayout();
                             contextTabItem.InvalidateVisual();
                             MainTabs?.UpdateLayout();
                             
-                            _instanceLogger?.LogDebug($"Tab renamed from '{oldTitle}' to '{newTitle}'");
+                            _instanceLogger?.LogDebug($"Tab renamed successfully using unified command system");
+                        }
+                        else
+                        {
+                            _instanceLogger?.LogWarning("Tab rename operation failed");
                         }
                     }
                 }
@@ -3145,35 +3132,44 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
-        private void TogglePinMenuItem_Click(object sender, RoutedEventArgs e)
+        private async void TogglePinMenuItem_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 if (sender is MenuItem menuItem && menuItem.Parent is ContextMenu contextMenu)
                 {
-                    var tabModel = GetContextMenuTabModel(contextMenu);
                     var contextTabItem = GetContextMenuTabItem(contextMenu);
                     
-                    if (tabModel != null && contextTabItem != null && _viewModel?.TogglePinCommand?.CanExecute(tabModel) == true)
+                    if (contextTabItem != null)
                     {
-                        var wasPin = tabModel.IsPinned;
+                        // Use the unified command system for consistent pinning
+                        if (contextTabItem.Tag is TabModel tabModel && 
+                            contextTabItem.Parent is ChromeStyleTabControl chromeTabControl)
+                        {
+                            var success = await ExplorerPro.Commands.UnifiedTabCommands.PinOperations.ToggleTabPinAsync(
+                                tabModel, 
+                                chromeTabControl, 
+                                message => _instanceLogger?.LogInformation($"Pin operation: {message}"));
                         
-                        _viewModel.TogglePinCommand.Execute(tabModel);
-                        
-                        // Sync changes back to the UI TabItem
-                        UpdateTabItemFromModel(contextTabItem, tabModel);
-                        
-                        // IMMEDIATE: Update the context menu item text to reflect the new state
-                        var newPinState = !wasPin;
-                        menuItem.Header = newPinState ? "Unpin Tab" : "Pin Tab";
-                        
-                        // Reorder tabs to keep pinned tabs on the left
-                        ReorderTabsAfterPinToggle();
-                        
-                        // CRITICAL: Invalidate context menu cache since pin state changed
-                        InvalidateContextMenuCache();
-                        
-                        _instanceLogger?.LogInformation($"Tab pin state changed: {contextTabItem.Header} - {(wasPin ? "Unpinned" : "Pinned")}");
+                            if (success)
+                            {
+                                // Update the context menu item text to reflect the new state
+                                bool isPinned = tabModel.IsPinned;
+                                menuItem.Header = isPinned ? "Unpin Tab" : "Pin Tab";
+                                
+                                // Reorder tabs to keep pinned tabs on the left
+                                ReorderTabsAfterPinToggle();
+                                
+                                // CRITICAL: Invalidate context menu cache since pin state changed
+                                InvalidateContextMenuCache();
+                                
+                                _instanceLogger?.LogInformation($"Tab pin state changed using unified command system: {contextTabItem.Header} - {(isPinned ? "Pinned" : "Unpinned")}");
+                            }
+                        }
+                        else
+                        {
+                            _instanceLogger?.LogWarning("Pin toggle operation failed");
+                        }
                     }
                 }
             }

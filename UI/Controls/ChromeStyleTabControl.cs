@@ -3085,6 +3085,17 @@ namespace ExplorerPro.UI.Controls
                 
                 // Wire up events for the new tab item
                 WireUpTabItemEvents(tabItem);
+                
+                // CRITICAL FIX: Apply template styling after tab is fully created and added
+                // This ensures pinned tabs get proper template during collection operations
+                if (tabModel.IsPinned)
+                {
+                    // Use a deferred call to apply template after the tab is fully initialized
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        ApplyTabStyling(tabItem, tabModel);
+                    }), System.Windows.Threading.DispatcherPriority.Normal);
+                }
             }
         }
 
@@ -3101,7 +3112,7 @@ namespace ExplorerPro.UI.Controls
                 ToolTip = string.IsNullOrEmpty(model.DisplayTitle) ? model.Title : model.DisplayTitle
             };
 
-            // Apply styling based on model properties
+            // Apply styling based on model properties - ORIGINAL WORKING CODE
             if (model.IsPinned)
             {
                 // Apply pinned styling
@@ -3178,10 +3189,13 @@ namespace ExplorerPro.UI.Controls
             {
                 // For pinned tabs, apply the pinned template
                 tabItem.SetResourceReference(TemplateProperty, "ChromePinnedTabTemplate");
+                // Clear any style that might interfere
+                tabItem.ClearValue(StyleProperty);
             }
             else
             {
-                // For regular tabs, use the Chrome style which includes the template
+                // For regular tabs, CLEAR the template first, then apply the style
+                tabItem.ClearValue(TemplateProperty);
                 tabItem.SetResourceReference(StyleProperty, "ChromeTabItemStyle");
             }
 
@@ -3278,17 +3292,18 @@ namespace ExplorerPro.UI.Controls
 
         /// <summary>
         /// Updates font styling based on model state
+        /// NOTE: FontSize is NOT set here to avoid affecting tab content (file trees, panes)
         /// </summary>
         private void UpdateTabFontStyling(TabItem tabItem, TabModel model)
         {
-            // Bold font for pinned tabs
-            tabItem.FontWeight = model.IsPinned ? FontWeights.Bold : FontWeights.Normal;
+            // Clear any font properties that might affect content
+            tabItem.ClearValue(FontSizeProperty);
+            tabItem.ClearValue(FontWeightProperty);
+            tabItem.ClearValue(FontStyleProperty);
             
-            // Italic for unsaved changes
-            tabItem.FontStyle = model.HasUnsavedChanges ? FontStyles.Italic : FontStyles.Normal;
-            
-            // Slightly larger font for active tabs
-            tabItem.FontSize = model.IsActive ? 12.5 : 12.0;
+            // The tab header styling is handled by the templates themselves
+            // ChromePinnedTabTemplate and ChromeTabItemStyle have their own font settings
+            // This prevents the font changes from cascading to the tab's content (file trees, panes)
         }
 
         /// <summary>
@@ -3627,20 +3642,25 @@ namespace ExplorerPro.UI.Controls
         /// <summary>
         /// Toggles the pin state of a tab
         /// </summary>
-        private void ToggleTabPin(TabModel tabModel)
+        private async void ToggleTabPin(TabModel tabModel)
         {
             try
             {
-                tabModel.IsPinned = !tabModel.IsPinned;
-                
-                // Update visual representation
-                var tabItem = Items.Cast<TabItem>().FirstOrDefault(t => t.Tag == tabModel);
-                if (tabItem != null)
-                {
-                    UpdateTabItemFromModel(tabItem, tabModel);
-                }
+                // Use the enhanced pin system with better visual feedback
+                var success = await ExplorerPro.Commands.UnifiedTabCommands.PinOperations.ToggleTabPinAsync(
+                    tabModel, 
+                    this, 
+                    message => 
+                    {
+                        // Show feedback to user (could be status bar, tooltip, etc.)
+                        AnnounceOperation(message);
+                        _logger?.LogInformation($"Pin operation: {message}");
+                    });
 
-                _logger?.LogInformation($"Tab '{tabModel.Title}' {(tabModel.IsPinned ? "pinned" : "unpinned")}");
+                if (!success)
+                {
+                    _logger?.LogWarning($"Pin toggle operation failed for tab '{tabModel.Title}'");
+                }
             }
             catch (Exception ex)
             {

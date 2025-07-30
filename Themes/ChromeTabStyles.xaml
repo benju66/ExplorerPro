@@ -29,62 +29,139 @@
         </Setter>
     </Style>
 
-    <!-- Chrome-style pinned tab template -->
+    <!-- Enhanced Chrome-style pinned tab template with better visual feedback -->
     <ControlTemplate x:Key="ChromePinnedTabTemplate" TargetType="{x:Type TabItem}">
         <Border x:Name="TabBorder"
                 Background="{StaticResource TabInactiveGradient}"
-                BorderBrush="#D0D7DE"
-                BorderThickness="1,1,1,0"
-                CornerRadius="12,12,0,0"
+                BorderBrush="#0078D4"
+                BorderThickness="2,2,2,0"
+                CornerRadius="8,8,0,0"
                 Margin="2,3,2,-1"
                 Padding="0"
+                Width="45"
+                MinWidth="45"
+                MaxWidth="45"
                 RenderTransformOrigin="0.5,0.5">
+            <Border.RenderTransform>
+                <ScaleTransform x:Name="TabScale" ScaleX="1" ScaleY="1"/>
+            </Border.RenderTransform>
             <Border.Effect>
                 <DropShadowEffect x:Name="TabShadow" 
-                                Color="#FF000000" 
+                                Color="#0078D4" 
                                 Direction="270" 
-                                ShadowDepth="2" 
-                                BlurRadius="6" 
-                                Opacity="0.1"/>
+                                ShadowDepth="3" 
+                                BlurRadius="8" 
+                                Opacity="0.3"/>
             </Border.Effect>
             
-            <!-- Content presenter that switches based on pin state -->
-            <ContentPresenter x:Name="ContentSite"
-                            ContentSource="Header"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Margin="8,6,8,6"/>
+            <!-- Enhanced pinned content with better visual indicator -->
+            <Grid>
+                <!-- Pin indicator background -->
+                <Ellipse x:Name="PinBackground"
+                        Width="24" Height="24"
+                        Fill="#0078D4"
+                        Opacity="0.15"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"/>
+                
+                <!-- Pin icon with enhanced visibility -->
+                <TextBlock x:Name="PinIcon"
+                          Text="📌"
+                          FontSize="16"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Foreground="#0078D4"
+                          FontWeight="Bold"
+                          RenderTransformOrigin="0.5,0.5">
+                    <TextBlock.RenderTransform>
+                        <RotateTransform Angle="0"/>
+                    </TextBlock.RenderTransform>
+                </TextBlock>
+                
+                <!-- Tooltip for better UX -->
+                <Grid.ToolTip>
+                    <ToolTip>
+                        <StackPanel>
+                            <TextBlock Text="{Binding Tag.Title, RelativeSource={RelativeSource TemplatedParent}}" 
+                                      FontWeight="Bold"/>
+                            <TextBlock Text="Pinned Tab - Right-click to unpin" 
+                                      FontSize="11" 
+                                      Foreground="Gray"/>
+                        </StackPanel>
+                    </ToolTip>
+                </Grid.ToolTip>
+            </Grid>
         </Border>
         
         <ControlTemplate.Triggers>
-            <!-- Pinned State Trigger -->
-            <DataTrigger Binding="{Binding Tag.IsPinned, RelativeSource={RelativeSource Self}}" Value="True">
-                <!-- Narrow the tab -->
-                <Setter TargetName="TabBorder" Property="Width" Value="40"/>
-                <Setter TargetName="TabBorder" Property="MinWidth" Value="40"/>
-                <Setter TargetName="TabBorder" Property="MaxWidth" Value="40"/>
-                
-                <!-- Hide the normal content -->
-                <Setter TargetName="ContentSite" Property="Visibility" Value="Collapsed"/>
-                
-                <!-- Show pinned icon -->
-                <Setter Property="ContentTemplate">
+            <!-- Hover effect for pinned tabs -->
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="TabBorder" Property="Background">
                     <Setter.Value>
-                        <DataTemplate>
-                            <Image Width="20" Height="20" 
-                                   Source="{DynamicResource FolderDotIcon}"
-                                   RenderOptions.BitmapScalingMode="HighQuality"/>
-                        </DataTemplate>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#F0F8FF" Offset="0"/>
+                            <GradientStop Color="#E6F3FF" Offset="1"/>
+                        </LinearGradientBrush>
                     </Setter.Value>
                 </Setter>
-            </DataTrigger>
+                <Setter TargetName="PinBackground" Property="Opacity" Value="0.25"/>
+                <!-- Note: Can't directly target TabShadow as it's inside Border.Effect -->
+                <Trigger.EnterActions>
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="TabScale"
+                                           Storyboard.TargetProperty="ScaleX"
+                                           To="1.05"
+                                           Duration="0:0:0.15"/>
+                            <DoubleAnimation Storyboard.TargetName="TabScale"
+                                           Storyboard.TargetProperty="ScaleY"
+                                           To="1.05"
+                                           Duration="0:0:0.15"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="TabScale"
+                                           Storyboard.TargetProperty="ScaleX"
+                                           To="1.0"
+                                           Duration="0:0:0.15"/>
+                            <DoubleAnimation Storyboard.TargetName="TabScale"
+                                           Storyboard.TargetProperty="ScaleY"
+                                           To="1.0"
+                                           Duration="0:0:0.15"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </Trigger.ExitActions>
+            </Trigger>
             
-            <!-- Selected State -->
+            <!-- Selected State with enhanced styling -->
             <Trigger Property="IsSelected" Value="True">
                 <Setter TargetName="TabBorder" Property="Background" Value="White"/>
                 <Setter TargetName="TabBorder" Property="BorderBrush" Value="#0078D4"/>
+                <Setter TargetName="TabBorder" Property="BorderThickness" Value="3,3,3,0"/>
+                <Setter TargetName="PinIcon" Property="Foreground" Value="#0078D4"/>
+                <Setter TargetName="PinBackground" Property="Fill" Value="#0078D4"/>
+                <Setter TargetName="PinBackground" Property="Opacity" Value="0.2"/>
                 <Setter Property="Panel.ZIndex" Value="2"/>
             </Trigger>
+            
+            <!-- Loading state for pinned tabs -->
+            <DataTrigger Binding="{Binding Tag.IsLoading, RelativeSource={RelativeSource Self}}" Value="True">
+                <Setter TargetName="PinIcon" Property="Text" Value="⟳"/>
+                <DataTrigger.EnterActions>
+                    <BeginStoryboard>
+                        <Storyboard RepeatBehavior="Forever">
+                            <DoubleAnimation Storyboard.TargetName="PinIcon"
+                                           Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                           From="0"
+                                           To="360"
+                                           Duration="0:0:1"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </DataTrigger.EnterActions>
+            </DataTrigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
 
