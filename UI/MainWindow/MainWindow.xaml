@@ -147,6 +147,7 @@ All dependencies mapped and validation tests established.
         xmlns:tabManagement="clr-namespace:ExplorerPro.UI.PaneManagement"
         xmlns:controls="clr-namespace:ExplorerPro.UI.Controls"
         xmlns:converters="clr-namespace:ExplorerPro.UI.Converters"
+        xmlns:ftconverters="clr-namespace:ExplorerPro.UI.FileTree"
         mc:Ignorable="d"
         Title="Enhanced File Explorer"
         Height="800" 
@@ -197,6 +198,12 @@ All dependencies mapped and validation tests established.
         
         <!-- Converts Colors to appropriate foreground colors -->
         <converters:ColorToForegroundConverter x:Key="ColorToForegroundConverter"/>
+        
+        <!-- Boolean to Visibility converter for tab visibility bindings -->
+        <ftconverters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        
+        <!-- Inverse Boolean to Visibility converter -->
+        <ftconverters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
         
         <!-- Converts boolean IsPinned to Visibility for pin indicators -->
         <converters:PinnedToVisibilityConverter x:Key="PinnedToVisibilityConverter"/>
@@ -605,13 +612,13 @@ All dependencies mapped and validation tests established.
                                         </Trigger>
                                         
                                         <!-- Pinned State Trigger -->
-                                        <DataTrigger Binding="{Binding Tag[IsPinned], RelativeSource={RelativeSource Self}}" Value="True">
+                                        <DataTrigger Binding="{Binding IsPinned}" Value="True">
                                             <!-- Narrow the tab -->
                                             <Setter Property="Width" Value="40"/>
                                             <Setter Property="MinWidth" Value="40"/>
                                             <Setter Property="MaxWidth" Value="40"/>
                                             <!-- Add tooltip for pinned tabs -->
-                                            <Setter Property="ToolTip" Value="{Binding Header, RelativeSource={RelativeSource Self}}"/>
+                                            <Setter Property="ToolTip" Value="{Binding DisplayTitle}"/>
                                         </DataTrigger>
                                         
                                         <!-- Enhanced hover effect -->
@@ -649,14 +656,14 @@ All dependencies mapped and validation tests established.
                     <DataTemplate>
                         <Grid>
                             <!-- Regular tab layout (shown when not pinned) -->
-                            <Grid x:Name="RegularLayout">
+                            <Grid x:Name="RegularLayout" Visibility="{Binding IsPinned, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 
                                 <TextBlock Grid.Column="0" 
-                                          Text="{Binding Title}" 
+                                          Text="{Binding DisplayTitle}" 
                                           VerticalAlignment="Center"
                                           Margin="8,0,8,0"/>
                                 
@@ -665,22 +672,18 @@ All dependencies mapped and validation tests established.
                                         Content="×" 
                                         Width="20" Height="20"
                                         Style="{StaticResource ChromeCloseButtonStyle}"
-                                        ToolTip="Close tab"/>
+                                        ToolTip="Close tab"
+                                        Visibility="{Binding CanClose, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             </Grid>
                             
                             <!-- Pinned tab layout (icon only) -->
-                            <Image x:Name="PinnedIcon" 
-                                   Width="20" Height="20"
-                                   Source="{DynamicResource FolderDotIcon}"
-                                   Visibility="Collapsed"/>
+                            <TextBlock x:Name="PinnedIcon" 
+                                      Text="{Binding PinnedIcon}"
+                                      FontSize="14"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Visibility="{Binding IsPinned, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                         </Grid>
-                        
-                        <DataTemplate.Triggers>
-                            <DataTrigger Binding="{Binding Tag[IsPinned], RelativeSource={RelativeSource AncestorType=TabItem}}" Value="True">
-                                <Setter TargetName="RegularLayout" Property="Visibility" Value="Collapsed"/>
-                                <Setter TargetName="PinnedIcon" Property="Visibility" Value="Visible"/>
-                            </DataTrigger>
-                        </DataTemplate.Triggers>
                     </DataTemplate>
                 </TabControl.ItemTemplate>
 

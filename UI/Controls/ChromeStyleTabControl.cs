@@ -2918,9 +2918,13 @@ namespace ExplorerPro.UI.Controls
             {
                 // Find parent TabItem
                 var tabItem = FindParent<TabItem>(closeButton);
-                if (tabItem?.Tag is TabModel tabModel)
+                if (tabItem != null)
                 {
-                    CloseTab(tabModel);
+                    var tabModel = GetTabModel(tabItem);
+                    if (tabModel != null)
+                    {
+                        CloseTab(tabModel);
+                    }
                 }
             }
         }
@@ -3521,9 +3525,8 @@ namespace ExplorerPro.UI.Controls
         {
             var tabItem = new TabItem
             {
-                Header = model.Title,
+                DataContext = model,
                 Content = model.Content,
-                Tag = model,
                 ToolTip = string.IsNullOrEmpty(model.DisplayTitle) ? model.Title : model.DisplayTitle
             };
 
@@ -3988,12 +3991,32 @@ namespace ExplorerPro.UI.Controls
         {
             for (int i = 0; i < Items.Count; i++)
             {
-                if (Items[i] is TabItem tabItem && tabItem.Tag == tab)
+                if (Items[i] is TabItem tabItem && GetTabModel(tabItem) == tab)
                 {
                     return i;
                 }
             }
             return -1;
+        }
+        
+        /// <summary>
+        /// Gets the TabModel from a TabItem, checking DataContext first, then Tag
+        /// </summary>
+        /// <param name="tabItem">The TabItem to get the model from</param>
+        /// <returns>The TabModel or null if not found</returns>
+        private TabModel GetTabModel(TabItem tabItem)
+        {
+            if (tabItem == null) return null;
+            
+            // Check DataContext first (preferred)
+            if (tabItem.DataContext is TabModel dataContextModel)
+                return dataContextModel;
+            
+            // Fall back to Tag for backward compatibility
+            if (tabItem.Tag is TabModel tagModel)
+                return tagModel;
+            
+            return null;
         }
 
         #endregion
@@ -4009,10 +4032,55 @@ namespace ExplorerPro.UI.Controls
             base.OnSelectionChanged(e);
 
             // Update SelectedTabItem based on the actual selection
-            if (SelectedItem is TabItem selectedTabItem && selectedTabItem.Tag is TabModel model)
+            if (SelectedItem is TabItem selectedTabItem)
             {
-                SelectedTabItem = model;
-                model.Activate();
+                var model = GetTabModel(selectedTabItem);
+                if (model != null)
+                {
+                    SelectedTabItem = model;
+                    model.Activate();
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Prepares a container for an item, ensuring proper DataContext binding
+        /// </summary>
+        protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
+        {
+            base.PrepareContainerForItemOverride(element, item);
+            
+            if (element is TabItem tabItem && item is TabModel model)
+            {
+                // Set DataContext for proper binding
+                tabItem.DataContext = model;
+                
+                // Set up any additional bindings or event handlers
+                SetupTabBindings(tabItem);
+            }
+        }
+        
+        /// <summary>
+        /// Sets up bindings and event handlers for a TabItem
+        /// </summary>
+        private void SetupTabBindings(TabItem tabItem)
+        {
+            if (tabItem == null) return;
+            
+            try
+            {
+                // Wire up context menu opening for DataContext binding
+                tabItem.ContextMenuOpening += (sender, e) =>
+                {
+                    if (sender is TabItem tab && tab.ContextMenu != null)
+                    {
+                        tab.ContextMenu.DataContext = tab.DataContext;
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error setting up tab bindings");
             }
         }
 

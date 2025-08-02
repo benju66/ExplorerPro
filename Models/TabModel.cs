@@ -233,11 +233,52 @@ namespace ExplorerPro.Models
             get
             {
                 var title = _title;
-                if (_hasUnsavedChanges) title += "*";
-                if (_isPinned) title = "📌 " + title;
+                if (_hasUnsavedChanges) title += " •";
                 return title;
             }
         }
+        
+        /// <summary>
+        /// Content to display for pinned tabs (first letter or emoji)
+        /// </summary>
+        public string PinnedIcon
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(_title))
+                {
+                    // Check if title starts with an emoji (Unicode surrogate pair)
+                    if (_title.Length >= 2 && char.IsSurrogatePair(_title[0], _title[1]))
+                    {
+                        return _title.Substring(0, 2);
+                    }
+                    return _title.Substring(0, 1).ToUpper();
+                }
+                return "T";
+            }
+        }
+        
+        /// <summary>
+        /// Background brush for the tab based on custom color
+        /// </summary>
+        public Brush TabBackground
+        {
+            get
+            {
+                if (HasCustomColor)
+                {
+                    // Create a semi-transparent brush for modern look
+                    var color = Color.FromArgb(80, _customColor.R, _customColor.G, _customColor.B);
+                    return new SolidColorBrush(color);
+                }
+                return Brushes.Transparent;
+            }
+        }
+        
+        /// <summary>
+        /// Dynamic width for the tab based on pinned state
+        /// </summary>
+        public double TabWidth => _isPinned ? 40 : 200;
         
         /// <summary>
         /// Whether this tab can be closed (pinned tabs and tabs with unsaved changes cannot be closed)
@@ -405,12 +446,23 @@ namespace ExplorerPro.Models
             OnPropertyChanged(propertyName);
             
             // Notify dependent properties
-            if (propertyName == nameof(Title) || propertyName == nameof(HasUnsavedChanges) || propertyName == nameof(IsPinned))
+            if (propertyName == nameof(Title) || propertyName == nameof(HasUnsavedChanges))
             {
                 OnPropertyChanged(nameof(DisplayTitle));
             }
             
-            if (propertyName == nameof(IsPinned) || propertyName == nameof(HasUnsavedChanges))
+            if (propertyName == nameof(Title))
+            {
+                OnPropertyChanged(nameof(PinnedIcon));
+            }
+            
+            if (propertyName == nameof(IsPinned))
+            {
+                OnPropertyChanged(nameof(TabWidth));
+                OnPropertyChanged(nameof(CanClose));
+            }
+            
+            if (propertyName == nameof(HasUnsavedChanges))
             {
                 OnPropertyChanged(nameof(CanClose));
             }
@@ -418,6 +470,7 @@ namespace ExplorerPro.Models
             if (propertyName == nameof(CustomColor))
             {
                 OnPropertyChanged(nameof(HasCustomColor));
+                OnPropertyChanged(nameof(TabBackground));
             }
             
             return true;

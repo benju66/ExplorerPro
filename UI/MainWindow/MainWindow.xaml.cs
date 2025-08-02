@@ -769,17 +769,14 @@ namespace ExplorerPro.UI.MainWindow
             {
                 TryAccessUIElement(SafeMainTabs, tabs =>
                 {
-                    var newTab = new TabItem
-                    {
-                        Header = header,
-                        Content = content,
-                        Tag = new TabModel(header, "")
+                    var tabModel = new TabModel(header, "")
                         {
                             Content = content,
                             IsPinned = false,
-                            CustomColor = Colors.LightGray
-                        }
+                        CustomColor = Colors.Transparent
                     };
+                    
+                    var newTab = CreateTabItem(tabModel);
                     
                     tabs.Items.Add(newTab);
                     tabs.SelectedItem = newTab;
@@ -1640,6 +1637,12 @@ namespace ExplorerPro.UI.MainWindow
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             _stateManager.TryTransitionTo(Core.WindowState.Ready, out _);
+            
+            // Migrate existing tabs from Tag to DataContext (Phase 2)
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                MigrateTagToDataContext();
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
         /// <summary>
@@ -2424,6 +2427,114 @@ namespace ExplorerPro.UI.MainWindow
         #region Tab Management
 
         /// <summary>
+        /// Creates a TabItem with proper data binding setup
+        /// </summary>
+        /// <param name="model">The TabModel to bind to the tab</param>
+        /// <returns>A properly configured TabItem</returns>
+        private TabItem CreateTabItem(TabModel model)
+        {
+            var tabItem = new TabItem
+            {
+                DataContext = model,
+                Content = model.Content
+            };
+            
+            // Set up bindings after initialization
+            SetupTabBindings(tabItem);
+            
+            return tabItem;
+        }
+        
+        /// <summary>
+        /// Sets up all necessary bindings for a TabItem
+        /// </summary>
+        /// <param name="tabItem">The TabItem to set up bindings for</param>
+        private void SetupTabBindings(TabItem tabItem)
+        {
+            try
+            {
+                // Wire up context menu opening event for DataContext binding
+                tabItem.ContextMenuOpening += (sender, e) =>
+                {
+                    if (sender is TabItem tab && tab.ContextMenu != null)
+                    {
+                        tab.ContextMenu.DataContext = tab.DataContext;
+                    }
+                };
+                
+                _instanceLogger?.LogDebug("Tab bindings set up successfully");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error setting up tab bindings");
+            }
+        }
+        
+        /// <summary>
+        /// Migrates existing tabs from Tag-based to DataContext-based binding
+        /// </summary>
+        private void MigrateTagToDataContext()
+        {
+            if (MainTabs == null) return;
+            
+            try
+            {
+                _instanceLogger?.LogInformation("Starting tab migration from Tag to DataContext");
+                int migratedCount = 0;
+                
+                foreach (TabItem tabItem in MainTabs.Items)
+                {
+                    // Skip if already has DataContext
+                    if (tabItem.DataContext is TabModel)
+                    {
+                        continue;
+                    }
+                    
+                    // Check for TabModel in Tag
+                    if (tabItem.Tag is TabModel tagModel)
+                    {
+                        // Migrate to DataContext
+                        tabItem.DataContext = tagModel;
+                        
+                        // Set up bindings
+                        SetupTabBindings(tabItem);
+                        
+                        migratedCount++;
+                        _instanceLogger?.LogDebug($"Migrated tab: {tagModel.Title}");
+                    }
+                    // Check for Dictionary metadata in Tag
+                    else if (tabItem.Tag is Dictionary<string, object> metadata)
+                    {
+                        // Create TabModel from metadata
+                        var model = new TabModel
+                        {
+                            Title = tabItem.Header?.ToString() ?? "Tab",
+                            Content = tabItem.Content,
+                            IsPinned = metadata.ContainsKey("IsPinned") && metadata["IsPinned"] is bool pinned && pinned,
+                            CustomColor = metadata.ContainsKey("CustomColor") && metadata["CustomColor"] is Color color ? color : Colors.Transparent
+                        };
+                        
+                        // Set DataContext
+                        tabItem.DataContext = model;
+                        tabItem.Tag = null; // Clear Tag
+                        
+                        // Set up bindings
+                        SetupTabBindings(tabItem);
+                        
+                        migratedCount++;
+                        _instanceLogger?.LogDebug($"Migrated tab from metadata: {model.Title}");
+                    }
+                }
+                
+                _instanceLogger?.LogInformation($"Tab migration completed. Migrated {migratedCount} tabs");
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error during tab migration");
+            }
+        }
+
+        /// <summary>
         /// Add a new tab with a MainWindowContainer.
         /// </summary>
         /// <param name="rootPath">Root path for the new tab</param>
@@ -2488,22 +2599,18 @@ namespace ExplorerPro.UI.MainWindow
                     }
                 }
 
-                // Create tab through direct manipulation
+                // Create tab through CreateTabItem method
                 string tabTitle = $"Window {MainTabs.Items.Count + 1}";
-                var newTab = new TabItem
-                {
-                    Header = tabTitle,
-                    Content = container,
-                    // Create proper TabModel instead of Dictionary
-                    Tag = new TabModel
+                var tabModel = new TabModel
                     {
                         Id = Guid.NewGuid().ToString(),
                         Title = tabTitle,
                         Content = container,
                         IsPinned = false,
-                        CustomColor = Colors.LightGray
-                    }
+                    CustomColor = Colors.Transparent // Use Transparent as default
                 };
+                
+                var newTab = CreateTabItem(tabModel);
                 
                 // Add the tab to the control using proper positioning
                 InsertTabAtCorrectPosition(newTab);
@@ -2562,18 +2669,16 @@ namespace ExplorerPro.UI.MainWindow
 
                 // Create a proper TabItem with loading content first
                 string tabHeader = $"Tab {MainTabs.Items.Count + 1}";
-                var newTabItem = new TabItem
-                {
-                    Header = tabHeader,
-                    Tag = new TabModel
+                var tabModel = new TabModel
                     {
                         Id = Guid.NewGuid().ToString(),
                         Title = tabHeader,
                         Content = null,
                         IsPinned = false,
-                        CustomColor = Colors.LightGray
-                    }
+                    CustomColor = Colors.Transparent
                 };
+                
+                var newTabItem = CreateTabItem(tabModel);
                 
                 // Create loading content
                 Grid loadingGrid = new Grid();
@@ -2606,10 +2711,10 @@ namespace ExplorerPro.UI.MainWindow
                     newTabItem.Content = container;
                     
                     // Update the TabModel with the container content
-                    if (newTabItem.Tag is TabModel tabModel)
+                    if (newTabItem.DataContext is TabModel existingTabModel)
                     {
-                        tabModel.Content = container;
-                        tabModel.Title = !string.IsNullOrEmpty(Path.GetFileName(safePath)) ? Path.GetFileName(safePath) : "Home";
+                        existingTabModel.Content = container;
+                        existingTabModel.Title = !string.IsNullOrEmpty(Path.GetFileName(safePath)) ? Path.GetFileName(safePath) : "Home";
                     }
                     
                     // Connect signals if needed
@@ -2875,17 +2980,10 @@ namespace ExplorerPro.UI.MainWindow
                 {
                     var contextTabItem = GetContextMenuTabItem(contextMenu);
                     
-                    if (contextTabItem != null)
+                    if (contextTabItem != null && contextTabItem.DataContext is TabModel tabModel)
                     {
-                        // Get current color from metadata or use default
-                        var currentColor = Colors.LightGray; // Default color
-                        if (contextTabItem.Tag is Dictionary<string, object> metadata && metadata.ContainsKey("CustomColor"))
-                        {
-                            if (metadata["CustomColor"] is Color storedColor)
-                            {
-                                currentColor = storedColor;
-                            }
-                        }
+                        // Get current color from TabModel
+                        var currentColor = tabModel.CustomColor;
                         
                         // Show color picker dialog with smart positioning
                         var dialog = new UI.Dialogs.ColorPickerDialog(currentColor, this, contextTabItem);
@@ -2893,42 +2991,20 @@ namespace ExplorerPro.UI.MainWindow
                         {
                             var newColor = dialog.SelectedColor;
                             
-                            // Update metadata stored in TabItem.Tag
-                            if (contextTabItem.Tag is Dictionary<string, object> existingMetadata)
-                            {
-                                existingMetadata["CustomColor"] = newColor;
-                                existingMetadata["LastModified"] = DateTime.Now;
-                            }
-                            else
-                            {
-                                contextTabItem.Tag = new Dictionary<string, object>
-                                {
-                                    ["CustomColor"] = newColor,
-                                    ["LastModified"] = DateTime.Now
-                                };
-                            }
+                            // Update the TabModel (triggers property change notifications)
+                            tabModel.CustomColor = newColor;
                             
                             // Update any associated model in the ViewModel
                             if (_viewModel?.TabItems != null)
                             {
-                                var tabTitle = contextTabItem.Header?.ToString();
                                 var viewModelTab = _viewModel.TabItems.FirstOrDefault(t => 
-                                    t.Title == tabTitle || 
-                                    (t.Content != null && t.Content == contextTabItem.Content));
-                                if (viewModelTab != null)
+                                    t.Id == tabModel.Id || 
+                                    (t.Content != null && t.Content == tabModel.Content));
+                                if (viewModelTab != null && viewModelTab != tabModel)
                                 {
                                     viewModelTab.CustomColor = newColor;
-                                    viewModelTab.Activate();
                                 }
                             }
-                            
-                            // Set the DataContext to enable binding-based color changes
-                            SetTabModelContext(contextTabItem, newColor);
-                            
-                            // Force immediate UI refresh
-                            contextTabItem.UpdateLayout();
-                            contextTabItem.InvalidateVisual();
-                            MainTabs?.UpdateLayout();
                             
                             _instanceLogger?.LogDebug($"Tab color changed to {newColor}");
                         }
@@ -6396,21 +6472,14 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                // Ensure the model is always set as Tag for binding consistency
-                tabItem.Tag = tabModel;
-
-                // Apply color styling (this preserves pinned state)
-                if (tabModel.CustomColor != Colors.LightGray)
+                // Ensure the model is set as DataContext for binding
+                if (tabItem.DataContext != tabModel)
                 {
-                    SetTabModelContext(tabItem, tabModel.CustomColor);
+                    tabItem.DataContext = tabModel;
                 }
-                else
-                {
-                    // For tabs without custom colors, clear DataContext to let Tag binding work
-                    tabItem.DataContext = null;
-                    // Clear any custom styling to return to default
-                    ClearCustomColorStyling(tabItem);
-                }
+                
+                // The styling is now handled through data binding in XAML
+                // TabBackground property on TabModel will automatically update the UI
 
                 // Force refresh of the tab's visual state to apply triggers
                 tabItem.UpdateLayout();
