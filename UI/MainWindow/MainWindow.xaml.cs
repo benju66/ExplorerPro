@@ -3471,24 +3471,7 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
-        /// <summary>
-        /// Handler for tab close button click.
-        /// </summary>
-        private void TabCloseButton_Click(object sender, RoutedEventArgs e)
-        {
-            // Find the tab that contains this button
-            var button = sender as System.Windows.Controls.Button;
-            var tabItem = FindParent<TabItem>(button);
-            
-            if (tabItem != null)
-            {
-                int index = MainTabs.Items.IndexOf(tabItem);
-                if (index >= 0)
-                {
-                    CloseTab(index);
-                }
-            }
-        }
+
 
         /// <summary>
         /// Handler for selection changed event in the main tabs.
@@ -5551,17 +5534,50 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                // Dispose the container if it implements IDisposable
-                if (e.TabItem.Content is IDisposable disposable)
+                // Find the corresponding TabItem from the TabModel
+                TabItem tabItemToClose = null;
+                foreach (TabItem tabItem in MainTabs.Items)
                 {
-                    disposable.Dispose();
+                    if (tabItem.Tag == e.TabItem)
+                    {
+                        tabItemToClose = tabItem;
+                        break;
+                    }
+                }
+
+                if (tabItemToClose != null)
+                {
+                    // Get the container before removal
+                    var container = tabItemToClose.Content as MainWindowContainer;
+                    
+                    // Dispose the container if it implements IDisposable
+                    if (container is IDisposable disposable)
+                    {
+                        try
+                        {
+                            disposable.Dispose();
+                            _instanceLogger?.LogDebug($"Disposed container for tab: {e.TabItem.Title}");
+                        }
+                        catch (Exception disposeEx)
+                        {
+                            _instanceLogger?.LogError(disposeEx, $"Error disposing container for tab: {e.TabItem.Title}");
+                        }
+                    }
+                    
+                    // Additional cleanup if needed
+                    if (container != null)
+                    {
+                        // Clean up any remaining references
+                        container.DataContext = null;
+                    }
                 }
                 
-                _instanceLogger?.LogDebug($"Tab closed: {e.TabItem.Title}");
+                _instanceLogger?.LogDebug($"Tab close handled: {e.TabItem.Title}");
             }
             catch (Exception ex)
             {
-                _instanceLogger?.LogError(ex, "Error closing tab");
+                _instanceLogger?.LogError(ex, "Error handling tab close request");
+                e.Cancel = true; // Cancel the close on error to prevent data loss
             }
         }
 

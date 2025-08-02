@@ -2721,12 +2721,31 @@ namespace ExplorerPro.UI.Controls
         {
             try
             {
+                // Check if the template is applied
+                if (!tabItem.IsLoaded)
+                {
+                    _logger?.LogDebug($"TabItem template not loaded yet, deferring event wiring for tab: {tabItem.Header}");
+                    
+                    // Defer until template is loaded
+                    RoutedEventHandler handler = null;
+                    handler = (s, e) => {
+                        tabItem.Loaded -= handler;
+                        WireUpTabItemEvents(tabItem);
+                    };
+                    tabItem.Loaded += handler;
+                    return;
+                }
+                
                 // Find close button in the tab item template
                 var closeButton = FindChildOfType<Button>(tabItem, "CloseButton");
                 if (closeButton != null)
                 {
                     closeButton.Click -= OnTabCloseButtonClick; // Remove any existing handler
                     SubscribeToRoutedEventWeak(closeButton, Button.ClickEvent, OnTabCloseButtonClick);
+                }
+                else
+                {
+                    _logger?.LogWarning($"Close button not found in tab template for tab: {tabItem.Header}");
                 }
             }
             catch (Exception ex)
@@ -3305,7 +3324,16 @@ namespace ExplorerPro.UI.Controls
                 return false;
             }
 
-            // Fire event to allow cancellation
+            // Check if tab is pinned
+            if (tabItem.IsPinned)
+            {
+                _logger?.LogDebug($"Cannot close pinned tab: {tabItem.Title}");
+                MessageBox.Show("Cannot close pinned tab. Unpin it first to close.", 
+                    "Pinned Tab", MessageBoxButton.OK, MessageBoxImage.Information);
+                return false;
+            }
+
+            // Fire event to allow cancellation and handle disposal
             var eventArgs = new TabCloseRequestedEventArgs(tabItem);
             TabCloseRequested?.Invoke(this, eventArgs);
 
@@ -3985,6 +4013,58 @@ namespace ExplorerPro.UI.Controls
             {
                 SelectedTabItem = model;
                 model.Activate();
+            }
+        }
+
+        /// <summary>
+        /// Handles items collection changes to wire up/clean up tab events
+        /// </summary>
+        /// <param name="e">Collection change event args</param>
+        protected override void OnItemsChanged(NotifyCollectionChangedEventArgs e)
+        {
+            base.OnItemsChanged(e);
+
+            try
+            {
+                // Handle new items
+                if (e.Action == NotifyCollectionChangedAction.Add && e.NewItems != null)
+                {
+                    foreach (var item in e.NewItems)
+                    {
+                        if (item is TabItem tabItem)
+                        {
+                            WireUpTabItemEvents(tabItem);
+                        }
+                    }
+                }
+
+                // Handle removed items
+                if (e.Action == NotifyCollectionChangedAction.Remove && e.OldItems != null)
+                {
+                    foreach (var item in e.OldItems)
+                    {
+                        if (item is TabItem tabItem)
+                        {
+                            // Clean up any event handlers
+                            var closeButton = FindChildOfType<Button>(tabItem, "CloseButton");
+                            if (closeButton != null)
+                            {
+                                // The weak event subscription will automatically clean up
+                                _logger?.LogDebug($"Tab removed, weak event handlers will be cleaned up for: {tabItem.Header}");
+                            }
+                        }
+                    }
+                }
+
+                // Handle reset (clear all)
+                if (e.Action == NotifyCollectionChangedAction.Reset)
+                {
+                    _logger?.LogDebug("All tabs cleared, weak event handlers will be cleaned up automatically");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error handling items collection change");
             }
         }
 

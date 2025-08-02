@@ -92,8 +92,8 @@ Code-behind dependencies that assume current structure:
      * ToggleTodoPanel_Click
    - Tab Management:
      * AddTabButton_Click
-     * TabCloseButton_Click
      * MainTabs_SelectionChanged
+     * Tab close handled by ChromeStyleTabControl
 
 3. UI UPDATE METHODS:
    - UpdateActivityBarButtonStates() - Updates button appearance
@@ -585,12 +585,12 @@ All dependencies mapped and validation tests established.
                                                         VerticalAlignment="Center"
                                                         Margin="8,6,4,6"/>
                                         
+                                        <!-- Close button event handled programmatically in ChromeStyleTabControl.WireUpTabItemEvents -->
                                         <Button Grid.Column="1" 
                                                 x:Name="CloseButton"
                                                 Content="×" 
                                                 Width="20" Height="20"
                                                 Style="{StaticResource ChromeCloseButtonStyle}"
-                                                Click="TabCloseButton_Click"
                                                 ToolTip="Close tab"
                                                 Margin="0,0,4,0"/>
                                     </Grid>
@@ -665,7 +665,6 @@ All dependencies mapped and validation tests established.
                                         Content="×" 
                                         Width="20" Height="20"
                                         Style="{StaticResource ChromeCloseButtonStyle}"
-                                        Click="TabCloseButton_Click"
                                         ToolTip="Close tab"/>
                             </Grid>
                             
