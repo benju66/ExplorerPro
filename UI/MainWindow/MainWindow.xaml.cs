@@ -3216,11 +3216,22 @@ namespace ExplorerPro.UI.MainWindow
                 {
                     var contextTabItem = GetContextMenuTabItem(contextMenu);
                     
-                    if (contextTabItem != null)
+                    if (contextTabItem != null && contextTabItem.Parent is ChromeStyleTabControl chromeTabControl)
                     {
-                        // Use the unified command system for consistent pinning
-                        if (contextTabItem.Tag is TabModel tabModel && 
-                            contextTabItem.Parent is ChromeStyleTabControl chromeTabControl)
+                        TabModel tabModel = null;
+                        
+                        // Priority 1: Check DataContext (Phase 2 pattern)
+                        if (contextTabItem.DataContext is TabModel dataContextModel)
+                        {
+                            tabModel = dataContextModel;
+                        }
+                        // Priority 2: Check Tag for backward compatibility
+                        else if (contextTabItem.Tag is TabModel tagModel)
+                        {
+                            tabModel = tagModel;
+                        }
+                        
+                        if (tabModel != null)
                         {
                             var success = await ExplorerPro.Commands.UnifiedTabCommands.PinOperations.ToggleTabPinAsync(
                                 tabModel, 
@@ -3241,10 +3252,14 @@ namespace ExplorerPro.UI.MainWindow
                                 
                                 _instanceLogger?.LogInformation($"Tab pin state changed using unified command system: {contextTabItem.Header} - {(isPinned ? "Pinned" : "Unpinned")}");
                             }
+                            else
+                            {
+                                _instanceLogger?.LogWarning("Pin toggle operation failed");
+                            }
                         }
                         else
                         {
-                            _instanceLogger?.LogWarning("Pin toggle operation failed");
+                            _instanceLogger?.LogWarning("Could not find TabModel in DataContext or Tag");
                         }
                     }
                 }
@@ -3312,19 +3327,25 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Checks if a tab is pinned by examining its tag
+        /// Checks if a tab is pinned by examining DataContext first, then Tag for backward compatibility
         /// </summary>
         private bool IsTabPinned(TabItem tabItem)
         {
             try
             {
-                // Single source of truth - only check TabModel
-                if (tabItem?.Tag is TabModel model)
+                // Priority 1: Check DataContext (Phase 2 pattern)
+                if (tabItem?.DataContext is TabModel dataContextModel)
                 {
-                    return model.IsPinned;
+                    return dataContextModel.IsPinned;
                 }
                 
-                return false; // No fallbacks, consistent behavior
+                // Priority 2: Check Tag for backward compatibility
+                if (tabItem?.Tag is TabModel tagModel)
+                {
+                    return tagModel.IsPinned;
+                }
+                
+                return false;
             }
             catch (Exception ex)
             {

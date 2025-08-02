@@ -278,12 +278,42 @@ namespace ExplorerPro.Models
         /// <summary>
         /// Dynamic width for the tab based on pinned state
         /// </summary>
-        public double TabWidth => _isPinned ? 40 : 200;
+        public double TabWidth => _isPinned ? 60 : 200;
+        
+        /// <summary>
+        /// Minimum width for the tab
+        /// </summary>
+        public double MinTabWidth => _isPinned ? 60 : 100;
+        
+        /// <summary>
+        /// Maximum width for the tab
+        /// </summary>
+        public double MaxTabWidth => _isPinned ? 60 : 250;
         
         /// <summary>
         /// Whether this tab can be closed (pinned tabs and tabs with unsaved changes cannot be closed)
         /// </summary>
         public bool CanClose => !_isPinned && !HasUnsavedChanges;
+        
+        /// <summary>
+        /// Whether to show the close button on this tab
+        /// </summary>
+        public bool ShowCloseButton => !_isPinned && !HasUnsavedChanges;
+        
+        /// <summary>
+        /// Whether to show the pin button on this tab (optional feature)
+        /// </summary>
+        public bool ShowPinButton => true; // Always show for easy access
+        
+        /// <summary>
+        /// Tooltip text for the pin button
+        /// </summary>
+        public string PinButtonTooltip => _isPinned ? "Unpin tab" : "Pin tab";
+        
+        /// <summary>
+        /// Content/icon for the pin button
+        /// </summary>
+        public string PinButtonContent => _isPinned ? "📌" : "📍";
         
         /// <summary>
         /// Whether this tab can be moved/reordered
@@ -459,12 +489,18 @@ namespace ExplorerPro.Models
             if (propertyName == nameof(IsPinned))
             {
                 OnPropertyChanged(nameof(TabWidth));
+                OnPropertyChanged(nameof(MinTabWidth));
+                OnPropertyChanged(nameof(MaxTabWidth));
                 OnPropertyChanged(nameof(CanClose));
+                OnPropertyChanged(nameof(ShowCloseButton));
+                OnPropertyChanged(nameof(PinButtonTooltip));
+                OnPropertyChanged(nameof(PinButtonContent));
             }
             
             if (propertyName == nameof(HasUnsavedChanges))
             {
                 OnPropertyChanged(nameof(CanClose));
+                OnPropertyChanged(nameof(ShowCloseButton));
             }
             
             if (propertyName == nameof(CustomColor))

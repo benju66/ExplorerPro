@@ -3302,12 +3302,52 @@ namespace ExplorerPro.UI.Controls
 
             // Add to collection
             TabItems ??= new ObservableCollection<TabModel>();
-            TabItems.Add(newTab);
+            
+            // Insert at the correct position (after pinned tabs)
+            int insertIndex = GetNewTabInsertIndex();
+            if (insertIndex >= TabItems.Count)
+            {
+                TabItems.Add(newTab);
+            }
+            else
+            {
+                TabItems.Insert(insertIndex, newTab);
+            }
 
             // Select the new tab
             SelectedTabItem = newTab;
 
             return newTab;
+        }
+        
+        /// <summary>
+        /// Gets the index where a new non-pinned tab should be inserted
+        /// </summary>
+        /// <returns>Index after all pinned tabs</returns>
+        public int GetNewTabInsertIndex()
+        {
+            if (TabItems == null || TabItems.Count == 0)
+            {
+                return 0;
+            }
+            
+            // Find the last pinned tab
+            int lastPinnedIndex = -1;
+            for (int i = 0; i < TabItems.Count; i++)
+            {
+                if (TabItems[i].IsPinned)
+                {
+                    lastPinnedIndex = i;
+                }
+                else
+                {
+                    // Once we hit a non-pinned tab, we can stop
+                    break;
+                }
+            }
+            
+            // Insert after the last pinned tab
+            return lastPinnedIndex + 1;
         }
 
         /// <summary>
