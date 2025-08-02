@@ -6,6 +6,13 @@
     "Show Address Bar": true
   },
   "restore_session": true,
+  "performance_optimization": {
+    "enable_tab_hibernation": true,
+    "enable_memory_optimization": true,
+    "hibernation_delay_minutes": 30,
+    "max_active_tabs": 10,
+    "optimization_interval_minutes": 5
+  },
   "dockable_panels": {
     "pinned_panel": true,
     "recent_items_panel": false,

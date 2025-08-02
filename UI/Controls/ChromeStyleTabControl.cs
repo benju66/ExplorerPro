@@ -246,6 +246,17 @@ namespace ExplorerPro.UI.Controls
         private TabOperationsManager _tabOperationsManager;
         private ITabDragDropService _dragDropService;
         private ExplorerPro.Core.TabManagement.TabStateManager _tabStateManager;
+        private ExplorerPro.Core.TabManagement.TabVirtualizationManager _tabVirtualizationManager;
+        private ExplorerPro.Core.TabManagement.TabHibernationManager _tabHibernationManager;
+        private ExplorerPro.Core.TabManagement.PerformanceOptimizer _performanceOptimizer;
+        private System.Windows.Threading.DispatcherTimer _optimizationTimer;
+        private Brush _originalBorderBrush;
+        
+        // Multi-tab selection support
+        private readonly ObservableCollection<TabModel> _selectedTabs = new ObservableCollection<TabModel>();
+        private TabModel _lastSelectedTab;
+        private bool _isMultiSelectMode;
+        
         private DragOperation _currentDragOperation;
         
         // Visual indicator fields
@@ -292,7 +303,7 @@ namespace ExplorerPro.UI.Controls
         }
 
         /// <summary>
-        /// Handles mouse down on tab headers for drag initiation
+        /// Handles mouse down on tab headers for drag initiation and multi-selection
         /// </summary>
         protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
         {
@@ -306,11 +317,39 @@ namespace ExplorerPro.UI.Controls
             var tabItem = FindTabItemFromPoint(e.GetPosition(this));
             
             // Validate that we have a valid tab item and not clicking on special buttons
-            if (tabItem != null && 
+            if (tabItem?.Tag is TabModel tabModel && 
                 !IsAddNewTabButton(e.OriginalSource) && 
                 !IsCloseButton(e.OriginalSource) &&
                 IsValidTabForDrag(tabItem))
             {
+                // Handle multi-selection modifiers
+                var ctrlPressed = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+                var shiftPressed = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+
+                if (ctrlPressed)
+                {
+                    // Ctrl+Click: Toggle selection
+                    HandleCtrlClick(tabModel);
+                    e.Handled = true;
+                    return;
+                }
+                else if (shiftPressed && _lastSelectedTab != null)
+                {
+                    // Shift+Click: Range selection
+                    HandleShiftClick(tabModel);
+                    e.Handled = true;
+                    return;
+                }
+                else
+                {
+                    // Normal click: Clear multi-selection if exists
+                    if (_selectedTabs.Count > 1)
+                    {
+                        ClearSelection();
+                        SelectSingleTab(tabModel);
+                    }
+                }
+
                 _dragStartPoint = e.GetPosition(this);
                 _draggedTab = tabItem;
                 _isDragging = false;
@@ -591,26 +630,49 @@ namespace ExplorerPro.UI.Controls
                         IsActive = true
                     };
 
-                    // Start visual feedback
+                    // ENHANCED: Integrate with TabDragDropService for comprehensive drag handling
+                    if (_dragDropService != null)
+                    {
+                        try
+                        {
+                            _dragDropService.StartDrag(tabModel, _dragStartPoint.Value, window);
+                            _logger?.LogInformation($"Started service-managed drag for tab: {tabModel.Title}");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning(ex, "Service drag start failed, falling back to local implementation");
+                        }
+                    }
+                    
+                    // Start enhanced visual feedback
                     try
                     {
-                        StartDragVisualFeedback();
+                        StartEnhancedDragVisualFeedback();
                     }
                     catch (Exception ex)
                     {
-                        _logger?.LogWarning(ex, "Error starting visual feedback during drag start");
+                        _logger?.LogWarning(ex, "Error starting enhanced visual feedback, falling back to basic");
+                        try
+                        {
+                            StartDragVisualFeedback();
+                        }
+                        catch (Exception fallbackEx)
+                        {
+                            _logger?.LogError(fallbackEx, "Failed to start any visual feedback during drag");
+                        }
                     }
                     
-                    // Create and show enhanced drag visual
+                    // Create and show enhanced drag visual with better positioning
                     try
                     {
-                        _dragVisualWindow = CreateDragVisual(_draggedTab);
+                        _dragVisualWindow = CreateEnhancedDragVisual(_draggedTab);
                         if (_dragVisualWindow != null)
                         {
-                            // Position at current cursor location
+                            // Position at current cursor location with better offset calculation
                             var cursorPos = Mouse.GetPosition(null);
-                            _dragVisualWindow.Left = cursorPos.X - (_dragVisualWindow.Width / 2);
-                            _dragVisualWindow.Top = cursorPos.Y - 20;
+                            var tabRect = _draggedTab.TransformToAncestor(window).TransformBounds(new Rect(_draggedTab.RenderSize));
+                            _dragVisualWindow.Left = cursorPos.X - (tabRect.Width / 2);
+                            _dragVisualWindow.Top = cursorPos.Y - 15;
                             _dragVisualWindow.Show();
                         }
                     }
@@ -1631,9 +1693,12 @@ namespace ExplorerPro.UI.Controls
             {
                 StopCurrentAnimation();
                 
+                // ENHANCED: Clear drop zone highlighting
+                ClearDropZoneHighlight();
+                
                 if (_draggedTab != null)
                 {
-                    // Animate fade back to normal with smooth transition
+                    // ENHANCED: Animate fade back to normal with enhanced transitions
                     var endStoryboard = new Storyboard();
                     
                     var opacityAnimation = new DoubleAnimation
@@ -1646,6 +1711,35 @@ namespace ExplorerPro.UI.Controls
                     Storyboard.SetTarget(opacityAnimation, _draggedTab);
                     Storyboard.SetTargetProperty(opacityAnimation, new PropertyPath("Opacity"));
                     endStoryboard.Children.Add(opacityAnimation);
+                    
+                    // ENHANCED: Add scale restoration if transform group exists
+                    if (_draggedTab.RenderTransform is TransformGroup transformGroup)
+                    {
+                        var scaleTransform = transformGroup.Children.OfType<ScaleTransform>().FirstOrDefault();
+                        if (scaleTransform != null)
+                        {
+                            var scaleXAnimation = new DoubleAnimation
+                            {
+                                To = 1.0,
+                                Duration = TimeSpan.FromMilliseconds(FADE_DURATION),
+                                EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut }
+                            };
+                            var scaleYAnimation = new DoubleAnimation
+                            {
+                                To = 1.0,
+                                Duration = TimeSpan.FromMilliseconds(FADE_DURATION),
+                                EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut }
+                            };
+                            
+                            Storyboard.SetTarget(scaleXAnimation, scaleTransform);
+                            Storyboard.SetTargetProperty(scaleXAnimation, new PropertyPath("ScaleX"));
+                            Storyboard.SetTarget(scaleYAnimation, scaleTransform);
+                            Storyboard.SetTargetProperty(scaleYAnimation, new PropertyPath("ScaleY"));
+                            
+                            endStoryboard.Children.Add(scaleXAnimation);
+                            endStoryboard.Children.Add(scaleYAnimation);
+                        }
+                    }
                     
                     CreateWeakSubscription(
                         () => endStoryboard.Completed += OnDragEndAnimationCompleted,
@@ -2363,6 +2457,165 @@ namespace ExplorerPro.UI.Controls
 
         #endregion
 
+        #region Multi-Tab Selection Properties
+
+        /// <summary>
+        /// Gets the collection of currently selected tabs
+        /// </summary>
+        public ObservableCollection<TabModel> SelectedTabs => _selectedTabs;
+
+        /// <summary>
+        /// Gets or sets whether multi-selection mode is enabled
+        /// </summary>
+        public bool IsMultiSelectMode
+        {
+            get => _isMultiSelectMode;
+            set
+            {
+                if (_isMultiSelectMode != value)
+                {
+                    _isMultiSelectMode = value;
+                    if (!_isMultiSelectMode)
+                    {
+                        ClearSelection();
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Event raised when tab selection changes
+        /// </summary>
+        public event EventHandler<TabSelectionChangedEventArgs> TabSelectionChanged;
+
+        /// <summary>
+        /// Tab selection changed event arguments
+        /// </summary>
+        public class TabSelectionChangedEventArgs : EventArgs
+        {
+            public ObservableCollection<TabModel> SelectedTabs { get; set; }
+            public TabModel AddedTab { get; set; }
+            public TabModel RemovedTab { get; set; }
+        }
+
+        /// <summary>
+        /// Handles Ctrl+Click for toggle selection
+        /// </summary>
+        private void HandleCtrlClick(TabModel tabModel)
+        {
+            if (_selectedTabs.Contains(tabModel))
+            {
+                // Deselect the tab
+                _selectedTabs.Remove(tabModel);
+                UpdateTabSelectionVisual(tabModel, false);
+                FireTabSelectionChanged(null, tabModel);
+            }
+            else
+            {
+                // Select the tab
+                _selectedTabs.Add(tabModel);
+                UpdateTabSelectionVisual(tabModel, true);
+                _lastSelectedTab = tabModel;
+                FireTabSelectionChanged(tabModel, null);
+            }
+        }
+
+        /// <summary>
+        /// Handles Shift+Click for range selection
+        /// </summary>
+        private void HandleShiftClick(TabModel tabModel)
+        {
+            if (_lastSelectedTab == null || TabItems == null) return;
+
+            var startIndex = TabItems.IndexOf(_lastSelectedTab);
+            var endIndex = TabItems.IndexOf(tabModel);
+
+            if (startIndex == -1 || endIndex == -1) return;
+
+            // Ensure startIndex is less than endIndex
+            if (startIndex > endIndex)
+            {
+                (startIndex, endIndex) = (endIndex, startIndex);
+            }
+
+            // Clear current selection
+            ClearSelection();
+
+            // Select range
+            for (int i = startIndex; i <= endIndex; i++)
+            {
+                var tab = TabItems[i];
+                _selectedTabs.Add(tab);
+                UpdateTabSelectionVisual(tab, true);
+            }
+
+            _lastSelectedTab = tabModel;
+            FireTabSelectionChanged(null, null); // Multiple tabs changed
+        }
+
+        /// <summary>
+        /// Selects a single tab and clears others
+        /// </summary>
+        private void SelectSingleTab(TabModel tabModel)
+        {
+            ClearSelection();
+            _selectedTabs.Add(tabModel);
+            UpdateTabSelectionVisual(tabModel, true);
+            _lastSelectedTab = tabModel;
+            FireTabSelectionChanged(tabModel, null);
+        }
+
+        /// <summary>
+        /// Clears all tab selections
+        /// </summary>
+        private void ClearSelection()
+        {
+            foreach (var tab in _selectedTabs.ToList())
+            {
+                UpdateTabSelectionVisual(tab, false);
+            }
+            _selectedTabs.Clear();
+        }
+
+        /// <summary>
+        /// Updates the visual appearance of a tab based on selection state
+        /// </summary>
+        private void UpdateTabSelectionVisual(TabModel tabModel, bool isSelected)
+        {
+            var tabItem = Items.OfType<TabItem>().FirstOrDefault(ti => ti.Tag == tabModel);
+            if (tabItem != null)
+            {
+                // Add visual indication for multi-selected tabs
+                if (isSelected)
+                {
+                    tabItem.BorderBrush = new SolidColorBrush(Color.FromRgb(0, 120, 212)); // Blue border
+                    tabItem.BorderThickness = new Thickness(2);
+                    tabItem.Background = new SolidColorBrush(Color.FromArgb(30, 0, 120, 212)); // Light blue background
+                }
+                else
+                {
+                    tabItem.ClearValue(BorderBrushProperty);
+                    tabItem.ClearValue(BorderThicknessProperty);
+                    tabItem.ClearValue(BackgroundProperty);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Fires the tab selection changed event
+        /// </summary>
+        private void FireTabSelectionChanged(TabModel addedTab, TabModel removedTab)
+        {
+            TabSelectionChanged?.Invoke(this, new TabSelectionChangedEventArgs
+            {
+                SelectedTabs = _selectedTabs,
+                AddedTab = addedTab,
+                RemovedTab = removedTab
+            });
+        }
+
+        #endregion
+
         #region Event Handlers
 
         /// <summary>
@@ -2390,8 +2643,37 @@ namespace ExplorerPro.UI.Controls
                 _ = LoadSavedTabStatesAsync();
             }
             
+            // Initialize performance optimization services
+            if (_tabVirtualizationManager == null)
+            {
+                _tabVirtualizationManager = ExplorerPro.App.TabVirtualizationManager;
+            }
+            
+            if (_tabHibernationManager == null)
+            {
+                _tabHibernationManager = ExplorerPro.App.TabHibernationManager;
+                // Subscribe to hibernation events for UI updates
+                if (_tabHibernationManager != null)
+                {
+                    CreateWeakSubscription(
+                        () => _tabHibernationManager.TabHibernated += OnTabHibernated,
+                        () => _tabHibernationManager.TabHibernated -= OnTabHibernated);
+                    CreateWeakSubscription(
+                        () => _tabHibernationManager.TabReactivated += OnTabReactivated,
+                        () => _tabHibernationManager.TabReactivated -= OnTabReactivated);
+                }
+            }
+            
+            if (_performanceOptimizer == null)
+            {
+                _performanceOptimizer = ExplorerPro.App.PerformanceOptimizer;
+            }
+            
             // Wire up event handlers for dynamically created buttons
             WireUpTabControlEvents();
+            
+            // Start periodic memory optimization
+            StartPerformanceOptimization();
             
             // Ensure we have at least one tab if none exist
             if (TabItems?.Count == 0 && AllowAddNew)
@@ -2499,31 +2781,98 @@ namespace ExplorerPro.UI.Controls
         }
 
         /// <summary>
-        /// Handles keyboard shortcuts
+        /// Handles keyboard shortcuts including multi-selection and enhanced navigation
         /// </summary>
         private void OnKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.T && Keyboard.Modifiers == ModifierKeys.Control && AllowAddNew)
+            var ctrlPressed = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+            var shiftPressed = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+            var altPressed = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
+
+            // Basic tab operations
+            if (e.Key == Key.T && ctrlPressed && AllowAddNew)
             {
                 // Ctrl+T: New Tab
                 AddNewTab();
                 e.Handled = true;
             }
-            else if (e.Key == Key.W && Keyboard.Modifiers == ModifierKeys.Control && AllowDelete)
+            else if (e.Key == Key.W && ctrlPressed && AllowDelete)
             {
-                // Ctrl+W: Close Tab
-                CloseCurrentTab();
+                // Ctrl+W: Close Tab (or close selected tabs if multi-selected)
+                if (_selectedTabs.Count > 1)
+                {
+                    CloseSelectedTabs();
+                }
+                else
+                {
+                    CloseCurrentTab();
+                }
                 e.Handled = true;
             }
-            else if (e.Key >= Key.D1 && e.Key <= Key.D9 && Keyboard.Modifiers == ModifierKeys.Control)
+            // Enhanced navigation
+            else if (e.Key == Key.Tab && ctrlPressed)
+            {
+                // Ctrl+Tab: Cycle through tabs
+                if (shiftPressed)
+                {
+                    CycleToPreviousTab();
+                }
+                else
+                {
+                    CycleToNextTab();
+                }
+                e.Handled = true;
+            }
+            else if (e.Key == Key.PageUp && ctrlPressed)
+            {
+                // Ctrl+PageUp: Previous tab
+                CycleToPreviousTab();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.PageDown && ctrlPressed)
+            {
+                // Ctrl+PageDown: Next tab
+                CycleToNextTab();
+                e.Handled = true;
+            }
+            // Number key navigation
+            else if (e.Key >= Key.D1 && e.Key <= Key.D9 && ctrlPressed)
             {
                 // Ctrl+1-9: Switch to tab by number
                 var tabIndex = e.Key - Key.D1;
                 if (tabIndex < TabItems?.Count)
                 {
                     SelectedTabItem = TabItems[tabIndex];
+                    ClearSelection();
+                    SelectSingleTab(TabItems[tabIndex]);
                     e.Handled = true;
                 }
+            }
+            // Multi-selection shortcuts
+            else if (e.Key == Key.A && ctrlPressed)
+            {
+                // Ctrl+A: Select all tabs
+                SelectAllTabs();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.D && ctrlPressed && shiftPressed)
+            {
+                // Ctrl+Shift+D: Deselect all
+                ClearSelection();
+                e.Handled = true;
+            }
+            // Tab grouping shortcuts
+            else if (e.Key == Key.G && ctrlPressed && _selectedTabs.Count > 1)
+            {
+                // Ctrl+G: Group selected tabs
+                GroupSelectedTabs();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.U && ctrlPressed && shiftPressed)
+            {
+                // Ctrl+Shift+U: Ungroup selected tabs
+                UngroupSelectedTabs();
+                e.Handled = true;
             }
         }
 
@@ -3064,6 +3413,12 @@ namespace ExplorerPro.UI.Controls
             {
                 // Update the selected tab in the underlying TabControl
                 control.UpdateSelection();
+                
+                // Track tab access for performance optimization
+                if (e.NewValue is TabModel selectedTabModel)
+                {
+                    control.TrackTabAccess(selectedTabModel);
+                }
             }
         }
 
@@ -3814,6 +4169,676 @@ namespace ExplorerPro.UI.Controls
 
         #endregion
 
+        #region Enhanced Drag & Drop Visual Feedback
+
+        /// <summary>
+        /// Starts enhanced visual feedback for drag operations with better animations and indicators
+        /// </summary>
+        private void StartEnhancedDragVisualFeedback()
+        {
+            try
+            {
+                if (_draggedTab == null) return;
+
+                // ENHANCED: Multi-layered visual feedback
+                
+                // 1. Enhanced tab opacity with smooth transition
+                var opacityAnimation = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    From = 1.0,
+                    To = 0.7,
+                    Duration = TimeSpan.FromMilliseconds(150),
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase()
+                };
+                _draggedTab.BeginAnimation(OpacityProperty, opacityAnimation);
+
+                // 2. Enhanced transform with subtle scale effect
+                if (_draggedTab.RenderTransform == null || !(_draggedTab.RenderTransform is TransformGroup))
+                {
+                    var transformGroup = new TransformGroup();
+                    transformGroup.Children.Add(new ScaleTransform(1.0, 1.0));
+                    transformGroup.Children.Add(new TranslateTransform(0, 0));
+                    _draggedTab.RenderTransform = transformGroup;
+                    _draggedTab.RenderTransformOrigin = new Point(0.5, 0.5);
+                }
+
+                var scaleTransform = ((TransformGroup)_draggedTab.RenderTransform).Children
+                    .OfType<ScaleTransform>().FirstOrDefault();
+                if (scaleTransform != null)
+                {
+                    var scaleAnimation = new System.Windows.Media.Animation.DoubleAnimation
+                    {
+                        From = 1.0,
+                        To = 1.05,
+                        Duration = TimeSpan.FromMilliseconds(150),
+                        EasingFunction = new System.Windows.Media.Animation.BackEase()
+                    };
+                    scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleAnimation);
+                    scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, scaleAnimation);
+                }
+
+                // 3. Enhanced drop zone highlighting for current tab control
+                HighlightDropZones();
+
+                _logger?.LogDebug("Enhanced drag visual feedback started");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error in enhanced drag visual feedback, falling back to basic");
+                StartDragVisualFeedback();
+            }
+        }
+
+        /// <summary>
+        /// Creates enhanced drag visual with modern styling and animations
+        /// </summary>
+        private Window CreateEnhancedDragVisual(TabItem draggedTab)
+        {
+            if (draggedTab?.Tag is not TabModel tabModel) return null;
+
+            try
+            {
+                var dragWindow = new Window
+                {
+                    WindowStyle = WindowStyle.None,
+                    AllowsTransparency = true,
+                    Background = Brushes.Transparent,
+                    ShowInTaskbar = false,
+                    Topmost = true,
+                    IsHitTestVisible = false,
+                    Width = Math.Max(draggedTab.ActualWidth, 120),
+                    Height = Math.Max(draggedTab.ActualHeight, 32),
+                    Opacity = 0.0 // Start invisible for smooth fade-in
+                };
+
+                // Enhanced visual container
+                var container = new Grid();
+
+                // Modern drop shadow effect
+                var shadow = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromArgb(30, 0, 0, 0)),
+                    CornerRadius = new CornerRadius(8),
+                    Margin = new Thickness(2, 2, 6, 6)
+                };
+
+                // Main visual border with modern styling
+                var visualBorder = new Border
+                {
+                    Background = new LinearGradientBrush(
+                        Color.FromArgb(240, 248, 249, 250),
+                        Color.FromArgb(240, 241, 243, 245),
+                        90),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(200, 0, 120, 212)),
+                    BorderThickness = new Thickness(2),
+                    CornerRadius = new CornerRadius(6),
+                    Margin = new Thickness(0, 0, 4, 4)
+                };
+
+                // Enhanced content layout
+                var contentGrid = new Grid();
+                contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
+                contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
+
+                // Tab icon/indicator
+                var tabIcon = new Ellipse
+                {
+                    Width = 8,
+                    Height = 8,
+                    Fill = tabModel.IsPinned 
+                        ? new SolidColorBrush(Color.FromRgb(255, 193, 7))
+                        : new SolidColorBrush(Color.FromRgb(0, 120, 212)),
+                    Margin = new Thickness(8, 0, 6, 0),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                Grid.SetColumn(tabIcon, 0);
+
+                // Enhanced tab title
+                var titleText = new TextBlock
+                {
+                    Text = tabModel.Title,
+                    FontSize = 12,
+                    FontWeight = FontWeights.Medium,
+                    Foreground = new SolidColorBrush(Color.FromRgb(32, 32, 32)),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 8, 0),
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                };
+                Grid.SetColumn(titleText, 1);
+
+                // Drag operation indicator
+                var dragIndicator = new TextBlock
+                {
+                    Text = "⋮⋮",
+                    FontSize = 10,
+                    Foreground = new SolidColorBrush(Color.FromArgb(150, 96, 96, 96)),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 6, 0)
+                };
+                Grid.SetColumn(dragIndicator, 2);
+
+                contentGrid.Children.Add(tabIcon);
+                contentGrid.Children.Add(titleText);
+                contentGrid.Children.Add(dragIndicator);
+
+                visualBorder.Child = contentGrid;
+                container.Children.Add(shadow);
+                container.Children.Add(visualBorder);
+                dragWindow.Content = container;
+
+                // Enhanced fade-in animation
+                var fadeIn = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    From = 0.0,
+                    To = 0.9,
+                    Duration = TimeSpan.FromMilliseconds(200),
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase()
+                };
+                
+                dragWindow.BeginAnimation(Window.OpacityProperty, fadeIn);
+
+                _logger?.LogDebug($"Enhanced drag visual created for tab: {tabModel.Title}");
+                return dragWindow;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error creating enhanced drag visual, falling back to basic");
+                return CreateDragVisual(draggedTab);
+            }
+        }
+
+        /// <summary>
+        /// Highlights potential drop zones with visual indicators
+        /// </summary>
+        private void HighlightDropZones()
+        {
+            try
+            {
+                // Store original border brush for restoration
+                _originalBorderBrush = BorderBrush;
+                
+                var colorAnimation = new System.Windows.Media.Animation.ColorAnimation
+                {
+                    From = Colors.Transparent,
+                    To = Color.FromArgb(50, 0, 120, 212),
+                    Duration = TimeSpan.FromMilliseconds(300),
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever
+                };
+
+                var animatedBrush = new SolidColorBrush();
+                animatedBrush.BeginAnimation(SolidColorBrush.ColorProperty, colorAnimation);
+                BorderBrush = animatedBrush;
+                
+                _logger?.LogDebug("Drop zone highlighting activated");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error highlighting drop zones");
+            }
+        }
+
+        /// <summary>
+        /// Removes drop zone highlighting
+        /// </summary>
+        private void ClearDropZoneHighlight()
+        {
+            try
+            {
+                if (_originalBorderBrush != null)
+                {
+                    BorderBrush = _originalBorderBrush;
+                    _originalBorderBrush = null;
+                }
+                else
+                {
+                    ClearValue(BorderBrushProperty);
+                }
+                
+                _logger?.LogDebug("Drop zone highlighting cleared");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error clearing drop zone highlight");
+            }
+        }
+
+        #endregion
+
+        #region Advanced Navigation and Grouping
+
+        /// <summary>
+        /// Cycles to the next tab in the collection
+        /// </summary>
+        private void CycleToNextTab()
+        {
+            if (TabItems == null || TabItems.Count <= 1) return;
+
+            var currentIndex = SelectedIndex;
+            var nextIndex = (currentIndex + 1) % TabItems.Count;
+            
+            SelectedTabItem = TabItems[nextIndex];
+            ClearSelection();
+            SelectSingleTab(TabItems[nextIndex]);
+        }
+
+        /// <summary>
+        /// Cycles to the previous tab in the collection
+        /// </summary>
+        private void CycleToPreviousTab()
+        {
+            if (TabItems == null || TabItems.Count <= 1) return;
+
+            var currentIndex = SelectedIndex;
+            var previousIndex = currentIndex <= 0 ? TabItems.Count - 1 : currentIndex - 1;
+            
+            SelectedTabItem = TabItems[previousIndex];
+            ClearSelection();
+            SelectSingleTab(TabItems[previousIndex]);
+        }
+
+        /// <summary>
+        /// Selects all tabs
+        /// </summary>
+        private void SelectAllTabs()
+        {
+            if (TabItems == null) return;
+
+            ClearSelection();
+            foreach (var tab in TabItems)
+            {
+                _selectedTabs.Add(tab);
+                UpdateTabSelectionVisual(tab, true);
+            }
+
+            if (TabItems.Count > 0)
+            {
+                _lastSelectedTab = TabItems.Last();
+            }
+
+            FireTabSelectionChanged(null, null); // Multiple tabs changed
+        }
+
+        /// <summary>
+        /// Closes all currently selected tabs
+        /// </summary>
+        private void CloseSelectedTabs()
+        {
+            if (_selectedTabs.Count == 0) return;
+
+            var tabsToClose = _selectedTabs.ToList();
+            ClearSelection();
+
+            foreach (var tab in tabsToClose)
+            {
+                try
+                {
+                    CloseTab(tab);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, $"Error closing tab: {tab.Title}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Groups the currently selected tabs
+        /// </summary>
+        private void GroupSelectedTabs()
+        {
+            if (_selectedTabs.Count < 2) return;
+
+            try
+            {
+                // Create a simple group ID
+                var groupId = Guid.NewGuid().ToString();
+                var groupColor = GenerateGroupColor();
+
+                foreach (var tab in _selectedTabs)
+                {
+                    tab.GroupId = groupId;
+                    tab.Metadata["GroupColor"] = groupColor;
+                    UpdateTabGroupVisual(tab, groupColor);
+                }
+
+                _logger?.LogInformation($"Grouped {_selectedTabs.Count} tabs with ID: {groupId}");
+                
+                // Optional: Reorder tabs to be adjacent
+                ReorderGroupedTabs(groupId);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error grouping selected tabs");
+            }
+        }
+
+        /// <summary>
+        /// Ungroups the currently selected tabs
+        /// </summary>
+        private void UngroupSelectedTabs()
+        {
+            if (_selectedTabs.Count == 0) return;
+
+            try
+            {
+                foreach (var tab in _selectedTabs)
+                {
+                    tab.GroupId = null;
+                    tab.Metadata.Remove("GroupColor");
+                    UpdateTabGroupVisual(tab, null);
+                }
+
+                _logger?.LogInformation($"Ungrouped {_selectedTabs.Count} tabs");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error ungrouping selected tabs");
+            }
+        }
+
+        /// <summary>
+        /// Generates a random color for tab groups
+        /// </summary>
+        private Color GenerateGroupColor()
+        {
+            var colors = new[]
+            {
+                Color.FromRgb(255, 193, 7),   // Amber
+                Color.FromRgb(76, 175, 80),   // Green
+                Color.FromRgb(156, 39, 176),  // Purple
+                Color.FromRgb(255, 87, 34),   // Deep Orange
+                Color.FromRgb(33, 150, 243),  // Blue
+                Color.FromRgb(255, 152, 0),   // Orange
+                Color.FromRgb(139, 195, 74),  // Light Green
+                Color.FromRgb(233, 30, 99)    // Pink
+            };
+
+            var random = new Random();
+            return colors[random.Next(colors.Length)];
+        }
+
+        /// <summary>
+        /// Updates the visual appearance of a tab based on group membership
+        /// </summary>
+        private void UpdateTabGroupVisual(TabModel tabModel, Color? groupColor)
+        {
+            var tabItem = Items.OfType<TabItem>().FirstOrDefault(ti => ti.Tag == tabModel);
+            if (tabItem != null)
+            {
+                if (groupColor.HasValue)
+                {
+                    // Add a colored indicator for grouped tabs
+                    var indicator = new Border
+                    {
+                        Width = 3,
+                        Height = 20,
+                        Background = new SolidColorBrush(groupColor.Value),
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(2, 0, 0, 0)
+                    };
+
+                    // Add the indicator to the tab header if it doesn't exist
+                    if (tabItem.Header is string)
+                    {
+                        var stackPanel = new StackPanel { Orientation = Orientation.Horizontal };
+                        stackPanel.Children.Add(indicator);
+                        stackPanel.Children.Add(new TextBlock { Text = tabItem.Header.ToString(), VerticalAlignment = VerticalAlignment.Center });
+                        tabItem.Header = stackPanel;
+                    }
+                }
+                else
+                {
+                    // Remove group indicator - restore original header
+                    if (tabItem.Header is StackPanel && tabModel.Title != null)
+                    {
+                        tabItem.Header = tabModel.Title;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Reorders tabs in a group to be adjacent
+        /// </summary>
+        private void ReorderGroupedTabs(string groupId)
+        {
+            try
+            {
+                if (TabItems == null) return;
+
+                var groupedTabs = TabItems.Where(t => t.GroupId == groupId).ToList();
+                if (groupedTabs.Count < 2) return;
+
+                // Find the lowest index among grouped tabs
+                var minIndex = groupedTabs.Min(t => TabItems.IndexOf(t));
+
+                // Move all grouped tabs to be adjacent starting from minIndex
+                for (int i = 0; i < groupedTabs.Count; i++)
+                {
+                    var tab = groupedTabs[i];
+                    var currentIndex = TabItems.IndexOf(tab);
+                    var targetIndex = minIndex + i;
+
+                    if (currentIndex != targetIndex)
+                    {
+                        _tabOperationsManager?.ReorderTab(this, tab, targetIndex);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, $"Error reordering grouped tabs for group: {groupId}");
+            }
+        }
+
+        #endregion
+
+        #region Performance Optimization
+
+        /// <summary>
+        /// Handles tab hibernation events from the hibernation manager
+        /// </summary>
+        private void OnTabHibernated(object sender, object e)
+        {
+            try
+            {
+                // Extract tab ID from hibernation event
+                if (e?.GetType().GetProperty("TabId")?.GetValue(e) is string tabId)
+                {
+                    var tabModel = TabItems?.FirstOrDefault(t => t.Id == tabId);
+                    if (tabModel != null)
+                    {
+                        _logger?.LogInformation($"Tab hibernated: {tabModel.Title}");
+                        
+                        // Update tab model state
+                        tabModel.State = Models.TabState.Hibernated;
+                        
+                        // Update visual indicators if needed
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            UpdateHibernatedTabVisuals(tabModel);
+                        }));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error handling tab hibernation event");
+            }
+        }
+
+        /// <summary>
+        /// Handles tab reactivation events from the hibernation manager
+        /// </summary>
+        private void OnTabReactivated(object sender, object e)
+        {
+            try
+            {
+                // Extract tab ID from reactivation event
+                if (e?.GetType().GetProperty("TabId")?.GetValue(e) is string tabId)
+                {
+                    var tabModel = TabItems?.FirstOrDefault(t => t.Id == tabId);
+                    if (tabModel != null)
+                    {
+                        _logger?.LogInformation($"Tab reactivated: {tabModel.Title}");
+                        
+                        // Update tab model state
+                        tabModel.State = Models.TabState.Normal;
+                        
+                        // Update visual indicators if needed
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            UpdateReactivatedTabVisuals(tabModel);
+                        }));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error handling tab reactivation event");
+            }
+        }
+
+        /// <summary>
+        /// Updates visual indicators for hibernated tabs
+        /// </summary>
+        private void UpdateHibernatedTabVisuals(TabModel tabModel)
+        {
+            try
+            {
+                var tabItem = Items.Cast<TabItem>().FirstOrDefault(t => t.Tag == tabModel);
+                if (tabItem != null)
+                {
+                    // Add visual indicator for hibernated state (e.g., opacity, icon)
+                    tabItem.Opacity = 0.6; // Dim hibernated tabs
+                    _logger?.LogDebug($"Updated hibernated visuals for tab: {tabModel.Title}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, $"Error updating hibernated visuals for tab: {tabModel.Title}");
+            }
+        }
+
+        /// <summary>
+        /// Updates visual indicators for reactivated tabs
+        /// </summary>
+        private void UpdateReactivatedTabVisuals(TabModel tabModel)
+        {
+            try
+            {
+                var tabItem = Items.Cast<TabItem>().FirstOrDefault(t => t.Tag == tabModel);
+                if (tabItem != null)
+                {
+                    // Remove hibernation visual indicators
+                    tabItem.Opacity = 1.0; // Restore full opacity
+                    _logger?.LogDebug($"Updated reactivated visuals for tab: {tabModel.Title}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, $"Error updating reactivated visuals for tab: {tabModel.Title}");
+            }
+        }
+
+        /// <summary>
+        /// Tracks tab access for virtualization and hibernation
+        /// </summary>
+        private void TrackTabAccess(TabModel tabModel)
+        {
+            try
+            {
+                if (tabModel == null) return;
+
+                // Register access with virtualization manager
+                _tabVirtualizationManager?.RegisterTabAccess(tabModel.Id);
+
+                // Update activation data - setting IsActive=true automatically updates LastActivated and ActivationCount
+                if (!tabModel.IsActive)
+                {
+                    tabModel.IsActive = true;
+                }
+
+                // If tab was hibernated, request reactivation
+                if (tabModel.State == Models.TabState.Hibernated)
+                {
+                    _ = Task.Run(async () => await _tabHibernationManager?.ReactivateTabAsync(tabModel));
+                }
+
+                _logger?.LogDebug($"Tracked access for tab: {tabModel.Title}");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, $"Error tracking tab access: {tabModel.Title}");
+            }
+        }
+
+        /// <summary>
+        /// Requests hibernation of inactive tabs to save memory
+        /// </summary>
+        public void OptimizeTabMemory()
+        {
+            try
+            {
+                if (TabItems == null || _performanceOptimizer == null) return;
+
+                var inactiveTabs = TabItems.Where(t => !t.IsActive && t.State == Models.TabState.Normal).ToList();
+                
+                foreach (var tabModel in inactiveTabs)
+                {
+                    // Queue tab for hibernation based on inactivity
+                    _ = Task.Run(async () => await _tabHibernationManager?.QueueForHibernationAsync(tabModel));
+                }
+
+                _logger?.LogDebug($"Requested hibernation evaluation for {inactiveTabs.Count} inactive tabs");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error optimizing tab memory");
+            }
+        }
+
+        /// <summary>
+        /// Starts performance optimization services and periodic memory cleanup
+        /// </summary>
+        private void StartPerformanceOptimization()
+        {
+            try
+            {
+                if (_performanceOptimizer == null) return;
+
+                // Set up periodic memory optimization (every 5 minutes)
+                _optimizationTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMinutes(5)
+                };
+                
+                _optimizationTimer.Tick += (s, e) =>
+                {
+                    try
+                    {
+                        OptimizeTabMemory();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Error during periodic memory optimization");
+                    }
+                };
+                
+                _optimizationTimer.Start();
+                
+                _logger?.LogInformation("Performance optimization started with 5-minute interval");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Error starting performance optimization");
+            }
+        }
+
+        #endregion
+
         #region Tab State Persistence
 
         /// <summary>
@@ -4010,6 +5035,25 @@ namespace ExplorerPro.UI.Controls
                             _logger?.LogWarning(ex, "Error saving tab states during disposal");
                         }
                         _tabStateManager = null;
+                        
+                        // Stop and dispose optimization timer
+                        if (_optimizationTimer != null)
+                        {
+                            _optimizationTimer.Stop();
+                            _optimizationTimer = null;
+                        }
+                        
+                        // Clear drop zone highlighting state
+                        _originalBorderBrush = null;
+                        
+                        // Clear multi-selection state
+                        _selectedTabs.Clear();
+                        _lastSelectedTab = null;
+                        
+                        // Clear performance service references
+                        _tabVirtualizationManager = null;
+                        _tabHibernationManager = null;
+                        _performanceOptimizer = null;
                         
                         // Dispose current drag operation
                         if (_currentDragOperation is IDisposable disposableOperation)

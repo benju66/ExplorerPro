@@ -38,6 +38,12 @@ namespace ExplorerPro
         public static ExplorerPro.Core.TabManagement.TabOperationsManager? TabOperationsManager { get; private set; }
         public static ExplorerPro.Core.TabManagement.ITabDragDropService? DragDropService { get; private set; }
         public static ExplorerPro.Core.TabManagement.TabStateManager? TabStateManager { get; private set; }
+        
+        // Performance optimization services
+        public static ExplorerPro.Core.Monitoring.ResourceMonitor? ResourceMonitor { get; private set; }
+        public static ExplorerPro.Core.TabManagement.TabVirtualizationManager? TabVirtualizationManager { get; private set; }
+        public static ExplorerPro.Core.TabManagement.TabHibernationManager? TabHibernationManager { get; private set; }
+        public static ExplorerPro.Core.TabManagement.PerformanceOptimizer? PerformanceOptimizer { get; private set; }
 
         // Logger factory for dependency injection
         private static ILoggerFactory? _loggerFactory;
@@ -529,6 +535,19 @@ namespace ExplorerPro
                 var stateManagerLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.TabStateManager>();
                 TabStateManager = new ExplorerPro.Core.TabManagement.TabStateManager(stateManagerLogger);
                 
+                // Initialize performance services for memory optimization
+                var resourceMonitorLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.Monitoring.ResourceMonitor>();
+                ResourceMonitor = new ExplorerPro.Core.Monitoring.ResourceMonitor();
+                
+                var virtualizationLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.TabVirtualizationManager>();
+                TabVirtualizationManager = new ExplorerPro.Core.TabManagement.TabVirtualizationManager(virtualizationLogger, TabStateManager);
+                
+                var hibernationLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.TabHibernationManager>();
+                TabHibernationManager = new ExplorerPro.Core.TabManagement.TabHibernationManager(hibernationLogger, ResourceMonitor);
+                
+                var optimizerLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.PerformanceOptimizer>();
+                PerformanceOptimizer = new ExplorerPro.Core.TabManagement.PerformanceOptimizer(optimizerLogger, ResourceMonitor, null, TabHibernationManager);
+                
                 // Initialize window manager as new SimpleDetachedWindowManager with logger
                 var windowManagerLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.SimpleDetachedWindowManager>();
                 WindowManager = new ExplorerPro.Core.TabManagement.SimpleDetachedWindowManager(windowManagerLogger);
@@ -541,13 +560,21 @@ namespace ExplorerPro
                 var dragDropLogger = _loggerFactory?.CreateLogger<ExplorerPro.Core.TabManagement.TabDragDropService>();
                 DragDropService = new ExplorerPro.Core.TabManagement.TabDragDropService(dragDropLogger, WindowManager, TabOperationsManager);
                 
-                Console.WriteLine("Tab management services initialized successfully");
+                // Start performance monitoring and optimization
+                // ResourceMonitor starts automatically when constructed
+                TabVirtualizationManager?.Start();
+                
+                Console.WriteLine("Tab management and performance services initialized successfully");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error initializing tab management services: {ex.Message}");
                 // Set to null on failure
                 TabStateManager = null;
+                ResourceMonitor = null;
+                TabVirtualizationManager = null;
+                TabHibernationManager = null;
+                PerformanceOptimizer = null;
                 WindowManager = null;
                 TabOperationsManager = null;
                 DragDropService = null;
@@ -1005,6 +1032,62 @@ namespace ExplorerPro
             catch (Exception ex)
             {
                 Console.WriteLine($"Error clearing TabStateManager: {ex.Message}");
+            }
+            
+            try
+            {
+                if (PerformanceOptimizer != null)
+                {
+                    PerformanceOptimizer.Dispose();
+                    Console.WriteLine("PerformanceOptimizer disposed");
+                    PerformanceOptimizer = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing PerformanceOptimizer: {ex.Message}");
+            }
+            
+            try
+            {
+                if (TabHibernationManager != null)
+                {
+                    TabHibernationManager.Dispose();
+                    Console.WriteLine("TabHibernationManager disposed");
+                    TabHibernationManager = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing TabHibernationManager: {ex.Message}");
+            }
+            
+            try
+            {
+                if (TabVirtualizationManager != null)
+                {
+                    TabVirtualizationManager.Stop();
+                    Console.WriteLine("TabVirtualizationManager stopped");
+                    TabVirtualizationManager = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error stopping TabVirtualizationManager: {ex.Message}");
+            }
+            
+            try
+            {
+                if (ResourceMonitor != null)
+                {
+                    ResourceMonitor.Dispose();
+                    Console.WriteLine("ResourceMonitor disposed");
+                    ResourceMonitor = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing ResourceMonitor: {ex.Message}");
             }
             
             try

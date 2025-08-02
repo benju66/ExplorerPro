@@ -34,6 +34,7 @@ namespace ExplorerPro.Models
         private TabPriority _priority;
         private bool _isLoading;
         private string _iconPath;
+        private string _groupId;
         private Dictionary<string, object> _metadata;
         
         #endregion
@@ -199,6 +200,16 @@ namespace ExplorerPro.Models
         {
             get => _iconPath;
             set => SetProperty(ref _iconPath, value);
+        }
+        
+        /// <summary>
+        /// Group identifier for tab grouping functionality. 
+        /// Tabs with the same GroupId belong to the same group.
+        /// </summary>
+        public string GroupId
+        {
+            get => _groupId;
+            set => SetProperty(ref _groupId, value);
         }
         
         /// <summary>
