@@ -571,12 +571,29 @@ All dependencies mapped and validation tests established.
                                             </TransformGroup>
                                         </Border.RenderTransform>
                                         
-                                        <!-- Tab header content only -->
+                                                                            <!-- Tab header content with close button -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        
                                         <ContentPresenter x:Name="ContentSite"
+                                                        Grid.Column="0"
                                                         ContentSource="Header"
                                                         HorizontalAlignment="Center"
                                                         VerticalAlignment="Center"
-                                                        Margin="8,6,8,6"/>
+                                                        Margin="8,6,4,6"/>
+                                        
+                                        <Button Grid.Column="1" 
+                                                x:Name="CloseButton"
+                                                Content="×" 
+                                                Width="20" Height="20"
+                                                Style="{StaticResource ChromeCloseButtonStyle}"
+                                                Click="TabCloseButton_Click"
+                                                ToolTip="Close tab"
+                                                Margin="0,0,4,0"/>
+                                    </Grid>
                                     </Border>
                                     
                                     <ControlTemplate.Triggers>
@@ -647,7 +664,9 @@ All dependencies mapped and validation tests established.
                                         x:Name="CloseButton"
                                         Content="×" 
                                         Width="20" Height="20"
-                                        Style="{StaticResource ChromeCloseButtonStyle}"/>
+                                        Style="{StaticResource ChromeCloseButtonStyle}"
+                                        Click="TabCloseButton_Click"
+                                        ToolTip="Close tab"/>
                             </Grid>
                             
                             <!-- Pinned tab layout (icon only) -->

@@ -240,9 +240,9 @@ namespace ExplorerPro.Models
         }
         
         /// <summary>
-        /// Whether this tab can be closed (pinned tabs may have restrictions)
+        /// Whether this tab can be closed (pinned tabs and tabs with unsaved changes cannot be closed)
         /// </summary>
-        public bool CanClose => !_isPinned || !HasUnsavedChanges;
+        public bool CanClose => !_isPinned && !HasUnsavedChanges;
         
         /// <summary>
         /// Whether this tab can be moved/reordered
