@@ -3650,7 +3650,11 @@ namespace ExplorerPro.UI.MainWindow
         /// <param name="index">Index of tab to close</param>
         public void CloseTab(int index)
         {
-            if (MainTabs.Items.Count <= 1) return;
+            if (MainTabs.Items.Count <= 1)
+            {
+                _instanceLogger?.LogDebug("Cannot close the last tab");
+                return;
+            }
             
             if (index >= 0 && index < MainTabs.Items.Count)
             {
@@ -3671,10 +3675,44 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Close the current tab.
+        /// Enhanced for Phase 4A: Pattern-aware with CanClose check
         /// </summary>
         public void CloseCurrentTab()
         {
-            if (MainTabs.Items.Count <= 1) return;
+            // Enforce minimum one tab
+            if (MainTabs.Items.Count <= 1)
+            {
+                _instanceLogger?.LogDebug("Cannot close the last tab");
+                return;
+            }
+            
+            // Check if current tab can be closed
+            if (MainTabs.SelectedItem is TabItem tabItem)
+            {
+                bool canClose = true;
+                string tabTitle = "Unknown";
+                
+                // Priority 1: Check DataContext (Phase 2 pattern)
+                if (tabItem.DataContext is TabModel dataModel)
+                {
+                    canClose = dataModel.CanClose;
+                    tabTitle = dataModel.Title;
+                }
+                // Priority 2: Check Tag for backward compatibility
+                else if (tabItem.Tag is TabModel tagModel)
+                {
+                    canClose = tagModel.CanClose;
+                    tabTitle = tagModel.Title;
+                }
+                
+                if (!canClose)
+                {
+                    _instanceLogger?.LogDebug($"Cannot close tab '{tabTitle}' - CanClose is false");
+                    MessageBox.Show($"Cannot close tab '{tabTitle}'. It may be pinned or have unsaved changes.", 
+                        "Tab Close", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+            }
             
             CloseTab(MainTabs.SelectedIndex);
         }
@@ -5562,6 +5600,7 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Handles middle-click on tabs to close them
+        /// Enhanced for Phase 4A: Pattern-aware with CanClose check
         /// </summary>
         private void OnTabControlMouseDown(object sender, RoutedEventArgs e)
         {
@@ -5573,14 +5612,46 @@ namespace ExplorerPro.UI.MainWindow
                     var source = e.OriginalSource as DependencyObject;
                     var tabItem = FindParent<TabItem>(source);
                     
-                    if (tabItem != null && MainTabs.Items.Count > 1) // Don't close the last tab
+                    if (tabItem != null)
                     {
+                        // Enforce minimum one tab
+                        if (MainTabs.Items.Count <= 1)
+                        {
+                            _instanceLogger?.LogDebug("Cannot close the last tab via middle-click");
+                            return;
+                        }
+                        
+                        // Check if tab can be closed
+                        bool canClose = true;
+                        string tabTitle = "Unknown";
+                        
+                        // Priority 1: Check DataContext (Phase 2 pattern)
+                        if (tabItem.DataContext is TabModel dataModel)
+                        {
+                            canClose = dataModel.CanClose;
+                            tabTitle = dataModel.Title;
+                        }
+                        // Priority 2: Check Tag for backward compatibility
+                        else if (tabItem.Tag is TabModel tagModel)
+                        {
+                            canClose = tagModel.CanClose;
+                            tabTitle = tagModel.Title;
+                        }
+                        
+                        if (!canClose)
+                        {
+                            _instanceLogger?.LogDebug($"Cannot close tab '{tabTitle}' via middle-click - CanClose is false");
+                            // Silent fail for middle-click (no message box)
+                            e.Handled = true;
+                            return;
+                        }
+                        
                         var index = MainTabs.Items.IndexOf(tabItem);
                         if (index >= 0)
                         {
                             CloseTab(index);
                             e.Handled = true;
-                            _instanceLogger?.LogDebug($"Tab closed via middle-click: {tabItem.Header}");
+                            _instanceLogger?.LogDebug($"Tab closed via middle-click: {tabTitle}");
                         }
                     }
                 }

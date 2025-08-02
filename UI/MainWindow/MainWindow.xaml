@@ -711,15 +711,21 @@ All dependencies mapped and validation tests established.
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     
-                                    <!-- Tab headers with professional styling -->
-                                    <TabPanel x:Name="HeaderPanel" 
-                                             Grid.Column="0" 
-                                             IsItemsHost="True"
-                                             Background="Transparent"
-                                             Panel.ZIndex="1"
-                                             KeyboardNavigation.TabIndex="1"
-                                             Margin="8,0,0,-1"
-                                             VerticalAlignment="Bottom"/>
+                                    <!-- Tab headers with professional styling and scroll support for Phase 4A -->
+                                    <ScrollViewer Grid.Column="0" 
+                                                HorizontalScrollBarVisibility="Auto"
+                                                VerticalScrollBarVisibility="Disabled"
+                                                CanContentScroll="True"
+                                                PanningMode="HorizontalOnly"
+                                                Margin="0">
+                                        <TabPanel x:Name="HeaderPanel" 
+                                                 IsItemsHost="True"
+                                                 Background="Transparent"
+                                                 Panel.ZIndex="1"
+                                                 KeyboardNavigation.TabIndex="1"
+                                                 Margin="8,0,0,-1"
+                                                 VerticalAlignment="Bottom"/>
+                                    </ScrollViewer>
                                     
                                     <!-- Ultra-modern button panel -->
                                     <StackPanel Grid.Column="1" 
