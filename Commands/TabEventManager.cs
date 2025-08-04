@@ -176,9 +176,9 @@ namespace ExplorerPro.Commands
             if (model.IsPinned)
             {
                 // Apply pinned styling
-                tabItem.Width = 40;
-                tabItem.MinWidth = 40;
-                tabItem.MaxWidth = 40;
+                tabItem.Width = TabDimensions.PinnedWidth;
+                tabItem.MinWidth = TabDimensions.PinnedWidth;
+                tabItem.MaxWidth = TabDimensions.PinnedWidth;
                 
                 // TODO: Hide text, show only icon when properly implemented
                 tabItem.ToolTip = model.Title;

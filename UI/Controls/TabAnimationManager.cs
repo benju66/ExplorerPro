@@ -432,7 +432,7 @@ namespace ExplorerPro.UI.Controls
                 // Animate to pinned width
                 var widthAnimation = new DoubleAnimation
                 {
-                    To = ChromeSizingConstants.PinnedTabWidth,
+                    To = TabDimensions.PinnedWidth,
                     Duration = TimeSpan.FromMilliseconds(DefaultDuration),
                     EasingFunction = _defaultEasing
                 };
@@ -445,7 +445,7 @@ namespace ExplorerPro.UI.Controls
                 // Animate to normal width
                 var widthAnimation = new DoubleAnimation
                 {
-                    To = ChromeSizingConstants.PreferredTabWidth,
+                    To = TabDimensions.PreferredTabWidth,
                     Duration = TimeSpan.FromMilliseconds(DefaultDuration),
                     EasingFunction = _defaultEasing
                 };

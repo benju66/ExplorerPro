@@ -200,22 +200,4 @@ namespace ExplorerPro.UI.Controls.Interfaces
             Strategy = strategy;
         }
     }
-
-    /// <summary>
-    /// Chrome-style sizing constants
-    /// </summary>
-    public static class ChromeSizingConstants
-    {
-        public const double MinTabWidth = 40.0;
-        public const double MaxTabWidth = 240.0;
-        public const double PreferredTabWidth = 180.0;
-        public const double PinnedTabWidth = 40.0;
-        public const double TabSpacing = 2.0;
-        public const double CloseButtonWidth = 20.0;
-        public const double TabPadding = 16.0; // 8px on each side
-        public const double NewTabButtonWidth = 32.0;
-        public const double OverflowButtonWidth = 32.0;
-        public const double ScrollButtonWidth = 24.0;
-        public const double TabHeaderHeight = 36.0;
-    }
 } 

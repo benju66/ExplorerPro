@@ -94,21 +94,7 @@
                 <Setter Property="BorderBrush" Value="{DynamicResource TabControlBorder}"/>
             </Style>
             
-            <Style TargetType="{x:Type TabItem}" BasedOn="{StaticResource {x:Type TabItem}}">
-                <Setter Property="Background" Value="{DynamicResource TabBackground}"/>
-                <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource TabBorderBrush}"/>
-                <Style.Triggers>
-                    <Trigger Property="IsSelected" Value="True">
-                        <Setter Property="Background" Value="{DynamicResource TabSelectedBackground}"/>
-                        <Setter Property="Foreground" Value="{DynamicResource TabSelectedForeground}"/>
-                        <Setter Property="BorderBrush" Value="{DynamicResource TabSelectedBorderBrush}"/>
-                    </Trigger>
-                    <Trigger Property="IsMouseOver" Value="True">
-                        <Setter Property="Background" Value="{DynamicResource TabHoverBackground}"/>
-                    </Trigger>
-                </Style.Triggers>
-            </Style>
+            <!-- TabItem implicit style removed - ChromeStyleTabControl handles all tab styling -->
             
             <Style TargetType="{x:Type Menu}" BasedOn="{StaticResource {x:Type Menu}}">
                 <Setter Property="Background" Value="{DynamicResource MenuBackground}"/>
@@ -152,12 +138,12 @@
                 <Setter Property="Background" Value="{DynamicResource ScrollBarTrackBackground}"/>
                 <Style.Triggers>
                     <Trigger Property="Orientation" Value="Vertical">
-                        <Setter Property="Width" Value="12"/>
-                        <Setter Property="MinWidth" Value="12"/>
+                        <Setter Property="Width" Value="14"/>
+                        <Setter Property="MinWidth" Value="14"/>
                     </Trigger>
                     <Trigger Property="Orientation" Value="Horizontal">
-                        <Setter Property="Height" Value="12"/>
-                        <Setter Property="MinHeight" Value="12"/>
+                        <Setter Property="Height" Value="14"/>
+                        <Setter Property="MinHeight" Value="14"/>
                     </Trigger>
                 </Style.Triggers>
             </Style>

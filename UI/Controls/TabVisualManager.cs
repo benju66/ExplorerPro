@@ -310,9 +310,9 @@ namespace ExplorerPro.UI.Controls
             if (tabItem == null)
                 return;
                 
-            tabItem.Width = ChromeSizingConstants.PinnedTabWidth;
-            tabItem.MinWidth = ChromeSizingConstants.PinnedTabWidth;
-            tabItem.MaxWidth = ChromeSizingConstants.PinnedTabWidth;
+            tabItem.Width = TabDimensions.PinnedWidth;
+            tabItem.MinWidth = TabDimensions.PinnedWidth;
+            tabItem.MaxWidth = TabDimensions.PinnedWidth;
             
             // Show only icon, hide text
             if (tabItem.Template?.FindName("HeaderPresenter", tabItem) is ContentPresenter headerPresenter)

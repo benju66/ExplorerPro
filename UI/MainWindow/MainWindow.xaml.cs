@@ -2252,20 +2252,13 @@ namespace ExplorerPro.UI.MainWindow
                     {
                         MainTabs.Background = GetResource<SolidColorBrush>("TabControlBackground");
                         
-                        // Refresh all tab items
+                        // Refresh all tab items - let ChromeStyleTabControl handle visual properties
                         foreach (var item in MainTabs.Items)
                         {
                             if (item is TabItem tabItem)
                             {
-                                tabItem.Background = GetResource<SolidColorBrush>("TabBackground");
-                                tabItem.Foreground = GetResource<SolidColorBrush>("TextColor");
-                                
-                                // If this tab is selected, apply selected style
-                                if (tabItem.IsSelected)
-                                {
-                                    tabItem.Background = GetResource<SolidColorBrush>("TabSelectedBackground");
-                                    tabItem.Foreground = GetResource<SolidColorBrush>("TabSelectedForeground");
-                                }
+                                // Only update the content, not the tab visual properties
+                                // ChromeStyleTabControl handles tab styling
                                 
                                 // Update containers within tabs
                                 if (tabItem.Content is MainWindowContainer container)
@@ -2446,15 +2439,9 @@ namespace ExplorerPro.UI.MainWindow
             var tabItem = new TabItem
             {
                 DataContext = model,
-                Content = model.Content
+                Content = model.Content,
+                Tag = model  // Ensure Tag is set for compatibility
             };
-            
-            // Apply pinned tab style if needed
-            if (model.IsPinned && TryFindResource("PinnedTabItemStyle") is Style pinnedStyle)
-            {
-                tabItem.Style = pinnedStyle;
-                _instanceLogger?.LogDebug($"Applied pinned tab style to tab: {model.Title}");
-            }
             
             // Set up header binding with deferred execution to ensure visual tree is ready
             Dispatcher.BeginInvoke(new Action(() =>
@@ -3258,13 +3245,7 @@ namespace ExplorerPro.UI.MainWindow
                             }
                         }
                         
-                        // Clear the DataContext and reset to original template styling
-                        ClearCustomColorStyling(contextTabItem);
-                        
-                        // Force immediate UI refresh
-                        contextTabItem.UpdateLayout();
-                        contextTabItem.InvalidateVisual();
-                        MainTabs?.UpdateLayout();
+                        // ChromeStyleTabControl will handle visual updates based on model changes
                         
                         _instanceLogger?.LogDebug("Tab color cleared to default");
                     }
@@ -6941,222 +6922,13 @@ namespace ExplorerPro.UI.MainWindow
 
 
 
-        /// <summary>
-        /// Applies visual styling to a TabItem based on TabModel properties
-        /// </summary>
-        /// <param name="tabItem">The TabItem to style</param>
-        /// <param name="tabModel">The model with styling information</param>
-        private void ApplyTabStyling(TabItem tabItem, TabModel tabModel)
-        {
-            try
-            {
-                // Ensure the model is set as DataContext for binding
-                if (tabItem.DataContext != tabModel)
-                {
-                    tabItem.DataContext = tabModel;
-                }
-                
-                // The styling is now handled through data binding in XAML
-                // TabBackground property on TabModel will automatically update the UI
 
-                // Force refresh of the tab's visual state to apply triggers
-                tabItem.UpdateLayout();
-                tabItem.InvalidateVisual();
-                
-                // Use dispatcher to ensure all bindings are updated
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    tabItem.ApplyTemplate();
-                }), DispatcherPriority.Loaded);
-            }
-            catch (Exception ex)
-            {
-                _instanceLogger?.LogError(ex, "Error applying tab styling");
-            }
-        }
 
-        /// <summary>
-        /// Sets up the DataContext for a TabItem to enable color binding
-        /// </summary>
-        /// <param name="tabItem">The TabItem to set up</param>
-        /// <param name="color">The color to apply</param>
-        private void SetTabModelContext(TabItem tabItem, Color color)
-        {
-            try
-            {
-                // Get current pinned state before creating TabModel
-                bool isPinned = false;
-                if (tabItem.Tag is TabModel model)
-                {
-                    isPinned = model.IsPinned;
-                }
-                else if (tabItem.Tag is Dictionary<string, object> metadata &&
-                         metadata.ContainsKey("IsPinned") &&
-                         metadata["IsPinned"] is bool pinnedValue)
-                {
-                    isPinned = pinnedValue;
-                }
 
-                // Create or update a simple data object for binding
-                var tabData = new TabModel
-                {
-                    CustomColor = color,
-                    Title = tabItem.Header?.ToString() ?? "",
-                    IsPinned = isPinned // Preserve the pinned state
-                };
-                
-                // Set the DataContext to enable binding
-                tabItem.DataContext = tabData;
-                
-                // Keep the original Tag if it's a TabModel, otherwise use metadata
-                if (tabItem.Tag is TabModel originalModel)
-                {
-                    // Keep the original model as Tag for proper binding
-                    originalModel.CustomColor = color;
-                    tabItem.Tag = originalModel;
-                }
-                else
-                {
-                    // Use metadata approach for legacy compatibility
-                    var metadata = tabItem.Tag as Dictionary<string, object> ?? new Dictionary<string, object>();
-                    metadata["CustomColor"] = color;
-                    metadata["TabModel"] = tabData;
-                    metadata["IsPinned"] = isPinned;
-                    tabItem.Tag = metadata;
-                }
-                
-                // Use dispatcher to ensure template is applied before styling
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    ApplyColorBindingStyle(tabItem);
-                }), DispatcherPriority.Loaded);
-            }
-            catch (Exception ex)
-            {
-                _instanceLogger?.LogError(ex, "Error setting tab color data context");
-            }
-        }
 
-        /// <summary>
-        /// Applies a style that supports color binding to a TabItem
-        /// </summary>
-        /// <param name="tabItem">The TabItem to style</param>
-        private void ApplyColorBindingStyle(TabItem tabItem)
-        {
-            try
-            {
-                // Force the template to be applied if it hasn't been yet
-                tabItem.ApplyTemplate();
-                
-                // Try to find the TabBorder in the control template
-                var tabBorder = tabItem.Template?.FindName("TabBorder", tabItem) as Border;
-                
-                if (tabBorder != null)
-                {
-                    var tabData = tabItem.DataContext as TabModel;
-                    if (tabData != null && tabData.CustomColor != Colors.LightGray)
-                    {
-                        // Apply color with transparency for a modern look
-                        var lightBrush = new SolidColorBrush(Color.FromArgb(80, tabData.CustomColor.R, tabData.CustomColor.G, tabData.CustomColor.B));
-                        var borderBrush = new SolidColorBrush(Color.FromArgb(200, tabData.CustomColor.R, tabData.CustomColor.G, tabData.CustomColor.B));
-                        
-                        tabBorder.Background = lightBrush;
-                        tabBorder.BorderBrush = borderBrush;
-                        
-                        // Ensure the border is visible
-                        if (tabBorder.BorderThickness.Bottom < 2)
-                        {
-                            tabBorder.BorderThickness = new Thickness(1, 1, 1, 2);
-                        }
-                    }
-                    else
-                    {
-                        // Reset to default by clearing the values, letting the template take over
-                        tabBorder.ClearValue(Border.BackgroundProperty);
-                        tabBorder.ClearValue(Border.BorderBrushProperty);
-                        tabBorder.ClearValue(Border.BorderThicknessProperty);
-                    }
-                }
-                else
-                {
-                    // If TabBorder not found, try applying to the TabItem directly
-                    var tabData = tabItem.DataContext as TabModel;
-                    if (tabData != null && tabData.CustomColor != Colors.LightGray)
-                    {
-                        var lightBrush = new SolidColorBrush(Color.FromArgb(60, tabData.CustomColor.R, tabData.CustomColor.G, tabData.CustomColor.B));
-                        var borderBrush = new SolidColorBrush(Color.FromArgb(180, tabData.CustomColor.R, tabData.CustomColor.G, tabData.CustomColor.B));
-                        
-                        tabItem.Background = lightBrush;
-                        tabItem.BorderBrush = borderBrush;
-                        tabItem.BorderThickness = new Thickness(0, 0, 0, 3);
-                    }
-                    else
-                    {
-                        tabItem.ClearValue(TabItem.BackgroundProperty);
-                        tabItem.ClearValue(TabItem.BorderBrushProperty);
-                        tabItem.ClearValue(TabItem.BorderThicknessProperty);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _instanceLogger?.LogError(ex, "Error applying color binding style");
-            }
-        }
 
-        /// <summary>
-        /// Clears all color styling from a TabItem and restores original template behavior
-        /// </summary>
-        /// <param name="tabItem">The TabItem to clear styling from</param>
-        private void ClearCustomColorStyling(TabItem tabItem)
-        {
-            try
-            {
-                // Clear the TabModel color data to prevent reversion
-                if (tabItem.Tag is TabModel model)
-                {
-                    model.CustomColor = Colors.LightGray; // Reset to default
-                }
-                
-                // Clear the DataContext that was set for color binding
-                tabItem.ClearValue(TabItem.DataContextProperty);
-                
-                // Clear any metadata that might store color information
-                if (tabItem.Tag is Dictionary<string, object> metadata)
-                {
-                    metadata.Remove("CustomColor");
-                    metadata.Remove("TabModel");
-                }
-                
-                // Force the template to be applied if it hasn't been yet
-                tabItem.ApplyTemplate();
-                
-                // Try to find the TabBorder in the control template and clear its styling
-                var tabBorder = tabItem.Template?.FindName("TabBorder", tabItem) as Border;
-                
-                if (tabBorder != null)
-                {
-                    // Clear all custom styling to let the template take over
-                    tabBorder.ClearValue(Border.BackgroundProperty);
-                    tabBorder.ClearValue(Border.BorderBrushProperty);
-                    tabBorder.ClearValue(Border.BorderThicknessProperty);
-                }
-                
-                // Also clear any direct styling on the TabItem itself
-                tabItem.ClearValue(TabItem.BackgroundProperty);
-                tabItem.ClearValue(TabItem.BorderBrushProperty);
-                tabItem.ClearValue(TabItem.BorderThicknessProperty);
-                
-                // Force the tab to re-evaluate its template triggers and styling
-                tabItem.InvalidateVisual();
-                
-                _instanceLogger?.LogDebug("Tab color styling cleared completely");
-            }
-            catch (Exception ex)
-            {
-                _instanceLogger?.LogError(ex, "Error clearing tab color styling");
-            }
-        }
+
+
 
 
 

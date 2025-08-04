@@ -3531,13 +3531,10 @@ namespace ExplorerPro.UI.Controls
                 // Wire up events for the new tab item
                 WireUpTabItemEvents(tabItem);
                 
-                // Apply template styling immediately for pinned tabs
-                // This ensures pinned tabs get proper template during collection operations
-                if (tabModel.IsPinned)
-                    {
-                        ApplyTabStyling(tabItem, tabModel);
-                    tabItem.UpdateLayout();
-                }
+                // Apply template styling immediately for ALL tabs
+                // This ensures tabs get proper template during collection operations
+                ApplyTabStyling(tabItem, tabModel);
+                tabItem.UpdateLayout();
             }
         }
 
@@ -4085,6 +4082,10 @@ namespace ExplorerPro.UI.Controls
             {
                 // Set DataContext for proper binding
                 tabItem.DataContext = model;
+                
+                // Apply visual styling immediately
+                ApplyTabStyling(tabItem, model);
+                tabItem.UpdateLayout();
                 
                 // Set up any additional bindings or event handlers
                 SetupTabBindings(tabItem);

@@ -29,10 +29,10 @@ namespace ExplorerPro.UI.Controls
             _logger = logger;
             
             // Initialize with Chrome-style defaults
-            MinTabWidth = ChromeSizingConstants.MinTabWidth;
-            MaxTabWidth = ChromeSizingConstants.MaxTabWidth;
-            PreferredTabWidth = ChromeSizingConstants.PreferredTabWidth;
-            PinnedTabWidth = ChromeSizingConstants.PinnedTabWidth;
+            MinTabWidth = TabDimensions.MinRegularWidth;
+            MaxTabWidth = TabDimensions.MaxRegularWidth;
+            PreferredTabWidth = TabDimensions.PreferredTabWidth;
+            PinnedTabWidth = TabDimensions.PinnedWidth;
             
             _logger?.LogDebug("TabSizingManager initialized with Chrome-style defaults");
         }
@@ -66,9 +66,9 @@ namespace ExplorerPro.UI.Controls
                 
             // Calculate available space for unpinned tabs
             var reservedForPinned = PinnedTabCount * PinnedTabWidth;
-            var reservedForSpacing = Math.Max(0, (totalTabs - 1)) * ChromeSizingConstants.TabSpacing;
-            var reservedForNewTabButton = ChromeSizingConstants.NewTabButtonWidth;
-            var reservedForOverflow = ChromeSizingConstants.OverflowButtonWidth;
+            var reservedForSpacing = Math.Max(0, (totalTabs - 1)) * TabDimensions.TabSpacing;
+            var reservedForNewTabButton = TabDimensions.NewTabButtonWidth;
+            var reservedForOverflow = TabDimensions.OverflowButtonWidth;
             
             var availableForUnpinned = AvailableWidth - reservedForPinned - reservedForSpacing - reservedForNewTabButton;
             
@@ -123,7 +123,7 @@ namespace ExplorerPro.UI.Controls
             }
             
             // Check if we need compression
-            var totalWidth = widths.Sum() + (ChromeSizingConstants.TabSpacing * (totalTabs - 1));
+            var totalWidth = widths.Sum() + (TabDimensions.TabSpacing * (totalTabs - 1));
             var isCompressed = totalWidth > AvailableWidth;
             var overflowStrategy = DetermineOverflowStrategy(tabList);
             
@@ -222,7 +222,7 @@ namespace ExplorerPro.UI.Controls
             double position = 0;
             for (int i = 0; i < tabIndex && i < widths.Count; i++)
             {
-                position += widths[i] + ChromeSizingConstants.TabSpacing;
+                position += widths[i] + TabDimensions.TabSpacing;
             }
             
             return position;
@@ -234,7 +234,7 @@ namespace ExplorerPro.UI.Controls
             
             var widths = CalculateAllTabWidths(tabs);
             var totalWidth = widths.Sum();
-            var spacing = ChromeSizingConstants.TabSpacing * (widths.Count - 1);
+            var spacing = TabDimensions.TabSpacing * (widths.Count - 1);
             
             return totalWidth + spacing;
         }
@@ -365,7 +365,7 @@ namespace ExplorerPro.UI.Controls
             {
                 currentWidth += widths[i];
                 if (i > 0)
-                    currentWidth += ChromeSizingConstants.TabSpacing;
+                    currentWidth += TabDimensions.TabSpacing;
                     
                 if (currentWidth <= AvailableWidth)
                     visibleCount++;
