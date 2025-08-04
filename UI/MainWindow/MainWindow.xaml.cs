@@ -2453,16 +2453,19 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                // Wire up context menu opening event for DataContext binding
-                tabItem.ContextMenuOpening += (sender, e) =>
-                {
-                    if (sender is TabItem tab && tab.ContextMenu != null)
+                // Wire up context menu opening event using weak event pattern to prevent memory leaks
+                WeakEventManager<FrameworkElement, ContextMenuEventArgs>.AddHandler(
+                    tabItem,
+                    nameof(FrameworkElement.ContextMenuOpening),
+                    (sender, e) =>
                     {
-                        tab.ContextMenu.DataContext = tab.DataContext;
-                    }
-                };
+                        if (sender is TabItem tab && tab.ContextMenu != null)
+                        {
+                            tab.ContextMenu.DataContext = tab.DataContext;
+                        }
+                    });
                 
-                _instanceLogger?.LogDebug("Tab bindings set up successfully");
+                _instanceLogger?.LogDebug("Tab bindings set up successfully with weak event pattern");
             }
             catch (Exception ex)
             {
@@ -3272,6 +3275,7 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Reorders tabs so that pinned tabs are always on the left side
+        /// Optimized to only move the changed tab instead of rebuilding entire collection
         /// </summary>
         private void ReorderTabsAfterPinToggle()
         {
@@ -3279,46 +3283,72 @@ namespace ExplorerPro.UI.MainWindow
             {
                 if (MainTabs?.Items == null || MainTabs.Items.Count <= 1) return;
 
-                var allTabs = MainTabs.Items.Cast<TabItem>().ToList();
-                var pinnedTabs = new List<TabItem>();
-                var regularTabs = new List<TabItem>();
-
-                // Separate pinned and regular tabs
-                foreach (var tab in allTabs)
-                {
-                    if (IsTabPinned(tab))
-                    {
-                        pinnedTabs.Add(tab);
-                    }
-                    else
-                    {
-                        regularTabs.Add(tab);
-                    }
-                }
-
-                // Clear all tabs
                 var selectedTab = MainTabs.SelectedItem as TabItem;
-                MainTabs.Items.Clear();
+                if (selectedTab == null) return;
 
-                // Add pinned tabs first (left side)
-                foreach (var pinnedTab in pinnedTabs)
+                int currentIndex = MainTabs.Items.IndexOf(selectedTab);
+                if (currentIndex == -1) return;
+
+                bool isNowPinned = IsTabPinned(selectedTab);
+                
+                // Find the correct position for the tab
+                int targetIndex = -1;
+                
+                if (isNowPinned)
                 {
-                    MainTabs.Items.Add(pinnedTab);
+                    // Tab was just pinned - find the last pinned tab position
+                    for (int i = MainTabs.Items.Count - 1; i >= 0; i--)
+                    {
+                        if (i != currentIndex && MainTabs.Items[i] is TabItem tab && IsTabPinned(tab))
+                        {
+                            targetIndex = i;
+                            break;
+                        }
+                    }
+                    
+                    // If no other pinned tabs, it should be first
+                    if (targetIndex == -1)
+                        targetIndex = 0;
+                    else if (currentIndex > targetIndex)
+                        targetIndex++; // Insert after the last pinned tab
+                }
+                else
+                {
+                    // Tab was just unpinned - find the first regular tab position
+                    for (int i = 0; i < MainTabs.Items.Count; i++)
+                    {
+                        if (i != currentIndex && MainTabs.Items[i] is TabItem tab && !IsTabPinned(tab))
+                        {
+                            targetIndex = i;
+                            break;
+                        }
+                    }
+                    
+                    // If no other regular tabs, it should be last
+                    if (targetIndex == -1)
+                        targetIndex = MainTabs.Items.Count - 1;
+                    else if (currentIndex < targetIndex)
+                        targetIndex--; // Adjust for removal
                 }
 
-                // Add regular tabs after pinned tabs
-                foreach (var regularTab in regularTabs)
+                // Only move if position actually changed
+                if (targetIndex != -1 && targetIndex != currentIndex)
                 {
-                    MainTabs.Items.Add(regularTab);
-                }
-
-                // Restore selection
-                if (selectedTab != null)
-                {
+                    // Temporarily remove the tab
+                    MainTabs.Items.RemoveAt(currentIndex);
+                    
+                    // Insert at the new position
+                    MainTabs.Items.Insert(targetIndex, selectedTab);
+                    
+                    // Restore selection
                     MainTabs.SelectedItem = selectedTab;
+                    
+                    _instanceLogger?.LogDebug($"Moved tab from index {currentIndex} to {targetIndex} after pin toggle");
                 }
-
-                _instanceLogger?.LogDebug($"Reordered tabs: {pinnedTabs.Count} pinned, {regularTabs.Count} regular");
+                else
+                {
+                    _instanceLogger?.LogDebug("Tab already in correct position after pin toggle");
+                }
             }
             catch (Exception ex)
             {
@@ -3354,8 +3384,8 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
-        /// <summary>
-        /// Ensures that when new tabs are added, they are placed after pinned tabs
+                /// <summary>
+        /// Ensures that when new tabs are added, they are placed at the correct position
         /// </summary>
         private void InsertTabAtCorrectPosition(TabItem newTab)
         {
@@ -3363,28 +3393,46 @@ namespace ExplorerPro.UI.MainWindow
             {
                 if (MainTabs?.Items == null) return;
 
-                // If this is a pinned tab, add it at the end of pinned tabs
-                if (IsTabPinned(newTab))
+                // Use ChromeStyleTabControl's GetNewTabInsertIndex if available
+                if (MainTabs is ChromeStyleTabControl chromeControl)
                 {
-                    int insertPosition = 0;
-                    // Find the position after the last pinned tab
-                    for (int i = 0; i < MainTabs.Items.Count; i++)
-                    {
-                        if (MainTabs.Items[i] is TabItem tab && IsTabPinned(tab))
-                        {
-                            insertPosition = i + 1;
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-                    MainTabs.Items.Insert(insertPosition, newTab);
+                    int insertIndex = chromeControl.GetNewTabInsertIndex();
+                    
+                    // Validate index
+                    if (insertIndex < 0)
+                        insertIndex = 0;
+                    if (insertIndex > MainTabs.Items.Count)
+                        insertIndex = MainTabs.Items.Count;
+                    
+                    MainTabs.Items.Insert(insertIndex, newTab);
+                    _instanceLogger?.LogDebug($"Inserted tab at position {insertIndex} using ChromeStyleTabControl logic");
                 }
                 else
                 {
-                    // Regular tab goes at the end
-                    MainTabs.Items.Add(newTab);
+                    // Fallback logic for non-Chrome tab controls
+                    // If this is a pinned tab, add it at the end of pinned tabs
+                    if (IsTabPinned(newTab))
+                    {
+                        int insertPosition = 0;
+                        // Find the position after the last pinned tab
+                        for (int i = 0; i < MainTabs.Items.Count; i++)
+                        {
+                            if (MainTabs.Items[i] is TabItem tab && IsTabPinned(tab))
+                            {
+                                insertPosition = i + 1;
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                        MainTabs.Items.Insert(insertPosition, newTab);
+                    }
+                    else
+                    {
+                        // Regular tab goes at the end
+                        MainTabs.Items.Add(newTab);
+                    }
                 }
             }
             catch (Exception ex)
@@ -5703,10 +5751,12 @@ namespace ExplorerPro.UI.MainWindow
             try
             {
                 // Find the corresponding TabItem from the TabModel
+                // Priority 1: Check DataContext first (Phase 2 pattern)
+                // Priority 2: Check Tag for backward compatibility
                 TabItem tabItemToClose = null;
                 foreach (TabItem tabItem in MainTabs.Items)
                 {
-                    if (tabItem.Tag == e.TabItem)
+                    if (tabItem.DataContext == e.TabItem || tabItem.Tag == e.TabItem)
                     {
                         tabItemToClose = tabItem;
                         break;
@@ -5738,6 +5788,11 @@ namespace ExplorerPro.UI.MainWindow
                         // Clean up any remaining references
                         container.DataContext = null;
                     }
+                    
+                    // Clear tab references to help GC
+                    tabItemToClose.DataContext = null;
+                    tabItemToClose.Tag = null;
+                    tabItemToClose.Content = null;
                 }
                 
                 _instanceLogger?.LogDebug($"Tab close handled: {e.TabItem.Title}");
