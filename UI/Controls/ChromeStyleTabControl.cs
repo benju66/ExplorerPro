@@ -3531,15 +3531,12 @@ namespace ExplorerPro.UI.Controls
                 // Wire up events for the new tab item
                 WireUpTabItemEvents(tabItem);
                 
-                // CRITICAL FIX: Apply template styling after tab is fully created and added
+                // Apply template styling immediately for pinned tabs
                 // This ensures pinned tabs get proper template during collection operations
                 if (tabModel.IsPinned)
-                {
-                    // Use a deferred call to apply template after the tab is fully initialized
-                    Dispatcher.BeginInvoke(new Action(() =>
                     {
                         ApplyTabStyling(tabItem, tabModel);
-                    }), System.Windows.Threading.DispatcherPriority.Normal);
+                    tabItem.UpdateLayout();
                 }
             }
         }
@@ -3620,6 +3617,9 @@ namespace ExplorerPro.UI.Controls
                 // Update active/inactive state
                 UpdateActiveState(tabItem, model);
 
+                // Force layout update after all visual changes
+                tabItem.UpdateLayout();
+
                 _logger?.LogDebug($"Updated TabItem visual properties for '{model.Title}'");
             }
             catch (Exception ex)
@@ -3649,6 +3649,11 @@ namespace ExplorerPro.UI.Controls
                 tabItem.SetResourceReference(StyleProperty, "ChromeTabItemStyle");
             }
 
+            // Force layout update after template switching
+            tabItem.InvalidateMeasure();
+            tabItem.InvalidateArrange();
+            tabItem.UpdateLayout();
+
             // Don't override opacity here - let the Chrome template handle dragging visuals
             // The ChromeTabItemStyle already has sophisticated drag animations built-in
         }
@@ -3660,16 +3665,16 @@ namespace ExplorerPro.UI.Controls
         {
             if (model.IsPinned)
             {
-                // Pinned tabs are narrower to save space
-                tabItem.MinWidth = 80;
-                tabItem.MaxWidth = 120;
-                tabItem.Width = double.NaN; // Auto-size within constraints
+                // Pinned tabs have fixed width
+                tabItem.MinWidth = TabDimensions.PinnedWidth;
+                tabItem.MaxWidth = TabDimensions.PinnedWidth;
+                tabItem.Width = TabDimensions.PinnedWidth;
             }
             else
             {
-                // Regular tabs have more flexible sizing
-                tabItem.MinWidth = 120;
-                tabItem.MaxWidth = 250;
+                // Regular tabs have flexible sizing
+                tabItem.MinWidth = TabDimensions.MinRegularWidth;
+                tabItem.MaxWidth = TabDimensions.MaxRegularWidth;
                 tabItem.Width = double.NaN; // Auto-size within constraints
             }
         }
@@ -4833,7 +4838,7 @@ namespace ExplorerPro.UI.Controls
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
                             UpdateHibernatedTabVisuals(tabModel);
-                        }));
+                        }), System.Windows.Threading.DispatcherPriority.Render);
                     }
                 }
             }
@@ -4865,7 +4870,7 @@ namespace ExplorerPro.UI.Controls
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
                             UpdateReactivatedTabVisuals(tabModel);
-                        }));
+                        }), System.Windows.Threading.DispatcherPriority.Render);
                     }
                 }
             }

@@ -1,5 +1,12 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System;assembly=mscorlib">
+    
+    <!-- Tab Dimension Resources -->
+    <system:Double x:Key="PinnedTabWidth">45</system:Double>
+    <system:Double x:Key="MinRegularTabWidth">120</system:Double>
+    <system:Double x:Key="MaxRegularTabWidth">250</system:Double>
+    <system:Double x:Key="TabHeight">32</system:Double>
     
     <!-- Ultra-modern Chrome-style close button -->
     <Style x:Key="ChromeCloseButtonStyle" TargetType="Button">
@@ -145,13 +152,14 @@
         <Border x:Name="TabBorder"
                 Background="{StaticResource TabInactiveGradient}"
                 BorderBrush="#0078D4"
-                BorderThickness="2,2,2,0"
+                BorderThickness="1,1,1,0"
                 CornerRadius="8,8,0,0"
                 Margin="2,3,2,-1"
                 Padding="0"
-                Width="45"
-                MinWidth="45"
-                MaxWidth="45"
+                Width="{StaticResource PinnedTabWidth}"
+                MinWidth="{StaticResource PinnedTabWidth}"
+                MaxWidth="{StaticResource PinnedTabWidth}"
+                Height="{StaticResource TabHeight}"
                 RenderTransformOrigin="0.5,0.5">
             <Border.RenderTransform>
                 <ScaleTransform x:Name="TabScale" ScaleX="1" ScaleY="1"/>
@@ -311,6 +319,9 @@
                             CornerRadius="8,8,0,0"
                             Margin="2,3,2,-1"
                             Padding="8,6,24,6"
+                            Height="{StaticResource TabHeight}"
+                            MinWidth="{StaticResource MinRegularTabWidth}"
+                            MaxWidth="{StaticResource MaxRegularTabWidth}"
                             RenderTransformOrigin="0.5,0.5">
                         <Border.RenderTransform>
                             <ScaleTransform x:Name="TabScale" ScaleX="1" ScaleY="1"/>

@@ -3419,6 +3419,11 @@ namespace ExplorerPro.UI.MainWindow
             {
                 _instanceLogger?.LogError(ex, "Error reordering tabs after pin toggle");
             }
+
+            // Force layout update after reordering
+            MainTabs.InvalidateMeasure();
+            MainTabs.InvalidateArrange();
+            MainTabs.UpdateLayout();
         }
 
         /// <summary>
@@ -6934,47 +6939,7 @@ namespace ExplorerPro.UI.MainWindow
             return null; // Never create new models
         }
 
-        /// <summary>
-        /// Updates a TabItem based on a TabModel's properties
-        /// </summary>
-        /// <param name="tabItem">The TabItem to update</param>
-        /// <param name="tabModel">The model with updated properties</param>
-        private void UpdateTabItemFromModel(TabItem tabItem, TabModel tabModel)
-        {
-            if (tabItem == null || tabModel == null) return;
 
-            try
-            {
-                // Ensure consistent Tag binding
-                tabItem.Tag = tabModel;
-                
-                // Update header
-                tabItem.Header = tabModel.Title;
-                
-                // Apply Chrome-style width for pinned tabs
-                if (tabModel.IsPinned)
-                {
-                    tabItem.Width = 50; // Chrome-style narrow width
-                    tabItem.MinWidth = 50;
-                    tabItem.MaxWidth = 50;
-                    tabItem.ToolTip = tabModel.Title; // Show full title in tooltip
-                }
-                else
-                {
-                    tabItem.Width = double.NaN; // Auto width
-                    tabItem.MinWidth = 100;
-                    tabItem.MaxWidth = 200;
-                    tabItem.ClearValue(TabItem.ToolTipProperty);
-                }
-
-                // Apply visual styling based on the model
-                ApplyTabStyling(tabItem, tabModel);
-            }
-            catch (Exception ex)
-            {
-                _instanceLogger?.LogError(ex, "Error updating TabItem from model");
-            }
-        }
 
         /// <summary>
         /// Applies visual styling to a TabItem based on TabModel properties
