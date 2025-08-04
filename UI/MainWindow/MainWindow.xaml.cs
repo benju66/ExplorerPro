@@ -2463,7 +2463,7 @@ namespace ExplorerPro.UI.MainWindow
                 var headerBinding = new Binding("Title") 
                 { 
                     Source = model,
-                    Mode = BindingMode.OneWay
+                    Mode = BindingMode.TwoWay
                 };
                 tabItem.SetBinding(HeaderedContentControl.HeaderProperty, headerBinding);
                 
@@ -3459,70 +3459,31 @@ namespace ExplorerPro.UI.MainWindow
             {
                 if (MainTabs?.Items == null) return;
                 
-                // Force layout update before insertion to ensure container is ready
-                MainTabs.UpdateLayout();
-
-                // Get the TabModel for proper insertion logic
-                var tabModel = newTab.DataContext as TabModel ?? newTab.Tag as TabModel;
-                bool isPinned = tabModel?.IsPinned ?? false;
-
-                // Use ChromeStyleTabControl's GetNewTabInsertIndex if available
-                if (MainTabs is ChromeStyleTabControl chromeControl)
+                var tabModel = GetTabModel(newTab);
+                if (tabModel?.IsPinned == true)
                 {
-                    // Pass the TabModel for proper pinned/unpinned logic
-                    int insertIndex = chromeControl.GetNewTabInsertIndex();
-                    
-                    // Validate index
-                    if (insertIndex < 0)
-                        insertIndex = 0;
-                    if (insertIndex > MainTabs.Items.Count)
-                        insertIndex = MainTabs.Items.Count;
-                    
-                    MainTabs.Items.Insert(insertIndex, newTab);
-                    _instanceLogger?.LogDebug($"Inserted {(isPinned ? "pinned" : "regular")} tab at position {insertIndex} using ChromeStyleTabControl logic");
-                }
-                else
-                {
-                    // Fallback logic for non-Chrome tab controls
-                    if (isPinned)
-                    {
-                        int insertPosition = 0;
-                        // Find the position after the last pinned tab
+                    // Pinned tab: find last pinned position
+                    int insertPos = 0;
                         for (int i = 0; i < MainTabs.Items.Count; i++)
                         {
-                            if (MainTabs.Items[i] is TabItem tab && IsTabPinned(tab))
-                            {
-                                insertPosition = i + 1;
-                            }
-                            else
-                            {
+                        var existingTab = MainTabs.Items[i] as TabItem;
+                        var existingModel = GetTabModel(existingTab);
+                        if (existingModel?.IsPinned != true)
                                 break;
+                        insertPos = i + 1;
                             }
-                        }
-                        MainTabs.Items.Insert(insertPosition, newTab);
+                    MainTabs.Items.Insert(insertPos, newTab);
                     }
                     else
                     {
-                        // Regular tab goes at the end
+                    // Regular tab: add to end
                         MainTabs.Items.Add(newTab);
-                    }
-                }
-                
-                // Force another layout update after insertion
-                MainTabs.UpdateLayout();
-                
-                // Ensure the header is visible by verifying bindings
-                if (newTab.Header == null && tabModel != null)
-                {
-                    // Fallback: set header directly if binding failed
-                    newTab.Header = tabModel.Title;
-                    _instanceLogger?.LogWarning($"Tab header was null after insertion, set directly to: {tabModel.Title}");
                 }
             }
             catch (Exception ex)
             {
-                _instanceLogger?.LogError(ex, "Error inserting tab at correct position");
-                // Fallback: just add to the end
+                _instanceLogger?.LogError(ex, "Error inserting tab");
+                // Fallback: just add to end
                 MainTabs.Items.Add(newTab);
                 MainTabs.UpdateLayout();
             }
@@ -6962,47 +6923,15 @@ namespace ExplorerPro.UI.MainWindow
         {
             if (tabItem == null) return null;
 
-            try
-            {
-                // First try to get existing model from Tag
-                if (tabItem.Tag is TabModel existingModel)
-                {
-                    return existingModel;
-                }
-
-                // Create a TabModel based on the TabItem's current state
-                var tabModel = new TabModel
-                {
-                    Title = tabItem.Header?.ToString() ?? "Untitled",
-                    Content = tabItem.Content,
-                    IsPinned = false, // Default value - could be stored in Tag
-                    CustomColor = Colors.LightGray, // Default value
-                    HasUnsavedChanges = false // Default value
-                };
-
-                // Try to extract metadata from TabItem's Tag if available
-                if (tabItem.Tag is Dictionary<string, object> metadata)
-                {
-                    if (metadata.ContainsKey("IsPinned") && metadata["IsPinned"] is bool pinned)
-                        tabModel.IsPinned = pinned;
-                    
-                    if (metadata.ContainsKey("CustomColor") && metadata["CustomColor"] is Color color)
-                        tabModel.CustomColor = color;
-                        
-                    if (metadata.ContainsKey("HasUnsavedChanges") && metadata["HasUnsavedChanges"] is bool hasChanges)
-                        tabModel.HasUnsavedChanges = hasChanges;
-                }
-
-                // Set the model as the Tag for future reference
-                tabItem.Tag = tabModel;
-
-                return tabModel;
-            }
-            catch (Exception ex)
-            {
-                _instanceLogger?.LogError(ex, "Error creating TabModel for TabItem");
-                return null;
-            }
+            // Check DataContext first (preferred)
+            if (tabItem.DataContext is TabModel dataContextModel)
+                return dataContextModel;
+            
+            // Fall back to Tag for backward compatibility
+            if (tabItem.Tag is TabModel tagModel)
+                return tagModel;
+            
+            return null; // Never create new models
         }
 
         /// <summary>
@@ -7545,7 +7474,14 @@ namespace ExplorerPro.UI.MainWindow
             _cachedTabCount = -1;
             _cachedPinnedState = false;
             _cachedSelectedTabHash = 0;
-            _instanceLogger?.LogDebug("Context menu cache invalidated");
+            
+            // Force context menu recreation by setting it to null
+            if (_rightClickedTab != null)
+            {
+                _rightClickedTab.ContextMenu = null;
+            }
+            
+            _instanceLogger?.LogDebug("Context menu cache invalidated and menu cleared");
         }
 
         #endregion

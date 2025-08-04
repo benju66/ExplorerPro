@@ -3331,23 +3331,9 @@ namespace ExplorerPro.UI.Controls
                 return 0;
             }
             
-            // Find the last pinned tab
-            int lastPinnedIndex = -1;
-            for (int i = 0; i < TabItems.Count; i++)
-            {
-                if (TabItems[i].IsPinned)
-                {
-                    lastPinnedIndex = i;
-                }
-                else
-                {
-                    // Once we hit a non-pinned tab, we can stop
-                    break;
-                }
-            }
-            
-            // Insert after the last pinned tab
-            return lastPinnedIndex + 1;
+            // Always add new regular tabs at the end
+            // Pinned tabs should be handled separately by the caller
+            return TabItems.Count;
         }
 
         /// <summary>

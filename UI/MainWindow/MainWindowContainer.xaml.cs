@@ -1857,7 +1857,7 @@ namespace ExplorerPro.UI.MainWindow
         /// PHASE 1 STEP 2: Navigate to a specific path in the active file tree
         /// </summary>
         /// <param name="path">The path to navigate to</param>
-        public void NavigateToPath(string path)
+                public void NavigateToPath(string path)
         {
             try
             {
@@ -1867,32 +1867,48 @@ namespace ExplorerPro.UI.MainWindow
                     return;
                 }
 
-                // Get the active pane manager
-                if (_paneManager == null)
+                // Strategy 1: Search through PaneManager structure
+                if (_paneManager?.TabControl?.SelectedItem is TabItem selectedTab)
                 {
-                    Console.WriteLine("NavigateToPath: PaneManager is null");
+                    // The file tree is nested deeper in the structure
+                    if (selectedTab.Content is DockPanel dockPanel)
+                    {
+                        foreach (var child in dockPanel.Children)
+                        {
+                            if (child is Grid grid)
+                            {
+                                foreach (var gridChild in grid.Children)
+                                {
+                                    if (gridChild is ImprovedFileTreeListView fileTreeControl)
+                                    {
+                                        fileTreeControl.SetRootDirectory(path);
+                                        Console.WriteLine($"NavigateToPath: Successfully navigated to {path} via PaneManager");
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Direct content check
+                    if (selectedTab.Content is ImprovedFileTreeListView directFileTree)
+                    {
+                        directFileTree.SetRootDirectory(path);
+                        Console.WriteLine($"NavigateToPath: Successfully navigated to {path} via direct content");
+                        return;
+                    }
+                }
+
+                // Strategy 2: Visual tree search (last resort)
+                var foundFileTree = FindVisualChild<ImprovedFileTreeListView>(_paneManager);
+                if (foundFileTree != null)
+                {
+                    foundFileTree.SetRootDirectory(path);
+                    Console.WriteLine($"NavigateToPath: Successfully navigated to {path} via visual tree search");
                     return;
                 }
 
-                // Get the selected tab from the active pane manager
-                var selectedTab = _paneManager.TabControl?.SelectedItem as TabItem;
-                if (selectedTab == null)
-                {
-                    Console.WriteLine("NavigateToPath: No active tab found");
-                    return;
-                }
-
-                // Get the file tree from the selected tab
-                var activeFileTree = selectedTab.Content as ImprovedFileTreeListView;
-                if (activeFileTree == null)
-                {
-                    Console.WriteLine("NavigateToPath: Active tab does not contain a file tree");
-                    return;
-                }
-
-                // Navigate to the path
-                activeFileTree.SetRootDirectory(path);
-                Console.WriteLine($"NavigateToPath: Successfully navigated to {path}");
+                Console.WriteLine("NavigateToPath: Could not find file tree control");
             }
             catch (Exception ex)
             {
@@ -2807,6 +2823,28 @@ namespace ExplorerPro.UI.MainWindow
                 "ProcorePanel" => ProcorePanelContainer?.Visibility == Visibility.Visible,
                 _ => false
             };
+        }
+
+        /// <summary>
+        /// Helper method to find a visual child of a specific type
+        /// </summary>
+        private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            if (parent == null) return null;
+
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                
+                if (child is T typedChild)
+                    return typedChild;
+
+                var childOfChild = FindVisualChild<T>(child);
+                if (childOfChild != null)
+                    return childOfChild;
+            }
+
+            return null;
         }
     }
 }
