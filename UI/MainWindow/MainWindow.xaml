@@ -352,6 +352,59 @@ All dependencies mapped and validation tests established.
                 </Setter.Value>
             </Setter>
         </Style>
+        
+        <!-- PHASE 1 STEP 3: Pinned Tab Item Style -->
+        <Style x:Key="PinnedTabItemStyle" TargetType="{x:Type TabItem}">
+            <Setter Property="MinWidth" Value="40"/>
+            <Setter Property="MaxWidth" Value="200"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabItem}">
+                        <Border Name="Border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1,1,1,0"
+                                CornerRadius="4,4,0,0"
+                                Margin="2,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <!-- Pin icon -->
+                                <Image Grid.Column="0" 
+                                       Source="{DynamicResource PinIcon}"
+                                       Width="16" Height="16"
+                                       Margin="4,0,2,0"/>
+                                       
+                                <!-- Tab header -->
+                                <ContentPresenter Grid.Column="1"
+                                                  x:Name="ContentSite"
+                                                  ContentSource="Header"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  Margin="4,0"/>
+                                                  
+                                <!-- Close button (hidden for pinned tabs) -->
+                                <Button Grid.Column="2"
+                                        x:Name="CloseButton"
+                                        Visibility="Collapsed"
+                                        Width="16" Height="16"
+                                        Margin="2,0,4,0"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource TabSelectedBackground}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         </ResourceDictionary>
     </Window.Resources>
 

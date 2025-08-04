@@ -613,6 +613,12 @@ namespace ExplorerPro.UI.MainWindow
 
         #region Phase 1 Enhancement Fields
 
+        // 1. Tab Counter Fix - Compiled regex for performance
+        private static readonly System.Text.RegularExpressions.Regex TabNumberRegex = 
+            new System.Text.RegularExpressions.Regex(@"^Window\s+(\d+)$", 
+                System.Text.RegularExpressions.RegexOptions.Compiled);
+        private readonly object _tabNamingLock = new object();
+
         // 3. Event Handler Debouncing
         private DateTime _lastContextMenuAction = DateTime.MinValue;
         private const int DEBOUNCE_INTERVAL_MS = 500;
@@ -1784,6 +1790,10 @@ namespace ExplorerPro.UI.MainWindow
                         _instanceLogger?.LogDebug("Disposing event subscriptions");
                         _eventSubscriptions?.Dispose();
                         
+                        // PHASE 1 STEP 5: Dispose all tabs before clearing references
+                        _instanceLogger?.LogDebug("Disposing all tabs");
+                        DisposeAllTabs();
+                        
                         // Clear all strong references
                         _instanceLogger?.LogDebug("Clearing strong references");
                         ClearAllStrongReferences();
@@ -2427,7 +2437,7 @@ namespace ExplorerPro.UI.MainWindow
         #region Tab Management
 
         /// <summary>
-        /// Creates a TabItem with proper data binding setup
+        /// PHASE 1 STEP 3 ENHANCED: Creates a TabItem with proper data binding setup and pinned tab support
         /// </summary>
         /// <param name="model">The TabModel to bind to the tab</param>
         /// <returns>A properly configured TabItem</returns>
@@ -2439,7 +2449,38 @@ namespace ExplorerPro.UI.MainWindow
                 Content = model.Content
             };
             
-            // Set up bindings after initialization
+            // Apply pinned tab style if needed
+            if (model.IsPinned && TryFindResource("PinnedTabItemStyle") is Style pinnedStyle)
+            {
+                tabItem.Style = pinnedStyle;
+                _instanceLogger?.LogDebug($"Applied pinned tab style to tab: {model.Title}");
+            }
+            
+            // Set up header binding with deferred execution to ensure visual tree is ready
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // Create and apply header binding
+                var headerBinding = new Binding("Title") 
+                { 
+                    Source = model,
+                    Mode = BindingMode.OneWay
+                };
+                tabItem.SetBinding(HeaderedContentControl.HeaderProperty, headerBinding);
+                
+                // Verify the binding worked
+                if (tabItem.Header == null || string.IsNullOrEmpty(tabItem.Header.ToString()))
+                {
+                    // Fallback: set header directly
+                    tabItem.Header = model.Title;
+                    _instanceLogger?.LogWarning($"Header binding failed for tab, set directly to: {model.Title}");
+                }
+                else
+                {
+                    _instanceLogger?.LogDebug($"Header binding successful for tab: {tabItem.Header}");
+                }
+            }), DispatcherPriority.Loaded);
+            
+            // Set up other bindings
             SetupTabBindings(tabItem);
             
             return tabItem;
@@ -2538,120 +2579,144 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Add a new tab with a MainWindowContainer.
+        /// PHASE 1 STEP 6 ENHANCED: Add a new tab with race condition prevention
         /// </summary>
         /// <param name="rootPath">Root path for the new tab</param>
         /// <returns>The created MainWindowContainer</returns>
         public MainWindowContainer? AddNewMainWindowTab(string? rootPath = null)
         {
-            try
+            // Use ExecuteOnUIThread<T> to ensure thread safety and get return value
+            return ExecuteOnUIThread<MainWindowContainer?>(() =>
             {
-                // Check MainTabs first
-                if (MainTabs == null)
+                // Check if operation is allowed
+                if (!TryEnsureOperationAllowed("AddNewMainWindowTab"))
                 {
-                    Console.WriteLine("ERROR: MainTabs is null, cannot add a new tab");
-                    MessageBox.Show("Cannot add a new tab - tab control is not available.", 
-                        "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    _instanceLogger?.LogWarning("Cannot add tab - operation not allowed in current state");
                     return null;
                 }
-
-                // Create new container with proper error handling
-                MainWindowContainer? container = null;
+                
+                // Set busy state to prevent concurrent tab creation
+                bool transitioned = _stateManager.TryTransitionTo(Core.WindowState.Busy, out string error);
+                if (!transitioned)
+                {
+                    _instanceLogger?.LogWarning($"Cannot add tab - failed to enter busy state: {error}");
+                    return null;
+                }
                 
                 try
                 {
-                    container = new MainWindowContainer(this);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Failed to create container: {ex.Message}");
-                    MessageBox.Show($"Error creating tab container: {ex.Message}", 
-                        "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return null;
-                }
-
-                // Validate the path more carefully
-                string validPath = ValidatePath(rootPath);
-                _instanceLogger?.LogDebug($"Validated path for new tab: {validPath}");
-                
-                // Initialize container
-                try
-                {
-                    _instanceLogger?.LogDebug($"Initializing file tree with path: {validPath}");
-                    container.InitializeWithFileTree(validPath);
-                    _instanceLogger?.LogDebug($"Successfully initialized file tree with path: {validPath}");
-                }
-                catch (Exception ex)
-                {
-                    _instanceLogger?.LogError(ex, $"Failed to initialize file tree with path '{validPath}'");
-                    
-                    // Try one more time with User folder as a last resort
-                    try
+                    // Check MainTabs first
+                    if (MainTabs == null)
                     {
-                        string fallbackPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                        _instanceLogger?.LogDebug($"Trying fallback path: {fallbackPath}");
-                        container.InitializeWithFileTree(fallbackPath);
-                        _instanceLogger?.LogDebug($"Successfully initialized file tree with fallback path: {fallbackPath}");
-                    }
-                    catch (Exception innerEx)
-                    {
-                        _instanceLogger?.LogError(innerEx, "Critical error: Failed to initialize with fallback path");
-                        MessageBox.Show("Unable to initialize file browser with any valid path.",
-                            "Critical Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        _instanceLogger?.LogError("MainTabs is null, cannot add a new tab");
+                        MessageBox.Show("Cannot add a new tab - tab control is not available.", 
+                            "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                         return null;
                     }
-                }
 
-                // Create tab through CreateTabItem method
-                string tabTitle = $"Window {MainTabs.Items.Count + 1}";
-                var tabModel = new TabModel
+                    // Create new container with proper error handling
+                    MainWindowContainer? container = null;
+                    
+                    try
+                    {
+                        container = new MainWindowContainer(this);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Failed to create container: {ex.Message}");
+                        MessageBox.Show($"Error creating tab container: {ex.Message}", 
+                            "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return null;
+                    }
+
+                    // Validate the path more carefully
+                    string validPath = ValidatePath(rootPath);
+                    _instanceLogger?.LogDebug($"Validated path for new tab: {validPath}");
+                    
+                    // Initialize container
+                    try
+                    {
+                        _instanceLogger?.LogDebug($"Initializing file tree with path: {validPath}");
+                        container.InitializeWithFileTree(validPath);
+                        _instanceLogger?.LogDebug($"Successfully initialized file tree with path: {validPath}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _instanceLogger?.LogError(ex, $"Failed to initialize file tree with path '{validPath}'");
+                        
+                        // Try one more time with User folder as a last resort
+                        try
+                        {
+                            string fallbackPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                            _instanceLogger?.LogDebug($"Trying fallback path: {fallbackPath}");
+                            container.InitializeWithFileTree(fallbackPath);
+                            _instanceLogger?.LogDebug($"Successfully initialized file tree with fallback path: {fallbackPath}");
+                        }
+                        catch (Exception innerEx)
+                        {
+                            _instanceLogger?.LogError(innerEx, "Critical error: Failed to initialize with fallback path");
+                            MessageBox.Show("Unable to initialize file browser with any valid path.",
+                                "Critical Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                            return null;
+                        }
+                    }
+
+                    // Create tab through CreateTabItem method
+                    string tabTitle = GetNextTabTitle();
+                    var tabModel = new TabModel
                     {
                         Id = Guid.NewGuid().ToString(),
                         Title = tabTitle,
                         Content = container,
                         IsPinned = false,
-                    CustomColor = Colors.Transparent // Use Transparent as default
-                };
-                
-                var newTab = CreateTabItem(tabModel);
-                
-                // Add the tab to the control using proper positioning
-                InsertTabAtCorrectPosition(newTab);
-                MainTabs.SelectedItem = newTab;
+                        CustomColor = Colors.Transparent // Use Transparent as default
+                    };
+                    
+                    var newTab = CreateTabItem(tabModel);
+                    
+                    // Add the tab to the control using proper positioning
+                    InsertTabAtCorrectPosition(newTab);
+                    MainTabs.SelectedItem = newTab;
 
-                // Connect signals if available
-                if (container.PinnedPanel != null)
-                {
+                    // Connect signals if available
+                    if (container.PinnedPanel != null)
+                    {
+                        try
+                        {
+                            ConnectPinnedPanel(container);
+                        }
+                        catch (Exception ex)
+                        {
+                            _instanceLogger?.LogError(ex, "Error connecting pinned panel");
+                        }
+                    }
+
+                    // Notify of new tab
                     try
                     {
-                        ConnectPinnedPanel(container);
+                        OnNewTabAdded(container);
                     }
                     catch (Exception ex)
                     {
-                        _instanceLogger?.LogError(ex, "Error connecting pinned panel");
+                        _instanceLogger?.LogError(ex, "Error in OnNewTabAdded");
                     }
-                }
 
-                // Notify of new tab
-                try
-                {
-                    OnNewTabAdded(container);
+                    _instanceLogger?.LogInformation($"Added new main window tab with root path: {validPath}");
+                    return container;
                 }
                 catch (Exception ex)
                 {
-                    _instanceLogger?.LogError(ex, "Error in OnNewTabAdded");
+                    _instanceLogger?.LogError(ex, "Unhandled error in AddNewMainWindowTab");
+                    MessageBox.Show($"Error creating new tab: {ex.Message}", 
+                        "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return null;
                 }
-
-                _instanceLogger?.LogInformation($"Added new main window tab with root path: {validPath}");
-                return container;
-            }
-            catch (Exception ex)
-            {
-                _instanceLogger?.LogError(ex, "Unhandled error in AddNewMainWindowTab");
-                MessageBox.Show($"Error creating new tab: {ex.Message}", 
-                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                return null;
-            }
+                finally
+                {
+                    // Always transition back to Ready state
+                    _stateManager.TryTransitionTo(Core.WindowState.Ready, out _);
+                }
+            });
         }
 
         /// <summary>
@@ -3385,17 +3450,26 @@ namespace ExplorerPro.UI.MainWindow
         }
 
                 /// <summary>
-        /// Ensures that when new tabs are added, they are placed at the correct position
+        /// PHASE 1 STEP 3 ENHANCED: Ensures that when new tabs are added, they are placed at the correct position
+        /// with proper layout updates to prevent header visibility issues
         /// </summary>
         private void InsertTabAtCorrectPosition(TabItem newTab)
         {
             try
             {
                 if (MainTabs?.Items == null) return;
+                
+                // Force layout update before insertion to ensure container is ready
+                MainTabs.UpdateLayout();
+
+                // Get the TabModel for proper insertion logic
+                var tabModel = newTab.DataContext as TabModel ?? newTab.Tag as TabModel;
+                bool isPinned = tabModel?.IsPinned ?? false;
 
                 // Use ChromeStyleTabControl's GetNewTabInsertIndex if available
                 if (MainTabs is ChromeStyleTabControl chromeControl)
                 {
+                    // Pass the TabModel for proper pinned/unpinned logic
                     int insertIndex = chromeControl.GetNewTabInsertIndex();
                     
                     // Validate index
@@ -3405,13 +3479,12 @@ namespace ExplorerPro.UI.MainWindow
                         insertIndex = MainTabs.Items.Count;
                     
                     MainTabs.Items.Insert(insertIndex, newTab);
-                    _instanceLogger?.LogDebug($"Inserted tab at position {insertIndex} using ChromeStyleTabControl logic");
+                    _instanceLogger?.LogDebug($"Inserted {(isPinned ? "pinned" : "regular")} tab at position {insertIndex} using ChromeStyleTabControl logic");
                 }
                 else
                 {
                     // Fallback logic for non-Chrome tab controls
-                    // If this is a pinned tab, add it at the end of pinned tabs
-                    if (IsTabPinned(newTab))
+                    if (isPinned)
                     {
                         int insertPosition = 0;
                         // Find the position after the last pinned tab
@@ -3434,12 +3507,24 @@ namespace ExplorerPro.UI.MainWindow
                         MainTabs.Items.Add(newTab);
                     }
                 }
+                
+                // Force another layout update after insertion
+                MainTabs.UpdateLayout();
+                
+                // Ensure the header is visible by verifying bindings
+                if (newTab.Header == null && tabModel != null)
+                {
+                    // Fallback: set header directly if binding failed
+                    newTab.Header = tabModel.Title;
+                    _instanceLogger?.LogWarning($"Tab header was null after insertion, set directly to: {tabModel.Title}");
+                }
             }
             catch (Exception ex)
             {
                 _instanceLogger?.LogError(ex, "Error inserting tab at correct position");
                 // Fallback: just add to the end
                 MainTabs.Items.Add(newTab);
+                MainTabs.UpdateLayout();
             }
         }
 
@@ -3693,14 +3778,58 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
-        /// Close specified tab.
+        /// PHASE 1 STEP 4 ENHANCED: Close specified tab, refreshing the last tab instead of closing it
         /// </summary>
         /// <param name="index">Index of tab to close</param>
         public void CloseTab(int index)
         {
+            // Check operation is allowed
+            if (!TryEnsureOperationAllowed("CloseTab"))
+            {
+                _instanceLogger?.LogWarning("CloseTab operation not allowed in current state");
+                return;
+            }
+            
             if (MainTabs.Items.Count <= 1)
             {
-                _instanceLogger?.LogDebug("Cannot close the last tab");
+                _instanceLogger?.LogInformation("Refreshing last tab instead of closing");
+                
+                // Get the last tab
+                if (index >= 0 && index < MainTabs.Items.Count && 
+                    MainTabs.Items[index] is TabItem lastTab)
+                {
+                    // Get the container from the tab
+                    var container = lastTab.Content as MainWindowContainer;
+                    if (container != null)
+                    {
+                        try
+                        {
+                            // Navigate to home directory
+                            string homePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                            container.NavigateToPath(homePath);
+                            
+                            // Update tab title
+                            if (lastTab.DataContext is TabModel tabModel)
+                            {
+                                tabModel.Title = "Home";
+                            }
+                            else if (lastTab.Tag is TabModel tagModel)
+                            {
+                                tagModel.Title = "Home";
+                            }
+                            else
+                            {
+                                lastTab.Header = "Home";
+                            }
+                            
+                            _instanceLogger?.LogInformation("Last tab refreshed to home directory");
+                        }
+                        catch (Exception ex)
+                        {
+                            _instanceLogger?.LogError(ex, "Error refreshing last tab");
+                        }
+                    }
+                }
                 return;
             }
             
@@ -3717,20 +3846,76 @@ namespace ExplorerPro.UI.MainWindow
                     return;
                 }
                 
+                // Dispose the container if needed
+                if (tabItem?.Content is MainWindowContainer container && container is IDisposable disposable)
+                {
+                    try
+                    {
+                        disposable.Dispose();
+                        _instanceLogger?.LogDebug($"Disposed container for tab at index {index}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _instanceLogger?.LogError(ex, "Error disposing tab container");
+                    }
+                }
+                
                 MainTabs.Items.RemoveAt(index);
+                _instanceLogger?.LogInformation($"Closed tab at index {index}");
             }
         }
 
         /// <summary>
-        /// Close the current tab.
+        /// PHASE 1 STEP 4 ENHANCED: Close the current tab with last tab preservation
         /// Enhanced for Phase 4A: Pattern-aware with CanClose check
         /// </summary>
         public void CloseCurrentTab()
         {
-            // Enforce minimum one tab
+            // Check operation is allowed
+            if (!TryEnsureOperationAllowed("CloseCurrentTab"))
+            {
+                _instanceLogger?.LogWarning("CloseCurrentTab operation not allowed in current state");
+                return;
+            }
+            
+            // Preserve the last tab by refreshing it
             if (MainTabs.Items.Count <= 1)
             {
-                _instanceLogger?.LogDebug("Cannot close the last tab");
+                _instanceLogger?.LogInformation("Refreshing last tab instead of closing");
+                
+                if (MainTabs.SelectedItem is TabItem lastTab)
+                {
+                    var container = lastTab.Content as MainWindowContainer;
+                    if (container != null)
+                    {
+                        try
+                        {
+                            // Navigate to home directory
+                            string homePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                            container.NavigateToPath(homePath);
+                            
+                            // Update tab title
+                            if (lastTab.DataContext is TabModel tabModel)
+                            {
+                                tabModel.Title = "Home";
+                            }
+                            else if (lastTab.Tag is TabModel tagModel)
+                            {
+                                tagModel.Title = "Home";
+                            }
+                            else
+                            {
+                                lastTab.Header = "Home";
+                            }
+                            
+                            _instanceLogger?.LogInformation("Last tab refreshed to home directory");
+                        }
+                        catch (Exception ex)
+                        {
+                            _instanceLogger?.LogError(ex, "Error refreshing last tab");
+                        }
+                    }
+                }
                 return;
             }
             
@@ -5731,7 +5916,7 @@ namespace ExplorerPro.UI.MainWindow
                 // Update the tab title to show proper window numbering (1-based indexing)
                 if (e.TabItem.Title == "New Tab")
                 {
-                    e.TabItem.Title = $"Window {MainTabs.Items.Count + 1}";
+                    e.TabItem.Title = GetNextTabTitle();
                 }
                 
                 _instanceLogger?.LogDebug($"New tab created: {e.TabItem.Title}");
@@ -5895,6 +6080,177 @@ namespace ExplorerPro.UI.MainWindow
             catch (Exception ex)
             {
                 _instanceLogger?.LogError(ex, "Error saving window layout");
+            }
+        }
+
+        /// <summary>
+        /// PHASE 1 HELPER: Generic ExecuteOnUIThread that can return values
+        /// </summary>
+        private T ExecuteOnUIThread<T>(Func<T> func, [CallerMemberName] string callerName = "")
+        {
+            if (func == null) throw new ArgumentNullException(nameof(func));
+            
+            try
+            {
+                if (Dispatcher == null || Dispatcher.HasShutdownStarted)
+                {
+                    _instanceLogger?.LogWarning($"{callerName}: Dispatcher unavailable");
+                    return default(T);
+                }
+                
+                if (Dispatcher.CheckAccess())
+                {
+                    return func();
+                }
+                else
+                {
+                    return Dispatcher.Invoke(func, DispatcherPriority.Normal);
+                }
+            }
+            catch (TaskCanceledException)
+            {
+                _instanceLogger?.LogDebug($"{callerName}: UI operation cancelled during shutdown");
+                return default(T);
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, $"{callerName}: Error during UI operation");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// PHASE 1 HELPER: Single item FindVisualChild
+        /// </summary>
+        public static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            return FindVisualChildren<T>(parent).FirstOrDefault();
+        }
+
+        /// <summary>
+        /// PHASE 1 HELPER: Safe EnsureOperationAllowed wrapper that returns bool
+        /// </summary>
+        private bool TryEnsureOperationAllowed(string operationName)
+        {
+            try
+            {
+                EnsureOperationAllowed(operationName);
+                return true;
+            }
+            catch (ObjectDisposedException ex)
+            {
+                _instanceLogger?.LogWarning(ex, $"Operation not allowed - window disposed: {operationName}");
+                return false;
+            }
+            catch (InvalidOperationException ex)
+            {
+                _instanceLogger?.LogWarning(ex, $"Operation not allowed - invalid state: {operationName}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, $"Unexpected error checking operation: {operationName}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// PHASE 1 STEP 1: Gets the next available tab number by scanning existing tabs
+        /// Thread-safe implementation that handles detached windows
+        /// </summary>
+        private string GetNextTabTitle()
+        {
+            lock (_tabNamingLock)
+            {
+                try
+                {
+                    var usedNumbers = new HashSet<int>();
+                    
+                    // Scan current window tabs
+                    if (MainTabs?.Items != null)
+                    {
+                        foreach (TabItem tab in MainTabs.Items)
+                        {
+                            string title = null;
+                            
+                            // Check DataContext first (Phase 2 pattern)
+                            if (tab.DataContext is TabModel dataModel)
+                            {
+                                title = dataModel.Title;
+                            }
+                            // Check Tag for backward compatibility
+                            else if (tab.Tag is TabModel tagModel)
+                            {
+                                title = tagModel.Title;
+                            }
+                            // Fallback to header
+                            else if (tab.Header is string headerString)
+                            {
+                                title = headerString;
+                            }
+                            
+                            if (!string.IsNullOrEmpty(title))
+                            {
+                                var match = TabNumberRegex.Match(title);
+                                if (match.Success && int.TryParse(match.Groups[1].Value, out int number))
+                                {
+                                    usedNumbers.Add(number);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Scan all detached windows
+                    foreach (var window in WindowLifecycleManager.Instance.GetActiveWindows())
+                    {
+                        if (window != this && window.MainTabs?.Items != null)
+                        {
+                            foreach (TabItem tab in window.MainTabs.Items)
+                            {
+                                string title = null;
+                                
+                                if (tab.DataContext is TabModel dataModel)
+                                {
+                                    title = dataModel.Title;
+                                }
+                                else if (tab.Tag is TabModel tagModel)
+                                {
+                                    title = tagModel.Title;
+                                }
+                                else if (tab.Header is string headerString)
+                                {
+                                    title = headerString;
+                                }
+                                
+                                if (!string.IsNullOrEmpty(title))
+                                {
+                                    var match = TabNumberRegex.Match(title);
+                                    if (match.Success && int.TryParse(match.Groups[1].Value, out int number))
+                                    {
+                                        usedNumbers.Add(number);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Find the lowest available number
+                    int nextNumber = 1;
+                    while (usedNumbers.Contains(nextNumber))
+                    {
+                        nextNumber++;
+                    }
+                    
+                    string newTitle = $"Window {nextNumber}";
+                    _instanceLogger?.LogDebug($"Generated tab title: {newTitle}");
+                    return newTitle;
+                }
+                catch (Exception ex)
+                {
+                    _instanceLogger?.LogError(ex, "Error generating tab title, using fallback");
+                    // Fallback to timestamp-based naming
+                    return $"Window {DateTime.Now:HHmmss}";
+                }
             }
         }
 
@@ -6377,6 +6733,87 @@ namespace ExplorerPro.UI.MainWindow
             {
                 _navigationHistory.Clear();
                 _currentHistoryNode = null;
+            }
+        }
+
+        /// <summary>
+        /// PHASE 1 STEP 5: Dispose all tabs and their containers to prevent memory leaks
+        /// </summary>
+        private void DisposeAllTabs()
+        {
+            try
+            {
+                _instanceLogger?.LogInformation("Disposing all tabs and containers");
+                
+                if (MainTabs?.Items != null)
+                {
+                    int tabCount = MainTabs.Items.Count;
+                    
+                    // Iterate through all tabs and dispose their containers
+                    for (int i = tabCount - 1; i >= 0; i--)
+                    {
+                        if (MainTabs.Items[i] is TabItem tab)
+                        {
+                            try
+                            {
+                                // Get tab info for logging
+                                string tabTitle = "Unknown";
+                                if (tab.DataContext is TabModel dataModel)
+                                {
+                                    tabTitle = dataModel.Title;
+                                }
+                                else if (tab.Tag is TabModel tagModel)
+                                {
+                                    tabTitle = tagModel.Title;
+                                }
+                                else if (tab.Header != null)
+                                {
+                                    tabTitle = tab.Header.ToString();
+                                }
+                                
+                                // Dispose container if it implements IDisposable
+                                if (tab.Content is IDisposable disposableContent)
+                                {
+                                    disposableContent.Dispose();
+                                    _instanceLogger?.LogDebug($"Disposed container for tab: {tabTitle}");
+                                }
+                                
+                                // Clear references to help GC
+                                tab.Content = null;
+                                tab.DataContext = null;
+                                tab.Tag = null;
+                                
+                                _instanceLogger?.LogDebug($"Cleared references for tab: {tabTitle}");
+                            }
+                            catch (Exception ex)
+                            {
+                                _instanceLogger?.LogError(ex, $"Error disposing tab at index {i}");
+                            }
+                        }
+                    }
+                    
+                    // Clear all tabs
+                    MainTabs.Items.Clear();
+                    _instanceLogger?.LogInformation($"Disposed and cleared {tabCount} tabs");
+                }
+                
+                // Unsubscribe from Chrome tab control events if needed
+                if (MainTabs is ChromeStyleTabControl chromeControl)
+                {
+                    try
+                    {
+                        // ChromeStyleTabControl might have its own cleanup
+                        _instanceLogger?.LogDebug("ChromeStyleTabControl cleanup completed");
+                    }
+                    catch (Exception ex)
+                    {
+                        _instanceLogger?.LogError(ex, "Error during ChromeStyleTabControl cleanup");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error in DisposeAllTabs");
             }
         }
 

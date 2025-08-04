@@ -1853,6 +1853,53 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
+        /// <summary>
+        /// PHASE 1 STEP 2: Navigate to a specific path in the active file tree
+        /// </summary>
+        /// <param name="path">The path to navigate to</param>
+        public void NavigateToPath(string path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    Console.WriteLine("NavigateToPath: Invalid path provided");
+                    return;
+                }
+
+                // Get the active pane manager
+                if (_paneManager == null)
+                {
+                    Console.WriteLine("NavigateToPath: PaneManager is null");
+                    return;
+                }
+
+                // Get the selected tab from the active pane manager
+                var selectedTab = _paneManager.TabControl?.SelectedItem as TabItem;
+                if (selectedTab == null)
+                {
+                    Console.WriteLine("NavigateToPath: No active tab found");
+                    return;
+                }
+
+                // Get the file tree from the selected tab
+                var activeFileTree = selectedTab.Content as ImprovedFileTreeListView;
+                if (activeFileTree == null)
+                {
+                    Console.WriteLine("NavigateToPath: Active tab does not contain a file tree");
+                    return;
+                }
+
+                // Navigate to the path
+                activeFileTree.SetRootDirectory(path);
+                Console.WriteLine($"NavigateToPath: Successfully navigated to {path}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"NavigateToPath: Error - {ex.Message}");
+            }
+        }
+
         #endregion
 
         #region Split View
