@@ -17,11 +17,12 @@ namespace ExplorerPro.Core.Configuration
         
         // Phase 1 Feature Flags
         public static bool UseTabModelResolver => GetFlag("UseTabModelResolver", true);
-        public static bool UseTabDisposalCoordinator => GetFlag("UseTabDisposalCoordinator", false);
-        public static bool UseEventCleanupManager => GetFlag("UseEventCleanupManager", false);
+        public static bool UseTabDisposalCoordinator => GetFlag("UseTabDisposalCoordinator", true); // Enable by default for Phase 1
+        public static bool UseEventCleanupManager => GetFlag("UseEventCleanupManager", true); // Enable by default for Phase 1
         
         // Monitoring and Diagnostics
         public static bool EnableTabResolutionMonitoring => GetFlag("EnableTabResolutionMonitoring", true);
+        public static bool EnableTabDisposalMonitoring => GetFlag("EnableTabDisposalMonitoring", true); // New flag for disposal monitoring
         public static bool EnableVerboseTelemetry => GetFlag("EnableVerboseTelemetry", false);
         public static bool EnablePerformanceMetrics => GetFlag("EnablePerformanceMetrics", true);
         

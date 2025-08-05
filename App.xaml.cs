@@ -48,9 +48,14 @@ namespace ExplorerPro
         // Phase 1 Critical Fixes services
         public static ExplorerPro.Core.Telemetry.IExtendedTelemetryService? TelemetryService { get; private set; }
         public static ExplorerPro.Core.TabManagement.TabResolutionMonitor? TabResolutionMonitor { get; private set; }
+        public static ExplorerPro.Core.TabManagement.TabDisposalCoordinator? TabDisposalCoordinator { get; private set; }
+        public static ExplorerPro.Core.Events.EventCleanupCoordinator? EventCleanupCoordinator { get; private set; }
 
         // Logger factory for dependency injection
         private static ILoggerFactory? _loggerFactory;
+        
+        // Public accessor for EventCleanupManager and other components
+        public static ILoggerFactory? LoggerFactory => _loggerFactory;
         
         // Store event handlers for proper cleanup
         private EventHandler<AppTheme>? _themeChangedHandler;
@@ -369,7 +374,7 @@ namespace ExplorerPro
             try
             {
                 // Create a logger factory that can be used across the application
-                _loggerFactory = LoggerFactory.Create(builder =>
+                _loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder =>
                 {
                     // Configure logging levels
                     builder.SetMinimumLevel(LogLevel.Debug);
@@ -389,7 +394,7 @@ namespace ExplorerPro
                 // Try to create a minimal logger factory
                 try
                 {
-                    _loggerFactory = LoggerFactory.Create(builder => { });
+                    _loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder => { });
                 }
                 catch
                 {
@@ -603,12 +608,12 @@ namespace ExplorerPro
                 // Initialize TabModelResolver
                 if (_loggerFactory != null && TelemetryService != null && ResourceMonitor != null)
                 {
-                    ExplorerPro.Core.TabManagement.TabModelResolver.Initialize(
-                        _loggerFactory.CreateLogger("TabModelResolver"),
-                        TelemetryService,
-                        ResourceMonitor,
-                        new ExplorerPro.Core.SettingsService(Settings, _loggerFactory.CreateLogger<ExplorerPro.Core.SettingsService>())
-                    );
+                                            ExplorerPro.Core.TabManagement.TabModelResolver.Initialize(
+                            _loggerFactory?.CreateLogger("TabModelResolver"),
+                            TelemetryService,
+                            ResourceMonitor,
+                            new ExplorerPro.Core.SettingsService(Settings, _loggerFactory?.CreateLogger<ExplorerPro.Core.SettingsService>())
+                        );
                     
                     Console.WriteLine($"TabModelResolver initialized. Feature enabled: {ExplorerPro.Core.Configuration.FeatureFlags.UseTabModelResolver}");
                     
@@ -623,6 +628,30 @@ namespace ExplorerPro
                         );
                         
                         Console.WriteLine("TabResolutionMonitor started");
+                    }
+                    
+                    // Initialize TabDisposalCoordinator if enabled
+                    if (ExplorerPro.Core.Configuration.FeatureFlags.UseTabDisposalCoordinator)
+                    {
+                        TabDisposalCoordinator = ExplorerPro.Core.TabManagement.TabDisposalCoordinator.GetInstance(
+                            _loggerFactory.CreateLogger<ExplorerPro.Core.TabManagement.TabDisposalCoordinator>(),
+                            TelemetryService,
+                            ResourceMonitor
+                        );
+                        
+                        Console.WriteLine($"TabDisposalCoordinator initialized. Feature enabled: {ExplorerPro.Core.Configuration.FeatureFlags.UseTabDisposalCoordinator}");
+                    }
+                    
+                    // Initialize EventCleanupCoordinator if enabled
+                    if (ExplorerPro.Core.Configuration.FeatureFlags.UseEventCleanupManager)
+                    {
+                        EventCleanupCoordinator = ExplorerPro.Core.Events.EventCleanupCoordinator.GetInstance(
+                            _loggerFactory.CreateLogger<ExplorerPro.Core.Events.EventCleanupCoordinator>(),
+                            TelemetryService,
+                            ResourceMonitor
+                        );
+                        
+                        Console.WriteLine($"EventCleanupCoordinator initialized. Feature enabled: {ExplorerPro.Core.Configuration.FeatureFlags.UseEventCleanupManager}");
                     }
                 }
                 else
@@ -1298,6 +1327,44 @@ namespace ExplorerPro
                     Console.WriteLine("Stopping TabResolutionMonitor...");
                     TabResolutionMonitor.Dispose();
                     TabResolutionMonitor = null;
+                }
+                
+                // Stop TabDisposalCoordinator and report final stats
+                if (TabDisposalCoordinator != null)
+                {
+                    Console.WriteLine("Stopping TabDisposalCoordinator...");
+                    try
+                    {
+                        var disposalStats = TabDisposalCoordinator.GetStats();
+                        Console.WriteLine($"Final disposal stats - Success: {disposalStats.SuccessfulDisposals}, " +
+                                        $"Failed: {disposalStats.FailedDisposals}, Rate: {disposalStats.SuccessRate:F1}%");
+                        
+                        TabDisposalCoordinator.Dispose();
+                        TabDisposalCoordinator = null;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error disposing TabDisposalCoordinator: {ex.Message}");
+                    }
+                }
+                
+                // Stop EventCleanupCoordinator and report final stats
+                if (EventCleanupCoordinator != null)
+                {
+                    Console.WriteLine("Stopping EventCleanupCoordinator...");
+                    try
+                    {
+                        var globalStats = EventCleanupCoordinator.GetGlobalStats();
+                        Console.WriteLine($"Final event cleanup stats - Managers: {globalStats.TotalManagers}, " +
+                                        $"Registrations: {globalStats.TotalRegistrations}, Memory freed: {globalStats.TotalMemoryFreedBytes / (1024.0 * 1024.0):F2}MB");
+                        
+                        EventCleanupCoordinator.Dispose();
+                        EventCleanupCoordinator = null;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error disposing EventCleanupCoordinator: {ex.Message}");
+                    }
                 }
                 
                 // Report final TabModelResolver statistics

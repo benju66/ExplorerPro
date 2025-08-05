@@ -16,7 +16,7 @@ namespace ExplorerPro.Tests.Manual
     /// </summary>
     public static class Phase1CriticalFixesManualTests
     {
-        public static void RunAllTests()
+        public static async Task RunAllTests()
         {
             Console.WriteLine("=== Phase 1 Critical Fixes Validation ===");
             Console.WriteLine("Testing: Memory Leaks, Race Conditions, TabModel Consistency");
@@ -29,6 +29,16 @@ namespace ExplorerPro.Tests.Manual
                 // Run quick test first
                 Console.WriteLine("🚀 Running TabModelResolver Quick Test...");
                 TestTabModelResolver.RunQuickTest();
+                Console.WriteLine();
+                
+                // Run TabDisposalCoordinator tests
+                Console.WriteLine("🚀 Running TabDisposalCoordinator Tests...");
+                await TestTabDisposalCoordinator.RunQuickTest();
+                Console.WriteLine();
+                
+                // Run EventCleanupManager tests
+                Console.WriteLine("🚀 Running EventCleanupManager Tests...");
+                await TestEventCleanupManager.RunQuickTest();
                 Console.WriteLine();
                 
                 TestTabModelConsistency();

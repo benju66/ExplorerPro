@@ -3795,17 +3795,23 @@ namespace ExplorerPro.UI.MainWindow
                     return;
                 }
                 
-                // Dispose the container if needed
-                if (tabItem?.Content is MainWindowContainer container && container is IDisposable disposable)
+                // Use coordinated disposal if available
+                if (tabItem != null)
                 {
-                    try
+                    var coordinatedDisposal = DisposeTabWithCoordination(tabItem, $"Tab at index {index}");
+                    
+                    // If coordination failed or is disabled, perform direct disposal
+                    if (!coordinatedDisposal && tabItem.Content is MainWindowContainer container && container is IDisposable disposable)
                     {
-                        disposable.Dispose();
-                        _instanceLogger?.LogDebug($"Disposed container for tab at index {index}");
-                    }
-                    catch (Exception ex)
-                    {
-                        _instanceLogger?.LogError(ex, "Error disposing tab container");
+                        try
+                        {
+                            disposable.Dispose();
+                            _instanceLogger?.LogDebug($"Disposed container for tab at index {index}");
+                        }
+                        catch (Exception ex)
+                        {
+                            _instanceLogger?.LogError(ex, "Error disposing tab container");
+                        }
                     }
                 }
                 
@@ -5899,34 +5905,41 @@ namespace ExplorerPro.UI.MainWindow
 
                 if (tabItemToClose != null)
                 {
-                    // Get the container before removal
-                    var container = tabItemToClose.Content as MainWindowContainer;
+                    // Use coordinated disposal if available, otherwise fallback
+                    var coordinatedDisposal = DisposeTabWithCoordination(tabItemToClose, e.TabItem.Title);
                     
-                    // Dispose the container if it implements IDisposable
-                    if (container is IDisposable disposable)
+                    // If coordination failed or is disabled, perform direct disposal
+                    if (!coordinatedDisposal)
                     {
-                        try
+                        // Get the container before removal
+                        var container = tabItemToClose.Content as MainWindowContainer;
+                        
+                        // Dispose the container if it implements IDisposable
+                        if (container is IDisposable disposable)
                         {
-                            disposable.Dispose();
-                            _instanceLogger?.LogDebug($"Disposed container for tab: {e.TabItem.Title}");
+                            try
+                            {
+                                disposable.Dispose();
+                                _instanceLogger?.LogDebug($"Disposed container for tab: {e.TabItem.Title}");
+                            }
+                            catch (Exception disposeEx)
+                            {
+                                _instanceLogger?.LogError(disposeEx, $"Error disposing container for tab: {e.TabItem.Title}");
+                            }
                         }
-                        catch (Exception disposeEx)
+                        
+                        // Additional cleanup if needed
+                        if (container != null)
                         {
-                            _instanceLogger?.LogError(disposeEx, $"Error disposing container for tab: {e.TabItem.Title}");
+                            // Clean up any remaining references
+                            container.DataContext = null;
                         }
+                        
+                        // Clear tab references to help GC
+                        tabItemToClose.DataContext = null;
+                        tabItemToClose.Tag = null;
+                        tabItemToClose.Content = null;
                     }
-                    
-                    // Additional cleanup if needed
-                    if (container != null)
-                    {
-                        // Clean up any remaining references
-                        container.DataContext = null;
-                    }
-                    
-                    // Clear tab references to help GC
-                    tabItemToClose.DataContext = null;
-                    tabItemToClose.Tag = null;
-                    tabItemToClose.Content = null;
                 }
                 
                 _instanceLogger?.LogDebug($"Tab close handled: {e.TabItem.Title}");
@@ -6763,6 +6776,59 @@ namespace ExplorerPro.UI.MainWindow
             catch (Exception ex)
             {
                 _instanceLogger?.LogError(ex, "Error in DisposeAllTabs");
+            }
+        }
+
+        /// <summary>
+        /// PHASE 1 FIX 2: Use TabDisposalCoordinator for safe tab disposal
+        /// </summary>
+        private bool DisposeTabWithCoordination(TabItem tabItem, string tabDescription)
+        {
+            try
+            {
+                // Check if coordinated disposal is available and enabled
+                if (App.TabDisposalCoordinator != null && ExplorerPro.Core.Configuration.FeatureFlags.UseTabDisposalCoordinator)
+                {
+                    _instanceLogger?.LogDebug($"Using coordinated disposal for: {tabDescription}");
+                    
+                    // Perform coordinated disposal asynchronously but don't wait
+                    // This prevents UI blocking while still providing coordination benefits
+                    var disposalTask = App.TabDisposalCoordinator.DisposeTabAsync(tabItem, TimeSpan.FromSeconds(10));
+                    
+                    // Fire and forget with error handling
+                    disposalTask.ContinueWith(task =>
+                    {
+                        if (task.IsFaulted)
+                        {
+                            _instanceLogger?.LogError(task.Exception, $"Coordinated disposal failed for: {tabDescription}");
+                        }
+                        else if (task.IsCompletedSuccessfully)
+                        {
+                            var result = task.Result;
+                            if (result.IsSuccess)
+                            {
+                                _instanceLogger?.LogDebug($"Coordinated disposal succeeded for: {tabDescription}");
+                            }
+                            else
+                            {
+                                _instanceLogger?.LogWarning($"Coordinated disposal returned failure for {tabDescription}: {result.Message}");
+                            }
+                        }
+                    }, TaskContinuationOptions.ExecuteSynchronously);
+                    
+                    // Return true to indicate coordination was attempted
+                    return true;
+                }
+                else
+                {
+                    _instanceLogger?.LogDebug($"TabDisposalCoordinator not available or disabled, using direct disposal for: {tabDescription}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, $"Error during coordinated disposal setup for: {tabDescription}");
+                return false;
             }
         }
 
