@@ -26,6 +26,11 @@ namespace ExplorerPro.Tests.Manual
             {
                 InitializeServices();
                 
+                // Run quick test first
+                Console.WriteLine("🚀 Running TabModelResolver Quick Test...");
+                TestTabModelResolver.RunQuickTest();
+                Console.WriteLine();
+                
                 TestTabModelConsistency();
                 TestTabModelMigration();
                 TestFeatureFlagToggle();
@@ -53,7 +58,7 @@ namespace ExplorerPro.Tests.Manual
             // Initialize TabModelResolver with mock services
             TabModelResolver.Initialize(
                 NullLogger.Instance,
-                new ConsoleTelemetryService(),
+                new ExplorerPro.Core.Telemetry.ExtendedTelemetryService(),
                 new ResourceMonitor(),
                 null // No settings service for manual tests
             );

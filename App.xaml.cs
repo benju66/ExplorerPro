@@ -44,6 +44,10 @@ namespace ExplorerPro
         public static ExplorerPro.Core.TabManagement.TabVirtualizationManager? TabVirtualizationManager { get; private set; }
         public static ExplorerPro.Core.TabManagement.TabHibernationManager? TabHibernationManager { get; private set; }
         public static ExplorerPro.Core.TabManagement.PerformanceOptimizer? PerformanceOptimizer { get; private set; }
+        
+        // Phase 1 Critical Fixes services
+        public static ExplorerPro.Core.Telemetry.IExtendedTelemetryService? TelemetryService { get; private set; }
+        public static ExplorerPro.Core.TabManagement.TabResolutionMonitor? TabResolutionMonitor { get; private set; }
 
         // Logger factory for dependency injection
         private static ILoggerFactory? _loggerFactory;
@@ -519,6 +523,9 @@ namespace ExplorerPro
                 InitializeUndoManager();
                 InitializeTabManagementServices();
                 
+                // Initialize Phase 1 Critical Fixes after core services
+                InitializePhase1CriticalFixes();
+                
                 Console.WriteLine("All services initialized successfully");
             }
             catch (Exception ex)
@@ -578,6 +585,59 @@ namespace ExplorerPro
                 WindowManager = null;
                 TabOperationsManager = null;
                 DragDropService = null;
+            }
+        }
+        
+        private void InitializePhase1CriticalFixes()
+        {
+            try
+            {
+                Console.WriteLine("Initializing Phase 1 Critical Fixes...");
+                
+                // Initialize extended telemetry service
+                TelemetryService = new ExplorerPro.Core.Telemetry.ExtendedTelemetryService(
+                    _loggerFactory?.CreateLogger<ExplorerPro.Core.Telemetry.ExtendedTelemetryService>()
+                );
+                Console.WriteLine("Extended telemetry service initialized");
+                
+                // Initialize TabModelResolver
+                if (_loggerFactory != null && TelemetryService != null && ResourceMonitor != null)
+                {
+                    ExplorerPro.Core.TabManagement.TabModelResolver.Initialize(
+                        _loggerFactory.CreateLogger("TabModelResolver"),
+                        TelemetryService,
+                        ResourceMonitor,
+                        new ExplorerPro.Core.SettingsService(Settings, _loggerFactory.CreateLogger<ExplorerPro.Core.SettingsService>())
+                    );
+                    
+                    Console.WriteLine($"TabModelResolver initialized. Feature enabled: {ExplorerPro.Core.Configuration.FeatureFlags.UseTabModelResolver}");
+                    
+                    // Start monitoring if enabled
+                    if (ExplorerPro.Core.Configuration.FeatureFlags.UseTabModelResolver && 
+                        ExplorerPro.Core.Configuration.FeatureFlags.EnableTabResolutionMonitoring)
+                    {
+                        TabResolutionMonitor = new ExplorerPro.Core.TabManagement.TabResolutionMonitor(
+                            _loggerFactory.CreateLogger<ExplorerPro.Core.TabManagement.TabResolutionMonitor>(),
+                            TelemetryService,
+                            TimeSpan.FromMinutes(5)
+                        );
+                        
+                        Console.WriteLine("TabResolutionMonitor started");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("WARNING: Could not initialize TabModelResolver - missing dependencies");
+                }
+                
+                Console.WriteLine("Phase 1 Critical Fixes initialization completed");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error initializing Phase 1 Critical Fixes: {ex.Message}");
+                // Don't throw - allow app to continue with degraded functionality
+                TelemetryService = null;
+                TabResolutionMonitor = null;
             }
         }
         
@@ -729,6 +789,10 @@ namespace ExplorerPro
                 // Phase 5: Save state of each manager separately to isolate errors
                 Console.WriteLine("Phase 5: Saving application state...");
                 SaveApplicationState();
+                
+                // Phase 5.5: Cleanup Phase 1 Critical Fixes
+                Console.WriteLine("Phase 5.5: Cleaning up Phase 1 Critical Fixes...");
+                CleanupPhase1CriticalFixes();
                 
                 // Phase 6: Dispose all services
                 Console.WriteLine("Phase 6: Disposing services...");
@@ -1221,6 +1285,47 @@ namespace ExplorerPro
             catch (Exception ex)
             {
                 Console.WriteLine($"Error disposing MainWindow shared logger factory: {ex.Message}");
+            }
+        }
+        
+        private void CleanupPhase1CriticalFixes()
+        {
+            try
+            {
+                // Stop monitoring and report final telemetry
+                if (TabResolutionMonitor != null)
+                {
+                    Console.WriteLine("Stopping TabResolutionMonitor...");
+                    TabResolutionMonitor.Dispose();
+                    TabResolutionMonitor = null;
+                }
+                
+                // Report final TabModelResolver statistics
+                if (TelemetryService != null)
+                {
+                    Console.WriteLine("Reporting final TabModelResolver statistics...");
+                    var finalStats = ExplorerPro.Core.TabManagement.TabModelResolver.GetStats();
+                    TelemetryService.TrackEvent("TabModelResolver.FinalStats", new Dictionary<string, object>
+                    {
+                        ["DataContextHits"] = finalStats.DataContextHits,
+                        ["TagFallbacks"] = finalStats.TagFallbacks,
+                        ["Migrations"] = finalStats.Migrations,
+                        ["NotFound"] = finalStats.NotFound,
+                        ["FallbackRate"] = finalStats.TagFallbackRate
+                    });
+                    
+                    Console.WriteLine($"Final TabModel stats - DataContext: {finalStats.DataContextHits}, " +
+                                    $"Tag fallbacks: {finalStats.TagFallbacks}, Migrations: {finalStats.Migrations}");
+                }
+                
+                // Clear references
+                TelemetryService = null;
+                
+                Console.WriteLine("Phase 1 Critical Fixes cleanup completed");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error during Phase 1 Critical Fixes cleanup: {ex.Message}");
             }
         }
         

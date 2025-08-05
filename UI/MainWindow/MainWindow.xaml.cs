@@ -2438,10 +2438,11 @@ namespace ExplorerPro.UI.MainWindow
         {
             var tabItem = new TabItem
             {
-                DataContext = model,
-                Content = model.Content,
-                Tag = model  // Ensure Tag is set for compatibility
+                Content = model.Content
             };
+            
+            // Use TabModelResolver to set model properly (will set DataContext and clear Tag)
+            ExplorerPro.Core.TabManagement.TabModelResolver.SetTabModel(tabItem, model);
             
             // Set up header binding with deferred execution to ensure visual tree is ready
             Dispatcher.BeginInvoke(new Action(() =>
@@ -2450,7 +2451,8 @@ namespace ExplorerPro.UI.MainWindow
                 var headerBinding = new Binding("Title") 
                 { 
                     Source = model,
-                    Mode = BindingMode.TwoWay
+                    Mode = BindingMode.TwoWay,
+                    UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged
                 };
                 tabItem.SetBinding(HeaderedContentControl.HeaderProperty, headerBinding);
                 

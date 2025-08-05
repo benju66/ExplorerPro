@@ -1,4 +1,5 @@
 using System;
+using Microsoft.Extensions.Logging;
 
 namespace ExplorerPro.Core
 {
@@ -7,15 +8,26 @@ namespace ExplorerPro.Core
     /// </summary>
     public class ConsoleTelemetryService : ITelemetryService
     {
+        protected readonly ILogger _logger;
+        
+        public ConsoleTelemetryService(ILogger logger = null)
+        {
+            _logger = logger;
+        }
+        
         /// <summary>
         /// Tracks an exception with the given context
         /// </summary>
         /// <param name="ex">The exception to track</param>
         /// <param name="context">The context in which the exception occurred</param>
-        public void TrackException(Exception ex, string context)
+        public virtual void TrackException(Exception ex, string context)
         {
-            Console.WriteLine($"Telemetry: Exception in {context}: {ex.Message}");
-            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            Console.WriteLine($"[{timestamp}] [TELEMETRY EXCEPTION] Context: {context}");
+            Console.WriteLine($"[{timestamp}] Exception: {ex.Message}");
+            Console.WriteLine($"[{timestamp}] Stack trace: {ex.StackTrace}");
+            
+            _logger?.LogError(ex, "Telemetry Exception in context: {Context}", context);
         }
     }
 } 

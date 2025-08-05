@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using ExplorerPro.Core.Monitoring;
+using ExplorerPro.Core.Telemetry;
 
 namespace ExplorerPro.Core.TabManagement
 {
@@ -13,7 +14,7 @@ namespace ExplorerPro.Core.TabManagement
     public class TabResolutionMonitor : IDisposable
     {
         private readonly ILogger<TabResolutionMonitor> _logger;
-        private readonly ITelemetryService _telemetryService;
+        private readonly IExtendedTelemetryService _telemetryService;
         private readonly Timer _monitoringTimer;
         private readonly TimeSpan _monitoringInterval;
         
@@ -28,7 +29,7 @@ namespace ExplorerPro.Core.TabManagement
         
         public TabResolutionMonitor(
             ILogger<TabResolutionMonitor> logger,
-            ITelemetryService telemetryService,
+            IExtendedTelemetryService telemetryService,
             TimeSpan? monitoringInterval = null)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));

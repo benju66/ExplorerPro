@@ -4028,23 +4028,14 @@ namespace ExplorerPro.UI.Controls
         }
         
         /// <summary>
-        /// Gets the TabModel from a TabItem, checking DataContext first, then Tag
+        /// Gets the TabModel from a TabItem using the centralized resolver
         /// </summary>
         /// <param name="tabItem">The TabItem to get the model from</param>
         /// <returns>The TabModel or null if not found</returns>
         private TabModel GetTabModel(TabItem tabItem)
         {
-            if (tabItem == null) return null;
-            
-            // Check DataContext first (preferred)
-            if (tabItem.DataContext is TabModel dataContextModel)
-                return dataContextModel;
-            
-            // Fall back to Tag for backward compatibility
-            if (tabItem.Tag is TabModel tagModel)
-                return tagModel;
-            
-            return null;
+            // Use centralized TabModelResolver for consistent behavior and telemetry
+            return ExplorerPro.Core.TabManagement.TabModelResolver.GetTabModel(tabItem);
         }
 
         #endregion

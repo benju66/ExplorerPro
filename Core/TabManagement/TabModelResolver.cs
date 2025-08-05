@@ -4,6 +4,8 @@ using ExplorerPro.Models;
 using System.Windows.Controls;
 using Microsoft.Extensions.Logging;
 using ExplorerPro.Core.Monitoring;
+using ExplorerPro.Core.Telemetry;
+using ExplorerPro.Core.Configuration;
 using System.Collections.Generic;
 
 namespace ExplorerPro.Core.TabManagement
@@ -18,7 +20,7 @@ namespace ExplorerPro.Core.TabManagement
         #region Private Fields
         
         private static ILogger _logger;
-        private static ITelemetryService _telemetryService;
+        private static IExtendedTelemetryService _telemetryService;
         private static ResourceMonitor _performanceMonitor;
         private static ISettingsService _settingsService;
         
@@ -40,7 +42,7 @@ namespace ExplorerPro.Core.TabManagement
         /// </summary>
         public static void Initialize(
             ILogger logger, 
-            ITelemetryService telemetryService, 
+            IExtendedTelemetryService telemetryService, 
             ResourceMonitor performanceMonitor,
             ISettingsService settingsService)
         {
@@ -77,7 +79,8 @@ namespace ExplorerPro.Core.TabManagement
                 return null;
             }
             
-            using var operation = _performanceMonitor?.StartOperation("TabModel.Resolution");
+            // Track performance using ResourceMonitor snapshot
+            var startSnapshot = _performanceMonitor?.GetCurrentSnapshot();
             
             try
             {
@@ -187,23 +190,8 @@ namespace ExplorerPro.Core.TabManagement
         {
             if (!_isEnabled.HasValue)
             {
-                // Check feature flag via environment variable first
-                var envValue = Environment.GetEnvironmentVariable("FF_USE_TAB_MODEL_RESOLVER");
-                if (bool.TryParse(envValue, out var envFlag))
-                {
-                    _isEnabled = envFlag;
-                }
-                else if (_settingsService != null)
-                {
-                    // Check settings service
-                    _isEnabled = _settingsService.GetSetting("FeatureFlags.UseTabModelResolver", true);
-                }
-                else
-                {
-                    // Default to enabled
-                    _isEnabled = true;
-                }
-                
+                // Use centralized feature flag management
+                _isEnabled = FeatureFlags.UseTabModelResolver;
                 _logger?.LogInformation("TabModelResolver feature flag: {IsEnabled}", _isEnabled);
             }
             
