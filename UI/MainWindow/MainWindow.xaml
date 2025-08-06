@@ -661,7 +661,8 @@ All dependencies mapped and validation tests established.
             <controls:ChromeStyleTabControl x:Name="MainTabs" 
                                           Background="#FFFFFF"
                                           BorderThickness="0"
-                                          TabStripPlacement="Top">
+                                          TabStripPlacement="Top"
+                                          ItemsSource="{Binding RelativeSource={RelativeSource Self}, Path=TabItems}">
 
 
                 <!-- TabControl ItemTemplate for content switching -->
@@ -699,6 +700,13 @@ All dependencies mapped and validation tests established.
                         </Grid>
                     </DataTemplate>
                 </TabControl.ItemTemplate>
+
+                <!-- ContentTemplate for tab content display -->
+                <TabControl.ContentTemplate>
+                    <DataTemplate>
+                        <ContentPresenter Content="{Binding Content}" />
+                    </DataTemplate>
+                </TabControl.ContentTemplate>
 
                 <!-- Ultra-Modern TabControl Template with integrated Toolbar -->
                 <TabControl.Template>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -1644,11 +1645,53 @@ namespace ExplorerPro.UI.MainWindow
         {
             _stateManager.TryTransitionTo(Core.WindowState.Ready, out _);
             
+            // Initialize default tabs with proper binding
+            InitializeDefaultTabs();
+            
             // Migrate existing tabs from Tag to DataContext (Phase 2)
             Dispatcher.BeginInvoke(new Action(() =>
             {
                 MigrateTagToDataContext();
             }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        /// <summary>
+        /// Initialize default tabs with proper ItemsSource binding
+        /// </summary>
+        private void InitializeDefaultTabs()
+        {
+            if (MainTabs is ChromeStyleTabControl chromeTabControl)
+            {
+                // Ensure TabItems collection exists
+                if (chromeTabControl.TabItems == null)
+                {
+                    chromeTabControl.TabItems = new ObservableCollection<TabModel>();
+                }
+                
+                // If no tabs exist, create default tab
+                if (chromeTabControl.TabItems.Count == 0)
+                {
+                    // Create default tab with proper content
+                    var defaultTab = new TabModel("Window 1"); // Start with Window 1
+                    
+                    // Create and set content BEFORE adding to collection
+                    var container = new MainWindowContainer(this);
+                    string defaultPath = ValidatePath(null);
+                    container.InitializeWithFileTree(defaultPath);
+                    ConnectPinnedPanel(container);
+                    
+                    // Set content on MODEL
+                    defaultTab.Content = container;
+                    
+                    // Add to collection
+                    chromeTabControl.TabItems.Add(defaultTab);
+                    chromeTabControl.SelectedTabItem = defaultTab;
+                    
+                    _instanceLogger?.LogDebug("Initialized default tab with content");
+                }
+                
+                _instanceLogger?.LogDebug($"Initialized with {chromeTabControl.TabItems.Count} tabs");
+            }
         }
 
         /// <summary>
@@ -2843,29 +2886,33 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                // Check if MainTabs is a ChromeStyleTabControl and use its AddNewTab method
                 if (MainTabs is ChromeStyleTabControl chromeTabControl)
                 {
-                    var newTabModel = chromeTabControl.AddNewTab();
-                    if (newTabModel != null)
-                    {
-                        // Success - tab created with proper Chrome styling
-                        _instanceLogger?.LogDebug($"Tab created via ChromeStyleTabControl: {newTabModel.Title}");
-                        return;
-                    }
-                }
-                
-                // Fallback to existing methods
-                var container = AddNewMainWindowTab();
-                if (container == null)
-                {
-                    SafeAddNewTab();
+                    // Create the TabModel
+                    string tabTitle = GetNextTabTitle();
+                    var tabModel = new TabModel(tabTitle);
+                    
+                    // Create the container content BEFORE adding to collection
+                    var container = new MainWindowContainer(this);
+                    string defaultPath = ValidatePath(null);
+                    container.InitializeWithFileTree(defaultPath);
+                    ConnectPinnedPanel(container);
+                    
+                    // CRITICAL: Set content on the MODEL, not the TabItem
+                    tabModel.Content = container;
+                    
+                    // Add to the TabItems collection
+                    chromeTabControl.TabItems.Add(tabModel);
+                    
+                    // Select the new tab
+                    chromeTabControl.SelectedTabItem = tabModel;
+                    
+                    _instanceLogger?.LogInformation($"Created tab '{tabTitle}' with content");
                 }
             }
             catch (Exception ex)
             {
-                _instanceLogger?.LogError(ex, "Error in AddTabButton_Click");
-                SafeAddNewTab();
+                _instanceLogger?.LogError(ex, "Error creating new tab");
             }
         }
 
@@ -6023,98 +6070,37 @@ namespace ExplorerPro.UI.MainWindow
         /// Thread-safe implementation that handles detached windows
         /// </summary>
         private string GetNextTabTitle()
-        {
-            lock (_tabNamingLock)
             {
                 try
                 {
-                    var usedNumbers = new HashSet<int>();
-                    
-                    // Scan current window tabs
-                    if (MainTabs?.Items != null)
+                // Find the highest existing Window number
+                int maxNumber = 0;
+                
+                if (MainTabs is ChromeStyleTabControl chromeTabControl && chromeTabControl.TabItems != null)
+                {
+                    foreach (var tabModel in chromeTabControl.TabItems)
                     {
-                        foreach (TabItem tab in MainTabs.Items)
+                        if (tabModel != null && !string.IsNullOrEmpty(tabModel.Title))
                         {
-                            string title = null;
-                            
-                            // Check DataContext first (Phase 2 pattern)
-                            if (tab.DataContext is TabModel dataModel)
-                            {
-                                title = dataModel.Title;
-                            }
-                            // Check Tag for backward compatibility
-                            else if (tab.Tag is TabModel tagModel)
-                            {
-                                title = tagModel.Title;
-                            }
-                            // Fallback to header
-                            else if (tab.Header is string headerString)
-                            {
-                                title = headerString;
-                            }
-                            
-                            if (!string.IsNullOrEmpty(title))
-                            {
-                                var match = TabNumberRegex.Match(title);
+                            // Extract number from "Window N" pattern
+                            var match = System.Text.RegularExpressions.Regex.Match(tabModel.Title, @"Window (\d+)");
                                 if (match.Success && int.TryParse(match.Groups[1].Value, out int number))
                                 {
-                                    usedNumbers.Add(number);
-                                }
+                                maxNumber = Math.Max(maxNumber, number);
                             }
                         }
                     }
-                    
-                    // Scan all detached windows
-                    foreach (var window in WindowLifecycleManager.Instance.GetActiveWindows())
-                    {
-                        if (window != this && window.MainTabs?.Items != null)
-                        {
-                            foreach (TabItem tab in window.MainTabs.Items)
-                            {
-                                string title = null;
-                                
-                                if (tab.DataContext is TabModel dataModel)
-                                {
-                                    title = dataModel.Title;
-                                }
-                                else if (tab.Tag is TabModel tagModel)
-                                {
-                                    title = tagModel.Title;
-                                }
-                                else if (tab.Header is string headerString)
-                                {
-                                    title = headerString;
-                                }
-                                
-                                if (!string.IsNullOrEmpty(title))
-                                {
-                                    var match = TabNumberRegex.Match(title);
-                                    if (match.Success && int.TryParse(match.Groups[1].Value, out int number))
-                                    {
-                                        usedNumbers.Add(number);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Find the lowest available number
-                    int nextNumber = 1;
-                    while (usedNumbers.Contains(nextNumber))
-                    {
-                        nextNumber++;
-                    }
-                    
-                    string newTitle = $"Window {nextNumber}";
-                    _instanceLogger?.LogDebug($"Generated tab title: {newTitle}");
-                    return newTitle;
+                }
+                
+                // Return next sequential number
+                return $"Window {maxNumber + 1}";
                 }
                 catch (Exception ex)
                 {
-                    _instanceLogger?.LogError(ex, "Error generating tab title, using fallback");
-                    // Fallback to timestamp-based naming
-                    return $"Window {DateTime.Now:HHmmss}";
-                }
+                _instanceLogger?.LogError(ex, "Error generating next tab title");
+                // Fallback to simple increment
+                var chromeTabControl = MainTabs as ChromeStyleTabControl;
+                return $"Window {chromeTabControl?.TabItems?.Count + 1 ?? 2}";
             }
         }
 

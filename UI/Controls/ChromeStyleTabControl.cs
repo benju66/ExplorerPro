@@ -3405,7 +3405,17 @@ namespace ExplorerPro.UI.Controls
         /// Closes the currently selected tab
         /// </summary>
         /// <returns>True if the tab was closed, false otherwise</returns>
-        public bool CloseCurrentTab()
+        public void CloseCurrentTab()
+        {
+            if (SelectedTabItem != null && TabItems != null)
+            {
+                CloseTab(SelectedTabItem);
+            }
+        }
+
+
+
+        public bool CloseCurrentTabOld()
         {
             return CloseTab(SelectedTabItem);
         }
@@ -3473,7 +3483,7 @@ namespace ExplorerPro.UI.Controls
                         // Fallback to direct subscription during construction
                         newCollection.CollectionChanged += control.OnTabItemsCollectionChanged;
                     }
-                    control.RefreshTabItems();
+                    // RefreshTabItems(); // Don't call this when using ItemsSource
                 }
             }
         }
@@ -3501,7 +3511,7 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         private void OnTabItemsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
-            RefreshTabItems();
+            // RefreshTabItems(); // Don't call this when using ItemsSource
             
             // Save state when tabs are added or removed
             try
@@ -3564,24 +3574,33 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         private void RefreshTabItems()
         {
-            // Clear existing items
-            Items.Clear();
-
+            try
+            {
             if (TabItems == null) return;
 
-            // Add TabItems based on TabModels
+                // DO NOT manipulate Items directly when using ItemsSource
+                // WPF will handle container generation automatically
+                
+                // Just ensure all TabModels are properly initialized
             foreach (var tabModel in TabItems)
             {
-                var tabItem = CreateTabItemFromModel(tabModel);
-                Items.Add(tabItem);
-                
-                // Wire up events for the new tab item
-                WireUpTabItemEvents(tabItem);
-                
-                // Apply template styling immediately for ALL tabs
-                // This ensures tabs get proper template during collection operations
-                ApplyTabStyling(tabItem, tabModel);
-                tabItem.UpdateLayout();
+                    // Ensure DisplayTitle is properly set
+                    if (string.IsNullOrEmpty(tabModel.Title))
+                    {
+                        _logger?.LogWarning($"TabModel {tabModel.Id} has empty title");
+                    }
+                }
+
+                // Force the ItemsControl to refresh its containers
+                var itemsSource = ItemsSource;
+                ItemsSource = null;
+                ItemsSource = itemsSource;
+
+                _logger?.LogDebug($"Refreshed tab items binding for {TabItems.Count} models");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error refreshing tab items");
             }
         }
 
@@ -3889,18 +3908,39 @@ namespace ExplorerPro.UI.Controls
         }
 
         /// <summary>
+        /// Gets the visual TabItem container for a TabModel
+        /// </summary>
+        private TabItem GetTabItemForModel(TabModel model)
+        {
+            if (model == null) return null;
+            return ItemContainerGenerator.ContainerFromItem(model) as TabItem;
+        }
+
+
+
+        /// <summary>
         /// Updates the selection to match the SelectedTabItem property
         /// </summary>
         private void UpdateSelection()
         {
             if (SelectedTabItem == null) return;
 
-            // Find the corresponding TabItem
-            var tabItem = Items.Cast<TabItem>().FirstOrDefault(t => t.Tag == SelectedTabItem);
-            if (tabItem != null)
+            // When using ItemsSource, we need to find the container, not cast the item
+            var container = ItemContainerGenerator.ContainerFromItem(SelectedTabItem) as TabItem;
+            if (container != null)
             {
-                SelectedItem = tabItem;
+                SelectedItem = container;
                 SelectedTabItem.Activate();
+            }
+            else
+            {
+                // Container might not be generated yet - try selecting by index
+                var index = TabItems?.IndexOf(SelectedTabItem) ?? -1;
+                if (index >= 0 && index < Items.Count)
+                {
+                    SelectedIndex = index;
+                    SelectedTabItem.Activate();
+                }
             }
         }
 
@@ -4159,15 +4199,29 @@ namespace ExplorerPro.UI.Controls
             
             if (element is TabItem tabItem && item is TabModel model)
             {
-                // Set DataContext for proper binding
+                // DataContext for bindings
                 tabItem.DataContext = model;
                 
-                // Apply visual styling immediately
-                ApplyTabStyling(tabItem, model);
-                tabItem.UpdateLayout();
+                // CRITICAL: Set the content from the model
+                if (model.Content != null)
+                {
+                    tabItem.Content = model.Content;
+                }
                 
-                // Set up any additional bindings or event handlers
+                // Store reference for quick lookup
+                TabModelResolver.SetTabModel(tabItem, model);
+                
+                // Apply visual styling
+                ApplyTabStyling(tabItem, model);
+                
+                // Set up any additional bindings
                 SetupTabBindings(tabItem);
+                
+                _logger?.LogDebug($"Prepared container for tab: {model.Title}, HasContent: {model.Content != null}");
+            }
+            else if (element is TabItem && item != null)
+            {
+                _logger?.LogWarning($"PrepareContainerForItemOverride received non-TabModel item: {item?.GetType().Name}");
             }
         }
         
@@ -4205,45 +4259,29 @@ namespace ExplorerPro.UI.Controls
 
             try
             {
-                // Handle new items
+                // When using ItemsSource, items are TabModel objects
                 if (e.Action == NotifyCollectionChangedAction.Add && e.NewItems != null)
                 {
                     foreach (var item in e.NewItems)
                     {
-                        if (item is TabItem tabItem)
+                        if (item is TabModel model)
                         {
-                            WireUpTabItemEvents(tabItem);
-                        }
-                    }
-                }
-
-                // Handle removed items
-                if (e.Action == NotifyCollectionChangedAction.Remove && e.OldItems != null)
-                {
-                    foreach (var item in e.OldItems)
-                    {
-                        if (item is TabItem tabItem)
-                        {
-                            // Clean up any event handlers
-                            var closeButton = FindChildOfType<Button>(tabItem, "CloseButton");
-                            if (closeButton != null)
+                            // Wait for container generation
+                            Dispatcher.BeginInvoke(new Action(() =>
                             {
-                                // The weak event subscription will automatically clean up
-                                _logger?.LogDebug($"Tab removed, weak event handlers will be cleaned up for: {tabItem.Header}");
-                            }
+                                var container = ItemContainerGenerator.ContainerFromItem(model) as TabItem;
+                                if (container != null)
+                                {
+                                    WireUpTabItemEvents(container);
+                                }
+                            }), System.Windows.Threading.DispatcherPriority.Loaded);
                         }
                     }
-                }
-
-                // Handle reset (clear all)
-                if (e.Action == NotifyCollectionChangedAction.Reset)
-                {
-                    _logger?.LogDebug("All tabs cleared, weak event handlers will be cleaned up automatically");
                 }
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Error handling items collection change");
+                _logger?.LogError(ex, "Error in OnItemsChanged");
             }
         }
 
@@ -4332,7 +4370,7 @@ namespace ExplorerPro.UI.Controls
                 if (colorDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
                 {
                     // For now, just update the background of the tab item directly
-                    var tabItem = Items.Cast<TabItem>().FirstOrDefault(t => t.Tag == tabModel);
+                    var tabItem = GetTabItemForModel(tabModel);
                     if (tabItem != null)
                     {
                         var color = Color.FromArgb(colorDialog.Color.A, colorDialog.Color.R, colorDialog.Color.G, colorDialog.Color.B);
@@ -4358,7 +4396,7 @@ namespace ExplorerPro.UI.Controls
                 var mainWindow = Window.GetWindow(this) as ExplorerPro.UI.MainWindow.MainWindow;
                 if (mainWindow != null)
                 {
-                    var tabItem = Items.Cast<TabItem>().FirstOrDefault(t => t.Tag == tabModel);
+                    var tabItem = GetTabItemForModel(tabModel);
                     if (tabItem != null)
                     {
                         var detachedWindow = mainWindow.DetachTabToNewWindow(tabItem);
@@ -4967,7 +5005,7 @@ namespace ExplorerPro.UI.Controls
         {
             try
             {
-                var tabItem = Items.Cast<TabItem>().FirstOrDefault(t => t.Tag == tabModel);
+                var tabItem = GetTabItemForModel(tabModel);
                 if (tabItem != null)
                 {
                     // Add visual indicator for hibernated state (e.g., opacity, icon)
@@ -4988,7 +5026,7 @@ namespace ExplorerPro.UI.Controls
         {
             try
             {
-                var tabItem = Items.Cast<TabItem>().FirstOrDefault(t => t.Tag == tabModel);
+                var tabItem = GetTabItemForModel(tabModel);
                 if (tabItem != null)
                 {
                     // Remove hibernation visual indicators

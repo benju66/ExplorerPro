@@ -232,9 +232,9 @@ namespace ExplorerPro.Models
         {
             get
             {
-                var title = _title;
-                if (_hasUnsavedChanges) title += " •";
-                return title;
+                if (HasUnsavedChanges)
+                    return $"• {Title}";
+                return Title ?? "Tab";
             }
         }
         
@@ -543,7 +543,9 @@ namespace ExplorerPro.Models
         
         public override string ToString()
         {
-            return $"TabModel: {DisplayTitle} ({Id})";
+            // This is what displays when binding fails
+            // Return just the title, not "TabModel: Title"
+            return DisplayTitle ?? Title ?? "Tab";
         }
         
         public override bool Equals(object obj)
