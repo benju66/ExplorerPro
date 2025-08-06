@@ -3749,6 +3749,9 @@ namespace ExplorerPro.UI.Controls
                             tabItem.ClearValue(TemplateProperty);
                             tabItem.SetResourceReference(StyleProperty, "ChromeTabItemStyle");
                         }
+                        
+                        // Ensure close button wiring after style is applied
+                        tabItem.ApplyTemplate();
                     }
                     catch (ResourceReferenceKeyNotFoundException)
                     {
@@ -4224,19 +4227,40 @@ namespace ExplorerPro.UI.Controls
                 
                 // Wire up the close button if it exists in the template
                 // This ensures the button works even if defined in styles
-                Dispatcher.BeginInvoke(new Action(() =>
+                tabItem.Loaded += (sender, args) =>
                 {
-                    var closeButton = FindChildOfType<Button>(tabItem, "CloseButton");
-                    if (closeButton != null)
+                    // Give the template time to fully load
+                    Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        // Remove any existing handlers first
-                        closeButton.Click -= OnTabCloseButtonClick;
-                        // Add the handler
-                        closeButton.Click += OnTabCloseButtonClick;
-                        // Ensure button has reference to TabModel
-                        closeButton.Tag = tabModel;
-                    }
-                }), System.Windows.Threading.DispatcherPriority.Loaded);
+                        var closeButton = FindChildOfType<Button>(tabItem, "CloseButton");
+                        if (closeButton != null)
+                        {
+                            _logger?.LogDebug($"Found close button for tab: {tabModel.Title}");
+                            // Remove any existing handlers first
+                            closeButton.Click -= OnTabCloseButtonClick;
+                            // Add the handler
+                            closeButton.Click += OnTabCloseButtonClick;
+                            // Ensure button has reference to TabModel
+                            closeButton.Tag = tabModel;
+                        }
+                        else
+                        {
+                            _logger?.LogWarning($"Could not find close button for tab: {tabModel.Title}");
+                            // Try getting it from the template
+                            if (tabItem.Template != null)
+                            {
+                                closeButton = tabItem.Template.FindName("CloseButton", tabItem) as Button;
+                                if (closeButton != null)
+                                {
+                                    _logger?.LogDebug($"Found close button via template for tab: {tabModel.Title}");
+                                    closeButton.Click -= OnTabCloseButtonClick;
+                                    closeButton.Click += OnTabCloseButtonClick;
+                                    closeButton.Tag = tabModel;
+                                }
+                            }
+                        }
+                    }), System.Windows.Threading.DispatcherPriority.Background);
+                };
                 
                 // Set up any additional bindings
                 SetupTabBindings(tabItem);

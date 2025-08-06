@@ -684,7 +684,12 @@ All dependencies mapped and validation tests established.
                     </DataTemplate>
                 </TabControl.ContentTemplate>
 
-                <!-- ChromeStyleTabControl handles its own ItemContainerStyle and context menus -->
+                <!-- ItemContainerStyle without static context menu - using dynamic menu from ChromeStyleTabControl -->
+                <TabControl.ItemContainerStyle>
+                    <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
+                        <EventSetter Event="ContextMenuOpening" Handler="TabItem_ContextMenuOpening"/>
+                    </Style>
+                </TabControl.ItemContainerStyle>
 
                 <!-- Ultra-Modern TabControl Template with integrated Toolbar -->
                 <TabControl.Template>

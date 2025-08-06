@@ -318,7 +318,7 @@
                             BorderThickness="1,1,1,0"
                             CornerRadius="8,8,0,0"
                             Margin="2,3,2,-1"
-                            Padding="8,6,8,6"
+                            Padding="8,6,32,6"
                             Height="{StaticResource TabHeight}"
                             MinWidth="{StaticResource MinRegularTabWidth}"
                             MaxWidth="{StaticResource MaxRegularTabWidth}"
@@ -336,57 +336,52 @@
                         </Border.Effect>
                         
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            
                             <ContentPresenter x:Name="ContentSite"
-                                            Grid.Column="0"
                                             ContentSource="Header"
                                             HorizontalAlignment="Left"
-                                            VerticalAlignment="Center"
-                                            Margin="0,0,8,0"/>
+                                            VerticalAlignment="Center"/>
                             
                             <!-- Close button with clear single X visual -->
                             <Button x:Name="CloseButton"
-                                    Grid.Column="1"
                                     Background="Transparent"
                                     BorderThickness="0"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
                                     Width="16"
                                     Height="16"
+                                    Margin="4,0,8,0"
                                     Cursor="Hand"
+                                    Tag="{Binding}"
                                     Visibility="{Binding CanClose, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <Button.Content>
-                                    <!-- Use a simple, clear X character -->
-                                    <TextBlock Text="✕" 
-                                               FontSize="12" 
-                                               FontWeight="Normal"
-                                               Foreground="#666666"/>
-                                </Button.Content>
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border Background="{TemplateBinding Background}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="{TemplateBinding BorderThickness}">
-                                                        <ContentPresenter HorizontalAlignment="Center"
-                                                                        VerticalAlignment="Center"/>
-                                                    </Border>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                        <Style.Triggers>
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="Border"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="2">
+                                            <Path x:Name="XPath"
+                                                  Width="8" 
+                                                  Height="8"
+                                                  Stretch="Uniform"
+                                                  StrokeThickness="1.5"
+                                                  Stroke="#666666"
+                                                  Data="M 0,0 L 8,8 M 8,0 L 0,8"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="#20000000"/>
+                                                <Setter TargetName="Border" Property="Background" Value="#E81123"/>
+                                                <Setter TargetName="XPath" Property="Stroke" Value="White"/>
                                             </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="Border" Property="Background" Value="#F1707A"/>
+                                                <Setter TargetName="XPath" Property="Stroke" Value="White"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
                             </Button>
                         </Grid>
                     </Border>
