@@ -65,6 +65,11 @@ namespace ExplorerPro.Core.TabManagement
         /// </summary>
         event EventHandler<TabReorderedEventArgs> TabsReordered;
         
+        /// <summary>
+        /// Fired when the tab collection is reordered (for UI synchronization)
+        /// </summary>
+        event EventHandler<TabCollectionChangedEventArgs> TabCollectionReordered;
+        
         #endregion
 
         #region Core Tab Operations
@@ -267,6 +272,21 @@ namespace ExplorerPro.Core.TabManagement
             Tab = tab;
             OldIndex = oldIndex;
             NewIndex = newIndex;
+        }
+    }
+    
+    /// <summary>
+    /// Event arguments for tab collection reordering events
+    /// </summary>
+    public class TabCollectionChangedEventArgs : EventArgs
+    {
+        public IReadOnlyList<TabModel> NewOrder { get; }
+        public string ChangeReason { get; }
+        
+        public TabCollectionChangedEventArgs(IReadOnlyList<TabModel> newOrder, string changeReason)
+        {
+            NewOrder = newOrder;
+            ChangeReason = changeReason;
         }
     }
     

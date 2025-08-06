@@ -86,6 +86,7 @@ namespace ExplorerPro.Core.TabManagement
         public event EventHandler<TabChangedEventArgs> ActiveTabChanged;
         public event EventHandler<TabModifiedEventArgs> TabModified;
         public event EventHandler<TabReorderedEventArgs> TabsReordered;
+        public event EventHandler<TabCollectionChangedEventArgs> TabCollectionReordered;
         
         #endregion
 
@@ -352,6 +353,10 @@ namespace ExplorerPro.Core.TabManagement
                 }
                 
                 _logger?.LogDebug($"Reorganized tabs: {pinnedTabs.Count} pinned, {unpinnedTabs.Count} unpinned");
+                
+                // Fire the TabCollectionReordered event to notify UI
+                var reorderedTabs = _tabs.ToList();
+                TabCollectionReordered?.Invoke(this, new TabCollectionChangedEventArgs(reorderedTabs, "Pin state reorganization"));
             }
         }
         

@@ -35,6 +35,11 @@ namespace ExplorerPro.UI.Controls
         /// </summary>
         private readonly ILogger<ChromeStyleTabControl>? _logger;
         
+        /// <summary>
+        /// Tab manager service for handling tab operations
+        /// </summary>
+        private ITabManagerService? _tabManagerService;
+        
         #endregion
 
         #region Dependency Properties
@@ -2643,6 +2648,17 @@ namespace ExplorerPro.UI.Controls
                 _ = LoadSavedTabStatesAsync();
             }
             
+            // Initialize tab manager service connection
+            if (_tabManagerService == null)
+            {
+                _tabManagerService = TabServicesFactory.Instance.CreateTabManagerService();
+                if (_tabManagerService != null)
+                {
+                    // Subscribe to collection reordering events
+                    _tabManagerService.TabCollectionReordered += OnTabManagerCollectionReordered;
+                }
+            }
+            
             // Initialize performance optimization services
             if (_tabVirtualizationManager == null)
             {
@@ -3513,6 +3529,37 @@ namespace ExplorerPro.UI.Controls
         }
 
         /// <summary>
+        /// Handles TabManagerService collection reordering events
+        /// </summary>
+        private void OnTabManagerCollectionReordered(object sender, TabCollectionChangedEventArgs e)
+        {
+            try
+            {
+                if (e.NewOrder != null && TabItems != null)
+                {
+                    // Update our TabItems collection to match the service order
+                    for (int i = 0; i < e.NewOrder.Count && i < TabItems.Count; i++)
+                    {
+                        var serviceTab = e.NewOrder[i];
+                        var currentIndex = TabItems.IndexOf(serviceTab);
+                        
+                        if (currentIndex != -1 && currentIndex != i)
+                        {
+                            // Move the tab to the correct position
+                            TabItems.Move(currentIndex, i);
+                        }
+                    }
+                    
+                    _logger?.LogDebug($"ChromeStyleTabControl synchronized with service reordering: {e.ChangeReason}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error synchronizing ChromeStyleTabControl with service reordering");
+            }
+        }
+
+        /// <summary>
         /// Refreshes the actual TabControl items based on the TabModels
         /// </summary>
         private void RefreshTabItems()
@@ -3627,32 +3674,73 @@ namespace ExplorerPro.UI.Controls
 
         /// <summary>
         /// Applies visual styling to the TabItem based on the model state
-        /// Preserves the ultra-modern Chrome styling while updating based on model
+        /// Enhanced with proper resource lookup and error handling
         /// </summary>
         private void ApplyTabStyling(TabItem tabItem, TabModel model)
         {
-            // Ensure the tab uses the Chrome style (don't override with generic styles)
-            if (model.IsPinned)
+            try
             {
-                // For pinned tabs, apply the pinned template
-                tabItem.SetResourceReference(TemplateProperty, "ChromePinnedTabTemplate");
-                // Clear any style that might interfere
-                tabItem.ClearValue(StyleProperty);
+                if (model.IsPinned)
+                {
+                    // For pinned tabs, apply the pinned template
+                    try
+                    {
+                        var pinnedTemplate = FindResource("ChromePinnedTabTemplate") as ControlTemplate;
+                        if (pinnedTemplate != null)
+                        {
+                            tabItem.Template = pinnedTemplate;
+                            tabItem.ClearValue(StyleProperty);
+                        }
+                        else
+                        {
+                            // Fallback to resource reference
+                            tabItem.SetResourceReference(TemplateProperty, "ChromePinnedTabTemplate");
+                            tabItem.ClearValue(StyleProperty);
+                        }
+                    }
+                    catch (ResourceReferenceKeyNotFoundException)
+                    {
+                        // Template not found, use fallback styling
+                        tabItem.ClearValue(TemplateProperty);
+                        tabItem.Width = 32; // Standard pinned tab width
+                    }
+                }
+                else
+                {
+                    // For regular tabs, apply the Chrome style
+                    try
+                    {
+                        var chromeStyle = FindResource("ChromeTabItemStyle") as Style;
+                        if (chromeStyle != null)
+                        {
+                            tabItem.ClearValue(TemplateProperty);
+                            tabItem.Style = chromeStyle;
+                        }
+                        else
+                        {
+                            // Fallback to resource reference
+                            tabItem.ClearValue(TemplateProperty);
+                            tabItem.SetResourceReference(StyleProperty, "ChromeTabItemStyle");
+                        }
+                    }
+                    catch (ResourceReferenceKeyNotFoundException)
+                    {
+                        // Style not found, clear template but keep default styling
+                        tabItem.ClearValue(TemplateProperty);
+                        tabItem.ClearValue(StyleProperty);
+                    }
+                }
+
+                // Force layout update after template switching
+                tabItem.InvalidateMeasure();
+                tabItem.InvalidateArrange();
+                tabItem.UpdateLayout();
             }
-            else
+            catch (Exception ex)
             {
-                // For regular tabs, CLEAR the template first, then apply the style
-                tabItem.ClearValue(TemplateProperty);
-                tabItem.SetResourceReference(StyleProperty, "ChromeTabItemStyle");
+                // Log error but don't throw - tab should still function
+                System.Diagnostics.Debug.WriteLine($"Error applying tab styling: {ex.Message}");
             }
-
-            // Force layout update after template switching
-            tabItem.InvalidateMeasure();
-            tabItem.InvalidateArrange();
-            tabItem.UpdateLayout();
-
-            // Don't override opacity here - let the Chrome template handle dragging visuals
-            // The ChromeTabItemStyle already has sophisticated drag animations built-in
         }
 
         /// <summary>
@@ -5257,8 +5345,17 @@ namespace ExplorerPro.UI.Controls
                         if (TabItems != null)
                         {
                             TabItems.CollectionChanged -= OnTabItemsCollectionChanged;
-                            
-                            // Dispose adapters if they are TabModelAdapter instances
+                        }
+                        
+                        // Unsubscribe from tab manager service events
+                        if (_tabManagerService != null)
+                        {
+                            _tabManagerService.TabCollectionReordered -= OnTabManagerCollectionReordered;
+                        }
+                        
+                        // Dispose adapters if they are TabModelAdapter instances
+                        if (TabItems != null)
+                        {
                             foreach (var tabItem in TabItems.OfType<TabModelAdapter>())
                             {
                                 tabItem.Dispose();

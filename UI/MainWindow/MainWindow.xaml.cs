@@ -2444,30 +2444,8 @@ namespace ExplorerPro.UI.MainWindow
             // Use TabModelResolver to set model properly (will set DataContext and clear Tag)
             ExplorerPro.Core.TabManagement.TabModelResolver.SetTabModel(tabItem, model);
             
-            // Set up header binding with deferred execution to ensure visual tree is ready
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                // Create and apply header binding
-                var headerBinding = new Binding("Title") 
-                { 
-                    Source = model,
-                    Mode = BindingMode.TwoWay,
-                    UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged
-                };
-                tabItem.SetBinding(HeaderedContentControl.HeaderProperty, headerBinding);
-                
-                // Verify the binding worked
-                if (tabItem.Header == null || string.IsNullOrEmpty(tabItem.Header.ToString()))
-                {
-                    // Fallback: set header directly
-                    tabItem.Header = model.Title;
-                    _instanceLogger?.LogWarning($"Header binding failed for tab, set directly to: {model.Title}");
-                }
-                else
-                {
-                    _instanceLogger?.LogDebug($"Header binding successful for tab: {tabItem.Header}");
-                }
-            }), DispatcherPriority.Loaded);
+            // Header binding removed - ItemTemplate handles title display via DataContext
+            // This eliminates the binding conflict that prevented titles from showing initially
             
             // Set up other bindings
             SetupTabBindings(tabItem);
@@ -2859,15 +2837,26 @@ namespace ExplorerPro.UI.MainWindow
 
         /// <summary>
         /// Handler for add tab button click.
+        /// Enhanced to use ChromeStyleTabControl.AddNewTab() when available
         /// </summary>
         private void AddTabButton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                // Try normal method first
-                var container = AddNewMainWindowTab();
+                // Check if MainTabs is a ChromeStyleTabControl and use its AddNewTab method
+                if (MainTabs is ChromeStyleTabControl chromeTabControl)
+                {
+                    var newTabModel = chromeTabControl.AddNewTab();
+                    if (newTabModel != null)
+                    {
+                        // Success - tab created with proper Chrome styling
+                        _instanceLogger?.LogDebug($"Tab created via ChromeStyleTabControl: {newTabModel.Title}");
+                        return;
+                    }
+                }
                 
-                // If it fails, use the safe method
+                // Fallback to existing methods
+                var container = AddNewMainWindowTab();
                 if (container == null)
                 {
                     SafeAddNewTab();
@@ -2875,7 +2864,7 @@ namespace ExplorerPro.UI.MainWindow
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error in AddTabButton_Click: {ex.Message}");
+                _instanceLogger?.LogError(ex, "Error in AddTabButton_Click");
                 SafeAddNewTab();
             }
         }
@@ -3295,8 +3284,7 @@ namespace ExplorerPro.UI.MainWindow
                                 bool isPinned = tabModel.IsPinned;
                                 menuItem.Header = isPinned ? "Unpin Tab" : "Pin Tab";
                                 
-                                // Reorder tabs to keep pinned tabs on the left
-                                ReorderTabsAfterPinToggle();
+                                // Note: Tab reordering is now handled by TabManagerService events
                                 
                                 // CRITICAL: Invalidate context menu cache since pin state changed
                                 InvalidateContextMenuCache();
@@ -3321,93 +3309,7 @@ namespace ExplorerPro.UI.MainWindow
             }
         }
 
-        /// <summary>
-        /// Reorders tabs so that pinned tabs are always on the left side
-        /// Optimized to only move the changed tab instead of rebuilding entire collection
-        /// </summary>
-        private void ReorderTabsAfterPinToggle()
-        {
-            try
-            {
-                if (MainTabs?.Items == null || MainTabs.Items.Count <= 1) return;
 
-                var selectedTab = MainTabs.SelectedItem as TabItem;
-                if (selectedTab == null) return;
-
-                int currentIndex = MainTabs.Items.IndexOf(selectedTab);
-                if (currentIndex == -1) return;
-
-                bool isNowPinned = IsTabPinned(selectedTab);
-                
-                // Find the correct position for the tab
-                int targetIndex = -1;
-                
-                if (isNowPinned)
-                {
-                    // Tab was just pinned - find the last pinned tab position
-                    for (int i = MainTabs.Items.Count - 1; i >= 0; i--)
-                    {
-                        if (i != currentIndex && MainTabs.Items[i] is TabItem tab && IsTabPinned(tab))
-                        {
-                            targetIndex = i;
-                            break;
-                        }
-                    }
-                    
-                    // If no other pinned tabs, it should be first
-                    if (targetIndex == -1)
-                        targetIndex = 0;
-                    else if (currentIndex > targetIndex)
-                        targetIndex++; // Insert after the last pinned tab
-                }
-                else
-                {
-                    // Tab was just unpinned - find the first regular tab position
-                    for (int i = 0; i < MainTabs.Items.Count; i++)
-                    {
-                        if (i != currentIndex && MainTabs.Items[i] is TabItem tab && !IsTabPinned(tab))
-                        {
-                            targetIndex = i;
-                            break;
-                        }
-                    }
-                    
-                    // If no other regular tabs, it should be last
-                    if (targetIndex == -1)
-                        targetIndex = MainTabs.Items.Count - 1;
-                    else if (currentIndex < targetIndex)
-                        targetIndex--; // Adjust for removal
-                }
-
-                // Only move if position actually changed
-                if (targetIndex != -1 && targetIndex != currentIndex)
-                {
-                    // Temporarily remove the tab
-                    MainTabs.Items.RemoveAt(currentIndex);
-                    
-                    // Insert at the new position
-                    MainTabs.Items.Insert(targetIndex, selectedTab);
-                    
-                    // Restore selection
-                    MainTabs.SelectedItem = selectedTab;
-                    
-                    _instanceLogger?.LogDebug($"Moved tab from index {currentIndex} to {targetIndex} after pin toggle");
-                }
-                else
-                {
-                    _instanceLogger?.LogDebug("Tab already in correct position after pin toggle");
-                }
-            }
-            catch (Exception ex)
-            {
-                _instanceLogger?.LogError(ex, "Error reordering tabs after pin toggle");
-            }
-
-            // Force layout update after reordering
-            MainTabs.InvalidateMeasure();
-            MainTabs.InvalidateArrange();
-            MainTabs.UpdateLayout();
-        }
 
         /// <summary>
         /// Checks if a tab is pinned by examining DataContext first, then Tag for backward compatibility

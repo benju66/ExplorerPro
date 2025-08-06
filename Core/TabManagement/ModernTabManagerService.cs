@@ -115,6 +115,7 @@ namespace ExplorerPro.Core.TabManagement
         public event EventHandler<TabChangedEventArgs> ActiveTabChanged;
         public event EventHandler<TabModifiedEventArgs> TabModified;
         public event EventHandler<TabReorderedEventArgs> TabsReordered;
+        public event EventHandler<TabCollectionChangedEventArgs> TabCollectionReordered;
         
         #endregion
 
