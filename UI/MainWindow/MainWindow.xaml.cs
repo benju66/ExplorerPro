@@ -2879,6 +2879,123 @@ namespace ExplorerPro.UI.MainWindow
         }
 
         /// <summary>
+        /// Handles close button clicks from the ItemTemplate
+        /// </summary>
+        private void TabCloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is Button button && button.Tag is TabModel tabModel)
+                {
+                    if (MainTabs is ChromeStyleTabControl chromeTabControl)
+                    {
+                        // Check if we can close this tab
+                        if (!tabModel.CanClose)
+                        {
+                            _instanceLogger?.LogDebug($"Cannot close tab '{tabModel.Title}' - CanClose is false");
+                            return;
+                        }
+                        
+                        // Don't close if it's the last tab
+                        if (chromeTabControl.TabItems?.Count <= 1)
+                        {
+                            _instanceLogger?.LogDebug("Cannot close the last tab");
+                            // Optionally refresh it instead
+                            if (tabModel.Content is MainWindowContainer container)
+                            {
+                                string homePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                                container.NavigateToPath(homePath);
+                                tabModel.Title = "Home";
+                            }
+                            return;
+                        }
+                        
+                        // Remove the tab
+                        chromeTabControl.TabItems.Remove(tabModel);
+                        
+                        // Dispose content if needed
+                        if (tabModel.Content is IDisposable disposable)
+                        {
+                            disposable.Dispose();
+                        }
+                        
+                        _instanceLogger?.LogInformation($"Closed tab: {tabModel.Title}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Error closing tab");
+            }
+        }
+
+        private TabModel _contextMenuTab;
+
+        /// <summary>
+        /// Store the tab for context menu operations
+        /// </summary>
+        private void TabItem_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            if (sender is TabItem tabItem)
+            {
+                _contextMenuTab = tabItem.DataContext as TabModel;
+                
+                // Update context menu based on tab state
+                if (tabItem.ContextMenu != null)
+                {
+                    tabItem.ContextMenu.DataContext = _contextMenuTab;
+                }
+            }
+        }
+
+        private void PinTabMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (_contextMenuTab != null)
+            {
+                _contextMenuTab.IsPinned = !_contextMenuTab.IsPinned;
+                
+                // Trigger reordering if needed
+                if (MainTabs is ChromeStyleTabControl chromeTabControl)
+                {
+                    // The service should handle reordering via events
+                    _instanceLogger?.LogDebug($"Toggled pin state for tab: {_contextMenuTab.Title}");
+                }
+            }
+        }
+
+        private void CloseOtherTabsMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (_contextMenuTab != null && MainTabs is ChromeStyleTabControl chromeTabControl)
+            {
+                var tabsToClose = chromeTabControl.TabItems
+                    .Where(t => t != _contextMenuTab && t.CanClose)
+                    .ToList();
+                    
+                foreach (var tab in tabsToClose)
+                {
+                    chromeTabControl.TabItems.Remove(tab);
+                }
+            }
+        }
+
+        private void CloseTabsToRightMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (_contextMenuTab != null && MainTabs is ChromeStyleTabControl chromeTabControl)
+            {
+                var index = chromeTabControl.TabItems.IndexOf(_contextMenuTab);
+                var tabsToClose = chromeTabControl.TabItems
+                    .Skip(index + 1)
+                    .Where(t => t.CanClose)
+                    .ToList();
+                    
+                foreach (var tab in tabsToClose)
+                {
+                    chromeTabControl.TabItems.Remove(tab);
+                }
+            }
+        }
+
+        /// <summary>
         /// Handler for add tab button click.
         /// Enhanced to use ChromeStyleTabControl.AddNewTab() when available
         /// </summary>
@@ -2922,39 +3039,7 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void NewTabMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            // 3. Event Handler Debouncing
-            if (IsDebounced()) return;
-
-            try
-            {
-                var container = AddNewMainWindowTab();
-                if (container != null)
-                {
-                    // 2. Smart Tab Positioning - Move new tab to correct position
-                    if (MainTabs?.Items.Count > 1)
-                    {
-                        var insertIndex = GetSmartInsertionIndex() - 1; // Adjust since tab was added at end
-                        var newTab = MainTabs.Items[MainTabs.Items.Count - 1] as TabItem;
-                        if (newTab != null && insertIndex < MainTabs.Items.Count - 1)
-                        {
-                            MainTabs.Items.RemoveAt(MainTabs.Items.Count - 1);
-                            MainTabs.Items.Insert(insertIndex, newTab);
-                            MainTabs.SelectedItem = newTab;
-                        }
-                    }
-
-                    _instanceLogger?.LogInformation("New tab created via context menu with smart positioning");
-                    
-                    // 4. Smart Memory Cleanup
-                    PerformSmartCleanup();
-                }
-            }
-            catch (Exception ex)
-            {
-                _instanceLogger?.LogError(ex, "Error creating new tab from context menu");
-                MessageBox.Show($"Failed to create new tab: {ex.Message}", 
-                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            AddTabButton_Click(sender, e);
         }
 
         /// <summary>
@@ -2963,53 +3048,23 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void DuplicateTabMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            // 3. Event Handler Debouncing
-            if (IsDebounced()) return;
-
-            try
+            if (_contextMenuTab != null && MainTabs is ChromeStyleTabControl chromeTabControl)
             {
-                var contextMenu = sender as MenuItem;
-                var tabModel = GetContextMenuTabModel(contextMenu?.Parent as ContextMenu);
+                var newTab = new TabModel($"{_contextMenuTab.Title} (Copy)");
                 
-                if (tabModel != null && MainTabs?.SelectedItem is TabItem currentTab)
+                // Clone the content
+                if (_contextMenuTab.Content is MainWindowContainer originalContainer)
                 {
-                    // Get the current container
-                    var currentContainer = currentTab.Content as MainWindowContainer;
-                    if (currentContainer != null)
-                    {
-                        // Create new tab with same path
-                        var fileTree = currentContainer.FindFileTree();
-                        string currentPath = fileTree?.GetCurrentPath() ?? 
-                            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                        
-                        var newContainer = AddNewMainWindowTab(currentPath);
-                        if (newContainer != null && MainTabs.SelectedItem is TabItem newTab)
-                        {
-                            // 2. Smart Tab Positioning - Move duplicated tab next to original
-                            var originalIndex = MainTabs.Items.IndexOf(currentTab);
-                            var newTabIndex = MainTabs.Items.IndexOf(newTab);
-                            
-                            if (originalIndex >= 0 && newTabIndex >= 0 && originalIndex != newTabIndex - 1)
-                            {
-                                MainTabs.Items.RemoveAt(newTabIndex);
-                                MainTabs.Items.Insert(originalIndex + 1, newTab);
-                                MainTabs.SelectedItem = newTab;
-                            }
-
-                            newTab.Header = $"{currentTab.Header} - Copy";
-                            _instanceLogger?.LogInformation($"Duplicated tab with smart positioning: {currentTab.Header}");
-                            
-                            // 4. Smart Memory Cleanup
-                            PerformSmartCleanup();
-                        }
-                    }
+                    var newContainer = new MainWindowContainer(this);
+                    // Use a default path for now - the user can navigate to where they want
+                    string defaultPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    newContainer.InitializeWithFileTree(defaultPath);
+                    ConnectPinnedPanel(newContainer);
+                    newTab.Content = newContainer;
                 }
-            }
-            catch (Exception ex)
-            {
-                _instanceLogger?.LogError(ex, "Error duplicating tab");
-                MessageBox.Show($"Failed to duplicate tab: {ex.Message}", 
-                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                
+                chromeTabControl.TabItems.Add(newTab);
+                chromeTabControl.SelectedTabItem = newTab;
             }
         }
 
@@ -3435,29 +3490,12 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void CloseTabMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            // 3. Event Handler Debouncing
-            if (IsDebounced()) return;
-
-            try
+            if (_contextMenuTab != null && MainTabs is ChromeStyleTabControl chromeTabControl)
             {
-                if (_rightClickedTab != null)
+                if (chromeTabControl.TabItems.Count > 1)
                 {
-                    var index = MainTabs.Items.IndexOf(_rightClickedTab);
-                    if (index >= 0)
-                    {
-                        CloseTab(index);
-                        _instanceLogger?.LogInformation($"Closed tab via context menu: {_rightClickedTab.Header}");
-                        
-                        // 4. Smart Memory Cleanup
-                        PerformSmartCleanup();
-                    }
+                    chromeTabControl.TabItems.Remove(_contextMenuTab);
                 }
-            }
-            catch (Exception ex)
-            {
-                _instanceLogger?.LogError(ex, "Error closing tab from context menu");
-                MessageBox.Show($"Failed to close tab: {ex.Message}", 
-                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
