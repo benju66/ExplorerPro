@@ -2932,15 +2932,23 @@ namespace ExplorerPro.UI.Controls
             var closeButton = sender as Button;
             if (closeButton != null)
             {
-                // Find parent TabItem
+                // Get TabModel from button's Tag or DataContext
+                var tabModel = closeButton.Tag as TabModel 
+                            ?? closeButton.DataContext as TabModel;
+                
+                // Fallback to finding parent TabItem
+                if (tabModel == null)
+                {
                 var tabItem = FindParent<TabItem>(closeButton);
                 if (tabItem != null)
                 {
-                    var tabModel = GetTabModel(tabItem);
-                    if (tabModel != null)
+                        tabModel = GetTabModel(tabItem);
+                    }
+                }
+                
+                if (tabModel != null && tabModel.CanClose)
                     {
                         CloseTab(tabModel);
-                    }
                 }
             }
         }
@@ -4197,27 +4205,43 @@ namespace ExplorerPro.UI.Controls
         {
             base.PrepareContainerForItemOverride(element, item);
             
-            if (element is TabItem tabItem && item is TabModel model)
+            if (element is TabItem tabItem && item is TabModel tabModel)
             {
-                // DataContext for bindings
-                tabItem.DataContext = model;
+                tabItem.DataContext = tabModel;
+                tabItem.Tag = tabModel; // Backwards compatibility
                 
                 // CRITICAL: Set the content from the model
-                if (model.Content != null)
+                if (tabModel.Content != null)
                 {
-                    tabItem.Content = model.Content;
+                    tabItem.Content = tabModel.Content;
                 }
                 
                 // Store reference for quick lookup
-                TabModelResolver.SetTabModel(tabItem, model);
+                TabModelResolver.SetTabModel(tabItem, tabModel);
                 
-                // Apply visual styling
-                ApplyTabStyling(tabItem, model);
+                // Apply styling
+                ApplyTabStyling(tabItem, tabModel);
+                
+                // Wire up the close button if it exists in the template
+                // This ensures the button works even if defined in styles
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    var closeButton = FindChildOfType<Button>(tabItem, "CloseButton");
+                    if (closeButton != null)
+                    {
+                        // Remove any existing handlers first
+                        closeButton.Click -= OnTabCloseButtonClick;
+                        // Add the handler
+                        closeButton.Click += OnTabCloseButtonClick;
+                        // Ensure button has reference to TabModel
+                        closeButton.Tag = tabModel;
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Loaded);
                 
                 // Set up any additional bindings
                 SetupTabBindings(tabItem);
                 
-                _logger?.LogDebug($"Prepared container for tab: {model.Title}, HasContent: {model.Content != null}");
+                _logger?.LogDebug($"Prepared container for tab: {tabModel.Title}, HasContent: {tabModel.Content != null}");
             }
             else if (element is TabItem && item != null)
             {

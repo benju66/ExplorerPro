@@ -318,7 +318,7 @@
                             BorderThickness="1,1,1,0"
                             CornerRadius="8,8,0,0"
                             Margin="2,3,2,-1"
-                            Padding="8,6,24,6"
+                            Padding="8,6,8,6"
                             Height="{StaticResource TabHeight}"
                             MinWidth="{StaticResource MinRegularTabWidth}"
                             MaxWidth="{StaticResource MaxRegularTabWidth}"
@@ -336,20 +336,58 @@
                         </Border.Effect>
                         
                         <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
                             <ContentPresenter x:Name="ContentSite"
+                                            Grid.Column="0"
                                             ContentSource="Header"
                                             HorizontalAlignment="Left"
-                                            VerticalAlignment="Center"/>
+                                            VerticalAlignment="Center"
+                                            Margin="0,0,8,0"/>
                             
+                            <!-- Close button with clear single X visual -->
                             <Button x:Name="CloseButton"
-                                    Style="{StaticResource ChromeCloseButtonStyle}"
-                                    Content="×"
+                                    Grid.Column="1"
+                                    Background="Transparent"
+                                    BorderThickness="0"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
                                     Width="16"
                                     Height="16"
-                                    Margin="4,0,0,0"
-                                    Visibility="{Binding Tag.ShowCloseButton, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    Cursor="Hand"
+                                    Visibility="{Binding CanClose, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Button.Content>
+                                    <!-- Use a simple, clear X character -->
+                                    <TextBlock Text="✕" 
+                                               FontSize="12" 
+                                               FontWeight="Normal"
+                                               Foreground="#666666"/>
+                                </Button.Content>
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                            BorderThickness="{TemplateBinding BorderThickness}">
+                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                        VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#20000000"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
                         </Grid>
                     </Border>
                     

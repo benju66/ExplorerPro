@@ -668,61 +668,12 @@ All dependencies mapped and validation tests established.
                                           ItemsSource="{Binding RelativeSource={RelativeSource Self}, Path=TabItems}">
 
 
-                <!-- TabControl ItemTemplate for content switching -->
+                <!-- Simplified ItemTemplate - close button handled by ChromeTabStyles -->
                 <TabControl.ItemTemplate>
                     <DataTemplate>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            
-                            <!-- Tab title -->
-                            <TextBlock Grid.Column="0"
-                                      Text="{Binding Title}" 
+                        <TextBlock Text="{Binding Title}" 
                                       VerticalAlignment="Center"
-                                      Margin="8,0,4,0"/>
-                            
-                            <!-- Close button with vector X -->
-                            <Button Grid.Column="1"
-                                    x:Name="CloseButton"
-                                    Width="16" 
-                                    Height="16"
-                                    Margin="2,0,4,0"
-                                    Background="Transparent"
-                                    BorderThickness="0"
-                                    VerticalAlignment="Center"
-                                    Visibility="{Binding CanClose, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                    ToolTip="Close tab"
-                                    Click="TabCloseButton_Click"
-                                    Tag="{Binding}">
-                                <Button.Template>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border x:Name="Border" 
-                                                Background="{TemplateBinding Background}"
-                                                CornerRadius="2">
-                                            <Path x:Name="XPath"
-                                                  Width="8" 
-                                                  Height="8"
-                                                  Stretch="Uniform"
-                                                  StrokeThickness="1.5"
-                                                  Stroke="#666666"
-                                                  Data="M 0,0 L 8,8 M 8,0 L 0,8"/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Border" Property="Background" Value="#E81123"/>
-                                                <Setter TargetName="XPath" Property="Stroke" Value="White"/>
-                                            </Trigger>
-                                            <Trigger Property="IsPressed" Value="True">
-                                                <Setter TargetName="Border" Property="Background" Value="#F1707A"/>
-                                                <Setter TargetName="XPath" Property="Stroke" Value="White"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Button.Template>
-                            </Button>
-                        </Grid>
+                                   Margin="8,4"/>
                     </DataTemplate>
                 </TabControl.ItemTemplate>
 
@@ -733,99 +684,7 @@ All dependencies mapped and validation tests established.
                     </DataTemplate>
                 </TabControl.ContentTemplate>
 
-                <TabControl.Resources>
-                    <!-- Define context menu as a resource with proper commands -->
-                    <ContextMenu x:Key="TabContextMenu">
-                        <!-- New Tab -->
-                        <MenuItem Header="New Tab" 
-                                  Click="NewTabMenuItem_Click">
-                            <MenuItem.Icon>
-                                <Grid Width="16" Height="16">
-                                    <Path Data="M 3,3 L 13,3 L 13,13 L 3,13 Z M 8,5 L 8,11 M 5,8 L 11,8" 
-                                          Stroke="#666" 
-                                          StrokeThickness="1.5"/>
-                                </Grid>
-                            </MenuItem.Icon>
-                        </MenuItem>
-                        
-                        <!-- Duplicate Tab -->
-                        <MenuItem Header="Duplicate" 
-                                  Click="DuplicateTabMenuItem_Click">
-                            <MenuItem.Icon>
-                                <Grid Width="16" Height="16">
-                                    <Path Data="M 2,2 L 10,2 L 10,10 L 2,10 Z M 6,6 L 14,6 L 14,14 L 6,14 Z" 
-                                          Stroke="#666" 
-                                          StrokeThickness="1.5"/>
-                                </Grid>
-                            </MenuItem.Icon>
-                        </MenuItem>
-                        
-                        <Separator/>
-                        
-                        <!-- Pin/Unpin -->
-                        <MenuItem Header="{Binding IsPinned, Converter={StaticResource PinUnpinTextConverter}, FallbackValue='Pin Tab'}" 
-                                  Click="PinTabMenuItem_Click">
-                            <MenuItem.Icon>
-                                <Grid Width="16" Height="16">
-                                    <Path Data="M 8,2 L 8,10 M 4,4 L 8,2 L 12,4" 
-                                          Stroke="#666" 
-                                          StrokeThickness="1.5"
-                                          RenderTransformOrigin="0.5,0.5">
-                                        <Path.RenderTransform>
-                                            <RotateTransform Angle="45"/>
-                                        </Path.RenderTransform>
-                                    </Path>
-                                </Grid>
-                            </MenuItem.Icon>
-                        </MenuItem>
-                        
-                        <Separator/>
-                        
-                        <!-- Close Tab -->
-                        <MenuItem Header="Close" 
-                                  Click="CloseTabMenuItem_Click">
-                            <MenuItem.Icon>
-                                <Grid Width="16" Height="16">
-                                    <Path Data="M 4,4 L 12,12 M 12,4 L 4,12" 
-                                          Stroke="#666" 
-                                          StrokeThickness="1.5"/>
-                                </Grid>
-                            </MenuItem.Icon>
-                        </MenuItem>
-                        
-                        <!-- Close Other Tabs -->
-                        <MenuItem Header="Close Other Tabs" 
-                                  Click="CloseOtherTabsMenuItem_Click">
-                            <MenuItem.Icon>
-                                <Grid Width="16" Height="16">
-                                    <Path Data="M 2,8 L 6,8 M 10,8 L 14,8 M 4,4 L 4,12 M 12,4 L 12,12" 
-                                          Stroke="#666" 
-                                          StrokeThickness="1.5"/>
-                                </Grid>
-                            </MenuItem.Icon>
-                        </MenuItem>
-                        
-                        <!-- Close Tabs to the Right -->
-                        <MenuItem Header="Close Tabs to the Right" 
-                                  Click="CloseTabsToRightMenuItem_Click">
-                            <MenuItem.Icon>
-                                <Grid Width="16" Height="16">
-                                    <Path Data="M 8,4 L 14,8 L 8,12 M 2,8 L 14,8" 
-                                          Stroke="#666" 
-                                          StrokeThickness="1.5"/>
-                                </Grid>
-                            </MenuItem.Icon>
-                        </MenuItem>
-                    </ContextMenu>
-                </TabControl.Resources>
-
-                <!-- Apply context menu to ItemContainerStyle -->
-                <TabControl.ItemContainerStyle>
-                    <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
-                        <Setter Property="ContextMenu" Value="{StaticResource TabContextMenu}"/>
-                        <EventSetter Event="ContextMenuOpening" Handler="TabItem_ContextMenuOpening"/>
-                    </Style>
-                </TabControl.ItemContainerStyle>
+                <!-- ChromeStyleTabControl handles its own ItemContainerStyle and context menus -->
 
                 <!-- Ultra-Modern TabControl Template with integrated Toolbar -->
                 <TabControl.Template>
