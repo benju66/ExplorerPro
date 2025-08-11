@@ -665,7 +665,8 @@ All dependencies mapped and validation tests established.
                                           Background="#FFFFFF"
                                           BorderThickness="0"
                                           TabStripPlacement="Top"
-                                          ItemsSource="{Binding RelativeSource={RelativeSource Self}, Path=TabItems}">
+                                          ItemsSource="{Binding RelativeSource={RelativeSource Self}, Path=TabItems}"
+                                          SelectedItem="{Binding SelectedTabItem, RelativeSource={RelativeSource Self}, Mode=TwoWay}">
 
 
                 <!-- Simplified ItemTemplate - close button handled by ChromeTabStyles -->

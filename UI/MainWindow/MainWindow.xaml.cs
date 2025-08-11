@@ -1466,41 +1466,7 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Named event handler for window loaded event - FIX 4: Event Handler Memory Leaks
         /// </summary>
-        private void OnMainWindowLoaded(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // Validate and preload icons for better performance
-                ValidateIcons();
-                PreloadIcons();
-
-                // Note: Tab creation is now handled by async initialization (OnWindowLoadedAsync)
-                // to avoid race conditions and duplicate tab creation
-
-                // Connect all pinned panels
-                ConnectAllPinnedPanels();
-
-                // Refresh pinned panels
-                RefreshAllPinnedPanels();
-                
-                // Refresh theme elements
-                RefreshThemeElements();
-                
-                _instanceLogger?.LogInformation("Main window loaded successfully");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"DEBUG: Exception in OnMainWindowLoaded: {ex.Message}");
-                _instanceLogger?.LogError(ex, "Error in window loaded event handler");
-                
-                // Make sure we have at least one tab
-                if (MainTabs.Items.Count == 0)
-                {
-                    Console.WriteLine("DEBUG: Creating emergency fallback tab");
-                    SafeAddNewTab();
-                }
-            }
-        }
+        // Removed: OnMainWindowLoaded duplicate handler per Phase 0 stabilization
 
         #endregion
 
@@ -1626,8 +1592,7 @@ namespace ExplorerPro.UI.MainWindow
                 RestoreWindowLayout();
                 InitializeKeyboardShortcuts();
                 
-                // Delayed tab creation until the window is fully loaded
-                this.Loaded += OnMainWindowLoaded;
+                // Removed duplicate Loaded handler to prevent multiple initializations
                 
                 _logger.LogDebug("Main window systems initialized");
             }
@@ -1641,58 +1606,12 @@ namespace ExplorerPro.UI.MainWindow
         /// <summary>
         /// Handles the window loaded event with robust error handling.
         /// </summary>
-        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
-        {
-            _stateManager.TryTransitionTo(Core.WindowState.Ready, out _);
-            
-            // Initialize default tabs with proper binding
-            InitializeDefaultTabs();
-            
-            // Migrate existing tabs from Tag to DataContext (Phase 2)
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                MigrateTagToDataContext();
-            }), System.Windows.Threading.DispatcherPriority.Loaded);
-        }
+        // Removed: MainWindow_Loaded duplicate handler per Phase 0 stabilization
 
         /// <summary>
         /// Initialize default tabs with proper ItemsSource binding
         /// </summary>
-        private void InitializeDefaultTabs()
-        {
-            if (MainTabs is ChromeStyleTabControl chromeTabControl)
-            {
-                // Ensure TabItems collection exists
-                if (chromeTabControl.TabItems == null)
-                {
-                    chromeTabControl.TabItems = new ObservableCollection<TabModel>();
-                }
-                
-                // If no tabs exist, create default tab
-                if (chromeTabControl.TabItems.Count == 0)
-                {
-                    // Create default tab with proper content
-                    var defaultTab = new TabModel("Window 1"); // Start with Window 1
-                    
-                    // Create and set content BEFORE adding to collection
-                    var container = new MainWindowContainer(this);
-                    string defaultPath = ValidatePath(null);
-                    container.InitializeWithFileTree(defaultPath);
-                    ConnectPinnedPanel(container);
-                    
-                    // Set content on MODEL
-                    defaultTab.Content = container;
-                    
-                    // Add to collection
-                    chromeTabControl.TabItems.Add(defaultTab);
-                    chromeTabControl.SelectedTabItem = defaultTab;
-                    
-                    _instanceLogger?.LogDebug("Initialized default tab with content");
-                }
-                
-                _instanceLogger?.LogDebug($"Initialized with {chromeTabControl.TabItems.Count} tabs");
-            }
-        }
+        // Removed: InitializeDefaultTabs to consolidate tab creation in OnWindowLoadedAsync only
 
         /// <summary>
         /// Override to add safe initialization check
@@ -1959,8 +1878,7 @@ namespace ExplorerPro.UI.MainWindow
                 // Restore window layout
                 RestoreWindowLayout();
 
-                // Delayed tab creation until the window is fully loaded
-                this.Loaded += OnMainWindowLoaded;
+                // Removed duplicate Loaded handler to prevent multiple initializations
 
                 // Set up keyboard shortcuts
                 InitializeKeyboardShortcuts();
@@ -5736,41 +5654,37 @@ namespace ExplorerPro.UI.MainWindow
         /// </summary>
         private void SetupChromeStyleTabEvents()
         {
-            // Note: MainTabs will be available after InitializeComponent is called
-            this.Loaded += (s, e) =>
+            if (MainTabs is ChromeStyleTabControl chromeTabControl)
             {
-                if (MainTabs is ChromeStyleTabControl chromeTabControl)
-                {
-                    // Handle new tab requests using weak event pattern
-                    SubscribeToEventWeak<NewTabRequestedEventArgs>(
-                        chromeTabControl, 
-                        nameof(chromeTabControl.NewTabRequested), 
-                        OnNewTabRequested);
-                    
-                    // Handle tab close requests using weak event pattern
-                    SubscribeToEventWeak<TabCloseRequestedEventArgs>(
-                        chromeTabControl, 
-                        nameof(chromeTabControl.TabCloseRequested), 
-                        OnTabCloseRequested);
-                    
-                    // Handle tab drag events using weak event pattern
-                    SubscribeToEventWeak<TabDragEventArgs>(
-                        chromeTabControl, 
-                        nameof(chromeTabControl.TabDragged), 
-                        OnTabDragged);
-                    
-                    // Handle tab metadata changes using weak event pattern
-                    SubscribeToEventWeak<TabMetadataChangedEventArgs>(
-                        chromeTabControl, 
-                        nameof(chromeTabControl.TabMetadataChanged), 
-                        OnTabMetadataChanged);
-                    
-                    // Add middle-click support to close tabs using weak routed event pattern
-                    SubscribeToRoutedEventWeak(chromeTabControl, UIElement.MouseDownEvent, OnTabControlMouseDown);
-                    
-                    _instanceLogger?.LogInformation("Chrome-style tab events configured with weak event pattern");
-                }
-            };
+                // Handle new tab requests using weak event pattern
+                SubscribeToEventWeak<NewTabRequestedEventArgs>(
+                    chromeTabControl, 
+                    nameof(chromeTabControl.NewTabRequested), 
+                    OnNewTabRequested);
+                
+                // Handle tab close requests using weak event pattern
+                SubscribeToEventWeak<TabCloseRequestedEventArgs>(
+                    chromeTabControl, 
+                    nameof(chromeTabControl.TabCloseRequested), 
+                    OnTabCloseRequested);
+                
+                // Handle tab drag events using weak event pattern
+                SubscribeToEventWeak<TabDragEventArgs>(
+                    chromeTabControl, 
+                    nameof(chromeTabControl.TabDragged), 
+                    OnTabDragged);
+                
+                // Handle tab metadata changes using weak event pattern
+                SubscribeToEventWeak<TabMetadataChangedEventArgs>(
+                    chromeTabControl, 
+                    nameof(chromeTabControl.TabMetadataChanged), 
+                    OnTabMetadataChanged);
+                
+                // Add middle-click support to close tabs using weak routed event pattern
+                SubscribeToRoutedEventWeak(chromeTabControl, UIElement.MouseDownEvent, OnTabControlMouseDown);
+                
+                _instanceLogger?.LogInformation("Chrome-style tab events configured with weak event pattern");
+            }
         }
 
         /// <summary>
