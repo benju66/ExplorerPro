@@ -1,25 +1,21 @@
 ﻿<Application x:Class="ExplorerPro.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:ExplorerPro"
-             xmlns:converters="clr-namespace:ExplorerPro.UI.Converters">
+              xmlns:local="clr-namespace:ExplorerPro">
     <!-- Remove StartupUri attribute - we create MainWindow programmatically in OnStartup -->
     <Application.Resources>
         <!-- Application resources use merged dictionaries for theme support -->
         <ResourceDictionary>
             <!-- The ThemeManager will dynamically manage these dictionaries at runtime -->
             <ResourceDictionary.MergedDictionaries>
+                <!-- Centralized Converters -->
+                <ResourceDictionary Source="UI/Converters/ConverterResources.xaml"/>
                 <!-- Icon Resources -->
                 <ResourceDictionary Source="UI/Resources/IconResources.xaml"/>
                 <!-- Theme Resources -->
                 <ResourceDictionary Source="Themes/UnifiedTabStyles.xaml"/>
                 <!-- Intentionally empty - ThemeManager will populate dynamically -->
             </ResourceDictionary.MergedDictionaries>
-            
-            <!-- Global Converters -->
-            <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-            <converters:BoolToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-            <converters:InverseBoolToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
             
             <!-- Global resource references for theme-aware controls -->
             <!-- Default styles that apply the theme resources -->

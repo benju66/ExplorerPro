@@ -10,13 +10,13 @@ using Microsoft.Extensions.Logging;
 namespace ExplorerPro.UI.Controls
 {
     /// <summary>
-    /// Enterprise-grade drag adorner with enhanced visual feedback and performance optimization
+    /// Tab drag adorner with enhanced visual feedback and performance optimization
     /// </summary>
-    public class EnhancedDragAdorner : Adorner, IDisposable
+    public class TabDragAdorner : Adorner, IDisposable
     {
         #region Fields
 
-        private readonly ILogger<EnhancedDragAdorner>? _logger;
+        private readonly ILogger<TabDragAdorner>? _logger;
         private readonly ContentPresenter _contentPresenter;
         private readonly Border _dragPreview;
         private readonly DropShadowEffect _shadowEffect;
@@ -71,7 +71,7 @@ namespace ExplorerPro.UI.Controls
 
         #region Constructor
 
-        public EnhancedDragAdorner(UIElement adornedElement, TabItem draggedTab, ILogger<EnhancedDragAdorner>? logger = null) 
+        public TabDragAdorner(UIElement adornedElement, TabItem draggedTab, ILogger<TabDragAdorner>? logger = null) 
             : base(adornedElement)
         {
             _logger = logger;
@@ -381,11 +381,13 @@ namespace ExplorerPro.UI.Controls
             }
         }
 
-        ~EnhancedDragAdorner()
+        ~TabDragAdorner()
         {
             Dispose(false);
         }
 
         #endregion
     }
-} 
+}
+
+

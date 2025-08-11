@@ -7,7 +7,7 @@
              d:DesignHeight="300" d:DesignWidth="400">
     
     <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    <!-- Converters centralized in UI/Converters/ConverterResources.xaml -->
         
         <!-- Search Result Item Style -->
         <Style x:Key="SearchResultItemStyle" TargetType="ListBoxItem">

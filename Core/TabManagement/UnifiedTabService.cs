@@ -50,6 +50,7 @@ namespace ExplorerPro.Core.TabManagement
             _adapters = new ConcurrentDictionary<string, TabModelAdapter>();
             
             // Subscribe to modern tab manager events
+            // No references to ModernTabManagerService directly; works with any ITabManagerService (TabManagerService primary)
             _modernTabManager.TabCreated += OnModernTabCreated;
             _modernTabManager.TabClosed += OnModernTabClosed;
             _modernTabManager.ActiveTabChanged += OnModernActiveTabChanged;

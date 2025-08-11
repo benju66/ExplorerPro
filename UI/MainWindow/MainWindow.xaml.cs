@@ -7329,46 +7329,6 @@ namespace ExplorerPro.UI.MainWindow
     #endregion
 
     #region Converters
-
-    /// <summary>
-    /// Converter that returns Visibility.Collapsed if count equals 1, Visibility.Visible otherwise.
-    /// </summary>
-    public class CountToVisibilityConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            if (value is int count)
-            {
-                return count <= 1 ? Visibility.Collapsed : Visibility.Visible;
-            }
-            return Visibility.Collapsed;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    /// <summary>
-    /// Converter that returns false if count equals 1, true otherwise.
-    /// </summary>
-    public class CountToEnableConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            if (value is int count)
-            {
-                return count > 1;
-            }
-            return false;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
+    // Converters centralized in ExplorerPro.UI.Converters.CommonConverters
     #endregion
 }

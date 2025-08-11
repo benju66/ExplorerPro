@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ExplorerPro.Core.TabManagement;
 using ExplorerPro.Core.Threading;
+using ExplorerPro.Core.Services;
 using ExplorerPro.ViewModels;
 using ExplorerPro.Models;
 
@@ -28,30 +29,29 @@ namespace ExplorerPro.Tests
                 // Create service collection
                 var services = new ServiceCollection();
                 services.AddLogging(builder => builder.AddConsole());
-                services.AddScoped<ITabManagerService, ModernTabManagerService>();
+                services.AddScoped<ITabManagerService, TabManagerService>();
                 services.AddScoped<MainWindowTabsViewModel>();
                 
                 var serviceProvider = services.BuildServiceProvider();
-                var logger = serviceProvider.GetService<ILogger<ServiceIntegrationManager>>();
-                
-                // Initialize service integration
-                var integrationManager = await ServiceIntegrationManager.CreateAsync(
-                    serviceProvider, logger, CancellationToken.None);
+                var factoryLogger = serviceProvider.GetService<ILogger<TabServicesFactory>>();
+                var factory = new TabServicesFactory(serviceProvider, factoryLogger);
+                var (tabManager, tabsViewModel) = factory.CreateTabSystem();
+                var threadSafeOps = new ThreadSafeTabOperations(tabManager);
                 
                 // Verify services are initialized
-                if (integrationManager.TabManagerService == null)
+                if (tabManager == null)
                 {
                     Console.WriteLine("❌ TabManagerService not initialized");
                     return false;
                 }
                 
-                if (integrationManager.ThreadSafeOperations == null)
+                if (threadSafeOps == null)
                 {
                     Console.WriteLine("❌ ThreadSafeOperations not initialized");
                     return false;
                 }
                 
-                if (integrationManager.TabsViewModel == null)
+                if (tabsViewModel == null)
                 {
                     Console.WriteLine("❌ TabsViewModel not initialized");
                     return false;
@@ -60,8 +60,8 @@ namespace ExplorerPro.Tests
                 Console.WriteLine("✅ All services initialized successfully");
                 
                 // Test basic functionality
-                var tabModel = await integrationManager.ThreadSafeOperations.CreateTabSafeAsync(
-                    "Test Tab", @"C:\Test\Path", null, CancellationToken.None);
+                var tabModel = await threadSafeOps.CreateTabSafeAsync(
+                    "Test Tab", @"C:\\Test\\Path", null, CancellationToken.None);
                 
                 if (tabModel == null)
                 {
@@ -72,7 +72,7 @@ namespace ExplorerPro.Tests
                 Console.WriteLine($"✅ Created tab: {tabModel.Title}");
                 
                 // Cleanup
-                integrationManager.Dispose();
+                threadSafeOps.Dispose();
                 serviceProvider.Dispose();
                 
                 Console.WriteLine("✅ Basic service integration test passed");
@@ -97,7 +97,7 @@ namespace ExplorerPro.Tests
                 // Create services
                 var services = new ServiceCollection();
                 services.AddLogging(builder => builder.AddConsole());
-                services.AddScoped<ITabManagerService, ModernTabManagerService>();
+                services.AddScoped<ITabManagerService, TabManagerService>();
                 
                 var serviceProvider = services.BuildServiceProvider();
                 var tabManager = serviceProvider.GetService<ITabManagerService>();
@@ -169,20 +169,23 @@ namespace ExplorerPro.Tests
                 // Create services
                 var services = new ServiceCollection();
                 services.AddLogging(builder => builder.AddConsole());
-                services.AddScoped<ITabManagerService, ModernTabManagerService>();
+                services.AddScoped<ITabManagerService, TabManagerService>();
                 
                 var serviceProvider = services.BuildServiceProvider();
-                var logger = serviceProvider.GetService<ILogger<ServiceIntegrationManager>>();
+                var factoryLogger = serviceProvider.GetService<ILogger<TabServicesFactory>>();
+                var factory = new TabServicesFactory(serviceProvider, factoryLogger);
+                var (service, viewModel) = factory.CreateTabSystem();
+                var monitor = new ServiceHealthMonitor();
                 
-                // Initialize service integration with health monitoring
-                var integrationManager = await ServiceIntegrationManager.CreateAsync(
-                    serviceProvider, logger, CancellationToken.None);
+                // Register services to monitor
+                monitor.RegisterService("TabManagerService", service);
+                monitor.RegisterService("MainWindowTabsViewModel", viewModel);
                 
                 // Give health monitor time to perform initial checks
                 await Task.Delay(100);
                 
                 // Get health status
-                var healthInfos = integrationManager.ServiceHealthMonitor?.GetAllServiceHealth();
+                var healthInfos = monitor.GetAllServiceHealth();
                 
                 if (healthInfos == null || healthInfos.Length == 0)
                 {
@@ -199,7 +202,7 @@ namespace ExplorerPro.Tests
                 }
                 
                 // Cleanup
-                integrationManager.Dispose();
+                monitor.Dispose();
                 serviceProvider.Dispose();
                 
                 Console.WriteLine("✅ Service health monitoring test passed");
