@@ -1,11 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:converters="clr-namespace:ExplorerPro.UI.Converters">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- Value converters for tab functionality -->
-    <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
-    <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter" />
-    <converters:CountToEnableConverter x:Key="CountToEnableConverter" />
+    <!-- Converters centralized in UI/Converters/ConverterResources.xaml -->
 
     <!-- Modern Gradients and Brushes -->
     <LinearGradientBrush x:Key="TabActiveGradient" StartPoint="0,0" EndPoint="0,1">

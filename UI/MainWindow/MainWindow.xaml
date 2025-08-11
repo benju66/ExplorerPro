@@ -145,7 +145,6 @@ All dependencies mapped and validation tests established.
         xmlns:tabManagement="clr-namespace:ExplorerPro.UI.PaneManagement"
         xmlns:controls="clr-namespace:ExplorerPro.UI.Controls"
         xmlns:converters="clr-namespace:ExplorerPro.UI.Converters"
-        xmlns:ftconverters="clr-namespace:ExplorerPro.UI.FileTree"
         mc:Ignorable="d"
         Title="Enhanced File Explorer"
         Height="800" 
@@ -281,46 +280,7 @@ All dependencies mapped and validation tests established.
                 </Setter>
             </Style>
             
-            <!-- 
-            =============================================================================
-            VALUE CONVERTERS
-            =============================================================================
-            Converters for binding UI element properties to data values
-            -->
-        
-        <!-- Converts numeric count to Visibility (useful for hiding elements when count is 0) -->
-        <local:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
-        
-        <!-- Converts numeric count to boolean enabled state (useful for disabling buttons when count is 0) -->
-        <local:CountToEnableConverter x:Key="CountToEnableConverter"/>
-        
-        <!-- 
-        =============================================================================
-        PHASE 2 TAB CONVERTERS
-        =============================================================================
-        Converters for tab customization features
-        -->
-        
-        <!-- Converts Color values to SolidColorBrush for tab styling -->
-        <converters:ColorToBrushConverter x:Key="ColorToBrushConverter"/>
-        
-        <!-- Converts Colors to darker shades for borders and accents -->
-        <converters:ColorToDarkerBrushConverter x:Key="ColorToDarkerBrushConverter"/>
-        
-        <!-- Converts Colors to appropriate foreground colors -->
-        <converters:ColorToForegroundConverter x:Key="ColorToForegroundConverter"/>
-        
-        <!-- Boolean to Visibility converter for tab visibility bindings -->
-        <ftconverters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-        
-        <!-- Inverse Boolean to Visibility converter -->
-        <ftconverters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
-        
-        <!-- Converts boolean IsPinned to Visibility for pin indicators -->
-        <converters:PinnedToVisibilityConverter x:Key="PinnedToVisibilityConverter"/>
-        
-        <!-- Converts boolean IsPinned to "Pin Tab"/"Unpin Tab" text -->
-        <converters:PinUnpinTextConverter x:Key="PinUnpinTextConverter"/>
+            <!-- Converters centralized in UI/Converters/ConverterResources.xaml -->
         
         <!-- 
         =============================================================================

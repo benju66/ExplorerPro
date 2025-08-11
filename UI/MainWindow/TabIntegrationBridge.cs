@@ -43,7 +43,7 @@ namespace ExplorerPro.UI.MainWindow
             _logger = logger;
             
             // Create or use provided services
-            _tabManagerService = tabManagerService ?? new ModernTabManagerService();
+            _tabManagerService = tabManagerService ?? new TabManagerService();
             _tabsViewModel = tabsViewModel ?? new MainWindowTabsViewModel(_tabManagerService);
             
             _logger?.LogInformation("TabIntegrationBridge created - ready to complete integration");
