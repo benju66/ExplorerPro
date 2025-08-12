@@ -145,6 +145,13 @@ namespace ExplorerPro.UI.Controls
 
         #region Constructor
         
+        /// <summary>
+        /// Parameterless constructor for XAML instantiation
+        /// </summary>
+        public ModernTabControl() : this(null, null)
+        {
+        }
+        
         public ModernTabControl(IServiceProvider serviceProvider = null, ILogger<ModernTabControl> logger = null)
         {
             _serviceProvider = serviceProvider;

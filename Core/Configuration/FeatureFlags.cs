@@ -29,6 +29,24 @@ namespace ExplorerPro.Core.Configuration
         // Development and Testing
         public static bool EnableDebugLogging => GetFlag("EnableDebugLogging", false);
         public static bool EnableManualTests => GetFlag("EnableManualTests", true);
+
+        // Phase 3: Modern tab migration flags
+        // Prefer explicit env var EXPLOREPRO_USE_MODERN_TABS, then fall back to generic flag store
+        public static bool UseModernTabs
+        {
+            get
+            {
+                var envVar = Environment.GetEnvironmentVariable("EXPLOREPRO_USE_MODERN_TABS");
+                if (!string.IsNullOrEmpty(envVar) && bool.TryParse(envVar, out var envResult))
+                {
+                    return envResult;
+                }
+                // Default false for safety if not specified anywhere
+                return GetFlag("UseModernTabs", false);
+            }
+        }
+
+        public static bool EnableTabDebugLogging => GetFlag("EnableTabDebugLogging", false);
         
         /// <summary>
         /// Gets a feature flag value with caching and multiple configuration sources

@@ -104,6 +104,9 @@ namespace ExplorerPro.UI.MainWindow
     /// </summary>
     public partial class MainWindow : Window, IDisposable
     {
+        // Phase 3: Adapter for bridging Chrome and Modern tab systems
+        private ExplorerPro.UI.MainWindow.MainWindowTabAdapter _tabAdapter;
+        private ExplorerPro.Core.TabManagement.ITabManagerService _tabManagerService;
         #region Thread-Safe Shared Logger Infrastructure
 
         private static readonly object _loggerFactoryLock = new object();
@@ -905,15 +908,11 @@ namespace ExplorerPro.UI.MainWindow
                 _instanceLogger = CreateInstanceLogger(windowId);
                 _instanceLogger.LogInformation($"MainWindow created (ID: {windowId})");
                 
-                // Phase 4: Setup Chrome-style tab events
-                // Set up the MainTabs control reference if available
-                if (MainTabs != null)
-                {
-                    SetMainTabsControl(MainTabs);
-                }
-                
-                // Phase 7: Initialize tab management services
-                InitializeTabManagement();
+                // Initialize tab management service (Modern core API)
+                _tabManagerService = ExplorerPro.Core.TabManagement.TabServicesFactory.Instance.CreateTabManagerService();
+
+                // Initialize adapter and choose control based on feature flag (default Chrome)
+                InitializeTabSystems();
                 
                 // Phase 5: Defer all other initialization
                 Loaded += OnWindowLoadedAsync;
@@ -1074,11 +1073,8 @@ namespace ExplorerPro.UI.MainWindow
                     _initializationComplete.SetResult(true);
                     _instanceLogger.LogInformation("Window initialization completed");
                     
-                    // Create initial tab if needed
-                    if (MainTabs?.Items.Count == 0)
-                    {
-                        AddNewMainWindowTabSafely();
-                    }
+                    // Ensure at least one tab via adapter/service
+                    EnsureInitialTab();
                 }
                 else
                 {
@@ -1101,6 +1097,95 @@ namespace ExplorerPro.UI.MainWindow
                     MessageBoxImage.Error);
                 
                 Close();
+            }
+        }
+
+        private void InitializeTabSystems()
+        {
+            try
+            {
+                // Create adapter
+                var adapterLogger = SharedLoggerFactory.CreateLogger<ExplorerPro.UI.MainWindow.MainWindowTabAdapter>();
+                _tabAdapter = new ExplorerPro.UI.MainWindow.MainWindowTabAdapter(_tabManagerService, adapterLogger);
+
+                // Use Modern or Chrome based on feature flag
+                var useModern = ExplorerPro.Core.Configuration.FeatureFlags.UseModernTabs;
+                _instanceLogger?.LogInformation($"Initializing with {(useModern ? "Modern" : "Chrome")} tab system");
+
+                if (useModern)
+                {
+                    InitializeModernTabs();
+                }
+                else
+                {
+                    InitializeChromeTabs();
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Failed to initialize tab systems; falling back to Chrome");
+                InitializeChromeTabs();
+            }
+        }
+
+        private void InitializeModernTabs()
+        {
+            // Hide Chrome, show Modern
+            if (MainTabs != null)
+                MainTabs.Visibility = Visibility.Collapsed;
+
+            if (ModernTabs != null)
+            {
+                ModernTabs.Visibility = Visibility.Visible;
+                
+                // Provide service to Modern control
+                ModernTabs.TabManagerService = _tabManagerService;
+                
+                // Initialize Modern control (managers etc.)
+                ModernTabs.Initialize(null);
+
+                // Initialize adapter on Modern control
+                _tabAdapter.Initialize(ModernTabs, true);
+
+                // Optional: forward selection changed if MainWindow relies on it
+                ModernTabs.SelectionChanged += MainTabs_SelectionChanged;
+            }
+        }
+
+        private void InitializeChromeTabs()
+        {
+            // Show Chrome, hide Modern
+            if (MainTabs != null)
+            {
+                MainTabs.Visibility = Visibility.Visible;
+                SetMainTabsControl(MainTabs);
+                SetupChromeStyleTabEvents();
+            }
+
+            if (ModernTabs != null)
+                ModernTabs.Visibility = Visibility.Collapsed;
+
+            // Initialize adapter on Chrome control
+            _tabAdapter.Initialize(MainTabs, false);
+        }
+
+        private async void EnsureInitialTab()
+        {
+            try
+            {
+                if (_tabManagerService == null) return;
+                if (!_tabManagerService.HasTabs)
+                {
+                    var container = new MainWindowContainer(this);
+                    var defaultPath = ValidatePath(null);
+                    container.InitializeWithFileTree(defaultPath);
+                    ConnectPinnedPanel(container);
+                    await _tabAdapter.CreateNewTabAsync(GetNextTabTitle(), container);
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "Failed to create initial tab");
             }
         }
 
@@ -2589,22 +2674,9 @@ namespace ExplorerPro.UI.MainWindow
                         }
                     }
 
-                    // Create tab through CreateTabItem method
+                    // Create tab through adapter/service (Phase 3)
                     string tabTitle = GetNextTabTitle();
-                    var tabModel = new TabModel
-                    {
-                        Id = Guid.NewGuid().ToString(),
-                        Title = tabTitle,
-                        Content = container,
-                        IsPinned = false,
-                        CustomColor = Colors.Transparent // Use Transparent as default
-                    };
-                    
-                    var newTab = CreateTabItem(tabModel);
-                    
-                    // Add the tab to the control using proper positioning
-                    InsertTabAtCorrectPosition(newTab);
-                    MainTabs.SelectedItem = newTab;
+                    _ = _tabAdapter?.CreateNewTabAsync(tabTitle, container);
 
                     // Connect signals if available
                     if (container.PinnedPanel != null)
@@ -2620,14 +2692,7 @@ namespace ExplorerPro.UI.MainWindow
                     }
 
                     // Notify of new tab
-                    try
-                    {
-                        OnNewTabAdded(container);
-                    }
-                    catch (Exception ex)
-                    {
-                        _instanceLogger?.LogError(ex, "Error in OnNewTabAdded");
-                    }
+                    try { OnNewTabAdded(container); } catch (Exception ex) { _instanceLogger?.LogError(ex, "Error in OnNewTabAdded"); }
 
                     _instanceLogger?.LogInformation($"Added new main window tab with root path: {validPath}");
                     return container;
@@ -2921,29 +2986,18 @@ namespace ExplorerPro.UI.MainWindow
         {
             try
             {
-                if (MainTabs is ChromeStyleTabControl chromeTabControl)
-                {
-                    // Create the TabModel
-                    string tabTitle = GetNextTabTitle();
-                    var tabModel = new TabModel(tabTitle);
-                    
-                    // Create the container content BEFORE adding to collection
-                    var container = new MainWindowContainer(this);
-                    string defaultPath = ValidatePath(null);
-                    container.InitializeWithFileTree(defaultPath);
-                    ConnectPinnedPanel(container);
-                    
-                    // CRITICAL: Set content on the MODEL, not the TabItem
-                    tabModel.Content = container;
-                    
-                    // Add to the TabItems collection
-                    chromeTabControl.TabItems.Add(tabModel);
-                    
-                    // Select the new tab
-                    chromeTabControl.SelectedTabItem = tabModel;
-                    
-                    _instanceLogger?.LogInformation($"Created tab '{tabTitle}' with content");
-                }
+                // Create the container content BEFORE adding to collection
+                var container = new MainWindowContainer(this);
+                string defaultPath = ValidatePath(null);
+                container.InitializeWithFileTree(defaultPath);
+                ConnectPinnedPanel(container);
+
+                string tabTitle = GetNextTabTitle();
+
+                // Use adapter for creation (supports both Modern and Chrome)
+                _ = _tabAdapter?.CreateNewTabAsync(tabTitle, container);
+
+                _instanceLogger?.LogInformation($"Created tab '{tabTitle}' with content via adapter");
             }
             catch (Exception ex)
             {
@@ -3481,7 +3535,23 @@ namespace ExplorerPro.UI.MainWindow
                 var tabModel = GetTabModel(tabItem);
 
                 // Remove from current window
-                MainTabs.Items.Remove(tabItem);
+                // Phase 3: Prefer adapter removal
+                try
+                {
+                    if (tabItem?.DataContext is TabModel m1)
+                    {
+                        _ = _tabAdapter.CloseTabAsync(m1);
+                    }
+                    else if (tabItem?.Tag is TabModel m2)
+                    {
+                        _ = _tabAdapter.CloseTabAsync(m2);
+                    }
+                    else
+                    {
+                        MainTabs.Items.Remove(tabItem);
+                    }
+                }
+                catch { MainTabs.Items.Remove(tabItem); }
 
                 // Create and configure new window
                 var newWindow = new MainWindow
@@ -3497,6 +3567,7 @@ namespace ExplorerPro.UI.MainWindow
                 newWindow.Show();
                 
                 // Clear default tabs
+                // Phase 3: new window init path left as-is for now (detachment not migrated yet)
                 newWindow.MainTabs.Items.Clear();
 
                 // Create new tab in target window
@@ -3635,7 +3706,7 @@ namespace ExplorerPro.UI.MainWindow
         /// PHASE 1 STEP 4 ENHANCED: Close specified tab, refreshing the last tab instead of closing it
         /// </summary>
         /// <param name="index">Index of tab to close</param>
-        public void CloseTab(int index)
+        public async void CloseTab(int index)
         {
             // Check operation is allowed
             if (!TryEnsureOperationAllowed("CloseTab"))
@@ -3720,8 +3791,30 @@ namespace ExplorerPro.UI.MainWindow
                     }
                 }
                 
-                MainTabs.Items.RemoveAt(index);
-                _instanceLogger?.LogInformation($"Closed tab at index {index}");
+                // Phase 3: Close via adapter/service to support both Chrome and Modern
+                try
+                {
+                    // Resolve TabModel when available
+                    TabModel model = null;
+                    if (tabItem?.DataContext is TabModel dc) model = dc;
+                    else if (tabItem?.Tag is TabModel tagModel) model = tagModel;
+
+                    if (model != null)
+                    {
+                        await _tabAdapter.CloseTabAsync(model);
+                    }
+                    else
+                    {
+                        // Fallback: remove directly if model missing
+                        MainTabs.Items.RemoveAt(index);
+                    }
+                    _instanceLogger?.LogInformation($"Closed tab at index {index}");
+                }
+                catch (Exception ex)
+                {
+                    _instanceLogger?.LogError(ex, "Error closing tab via adapter; falling back to direct removal");
+                    try { MainTabs.Items.RemoveAt(index); } catch { /* ignore */ }
+                }
             }
         }
 
@@ -3729,7 +3822,7 @@ namespace ExplorerPro.UI.MainWindow
         /// PHASE 1 STEP 4 ENHANCED: Close the current tab with last tab preservation
         /// Enhanced for Phase 4A: Pattern-aware with CanClose check
         /// </summary>
-        public void CloseCurrentTab()
+        public async void CloseCurrentTab()
         {
             // Check operation is allowed
             if (!TryEnsureOperationAllowed("CloseCurrentTab"))
@@ -3779,20 +3872,22 @@ namespace ExplorerPro.UI.MainWindow
                 return;
             }
             
+            // Capture current tab item once for reuse
+            var selectedTabItem = MainTabs.SelectedItem as TabItem;
             // Check if current tab can be closed
-            if (MainTabs.SelectedItem is TabItem tabItem)
+            if (selectedTabItem != null)
             {
                 bool canClose = true;
                 string tabTitle = "Unknown";
                 
                 // Priority 1: Check DataContext (Phase 2 pattern)
-                if (tabItem.DataContext is TabModel dataModel)
+                if (selectedTabItem.DataContext is TabModel dataModel)
                 {
                     canClose = dataModel.CanClose;
                     tabTitle = dataModel.Title;
                 }
                 // Priority 2: Check Tag for backward compatibility
-                else if (tabItem.Tag is TabModel tagModel)
+                else if (selectedTabItem.Tag is TabModel tagModel)
                 {
                     canClose = tagModel.CanClose;
                     tabTitle = tagModel.Title;
@@ -3806,7 +3901,23 @@ namespace ExplorerPro.UI.MainWindow
                     return;
                 }
             }
-            
+            // Phase 3: Route through adapter when possible
+            try
+            {
+                TabModel model = null;
+                if (selectedTabItem?.DataContext is TabModel dc) model = dc;
+                else if (selectedTabItem?.Tag is TabModel tagModel) model = tagModel;
+                if (model != null)
+                {
+                    await _tabAdapter.CloseTabAsync(model);
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                _instanceLogger?.LogError(ex, "CloseCurrentTab via adapter failed; falling back to index");
+            }
+
             CloseTab(MainTabs.SelectedIndex);
         }
 
@@ -3829,7 +3940,7 @@ namespace ExplorerPro.UI.MainWindow
             try
             {
                 // Get the tab item
-                TabItem? tabItem = MainTabs.Items[index] as TabItem;
+                var tabItem = MainTabs.Items[index] as TabItem;
                 if (tabItem == null) return;
 
                 // Get the container
