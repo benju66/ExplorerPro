@@ -893,6 +893,13 @@ All dependencies mapped and validation tests established.
                 </TabControl.ContextMenu>
             </controls:ChromeStyleTabControl>
             
+            <!-- Modern Tab Control (initially collapsed; visibility toggled in code-behind) -->
+            <controls:ModernTabControl x:Name="ModernTabs"
+                                       Visibility="Collapsed"
+                                       AllowTabReordering="True"
+                                       AllowTabDetachment="False"
+                                       AnimationsEnabled="True" />
+            
             <!-- PHASE 3: TabControl now fills remaining space and contains its own content area -->
         </DockPanel>
     </Grid>

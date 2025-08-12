@@ -60,6 +60,12 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <!-- Add this section to handle native PDFium libraries -->
   <ItemGroup>
     <None Remove="Native\**" />
